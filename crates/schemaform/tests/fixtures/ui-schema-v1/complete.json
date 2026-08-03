@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "required_extensions": [
+    "https://example.com/ui/a",
+    "https://example.com/ui/z"
+  ],
+  "root": {
+    "type": "stack",
+    "value": {
+      "id": "root-stack",
+      "extensions": {
+        "https://example.com/ui/z": {
+          "density": "compact"
+        }
+      },
+      "children": [
+        {
+          "type": "text",
+          "value": {
+            "id": "intro",
+            "extensions": {
+              "https://example.com/ui/optional": {
+                "tone": "informational"
+              }
+            },
+            "content": {
+              "fallback": "Complete <plain-text> form",
+              "key": "form.intro"
+            }
+          }
+        },
+        {
+          "type": "group",
+          "value": {
+            "id": "identity-group",
+            "title": {
+              "fallback": "Identity",
+              "key": "form.identity"
+            },
+            "child": {
+              "type": "control",
+              "value": {
+                "id": "name-control",
+                "binding": {
+                  "origin": "root",
+                  "pointer": "/name"
+                },
+                "label": {
+                  "value": {
+                    "fallback": "Display name",
+                    "key": "form.name"
+                  }
+                },
+                "help": "suppress",
+                "widget": "company:text",
+                "extensions": {
+                  "https://example.com/ui/a": {
+                    "trim": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "grid",
+          "value": {
+            "id": "facts-grid",
+            "cells": [
+              {
+                "compact_span": 12,
+                "wide_span": 4,
+                "child": {
+                  "type": "control",
+                  "value": {
+                    "id": "count-control",
+                    "binding": {
+                      "origin": "root",
+                      "pointer": "/count"
+                    },
+                    "label": "inherit",
+                    "help": {
+                      "value": {
+                        "fallback": "Whole units"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "compact_span": 12,
+                "child": {
+                  "type": "control",
+                  "value": {
+                    "id": "active-control",
+                    "binding": {
+                      "origin": "root",
+                      "pointer": "/active"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "type": "tabs",
+          "value": {
+            "id": "details-tabs",
+            "panels": [
+              {
+                "title": {
+                  "fallback": "Choice"
+                },
+                "child": {
+                  "type": "control",
+                  "value": {
+                    "id": "choice-control",
+                    "binding": {
+                      "origin": "root",
+                      "pointer": "/choice"
+                    },
+                    "label": "suppress"
+                  }
+                }
+              },
+              {
+                "title": {
+                  "fallback": "Tags",
+                  "key": "form.tags"
+                },
+                "child": {
+                  "type": "control",
+                  "value": {
+                    "id": "tags-control",
+                    "binding": {
+                      "origin": "root",
+                      "pointer": "/tags"
+                    },
+                    "widget": "company:tags",
+                    "item_label": {
+                      "fallback": "Tag",
+                      "key": "form.tag"
+                    },
+                    "item_template": {
+                      "type": "stack",
+                      "value": {
+                        "id": "tag-template",
+                        "children": [
+                          {
+                            "type": "text",
+                            "value": {
+                              "id": "tag-help",
+                              "content": {
+                                "fallback": "One tag"
+                              }
+                            }
+                          },
+                          {
+                            "type": "control",
+                            "value": {
+                              "id": "tag-control",
+                              "binding": {
+                                "origin": "item_template",
+                                "pointer": ""
+                              },
+                              "widget": "company:tag"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "type": "auto",
+          "value": {
+            "id": "remaining-auto",
+            "binding": {
+              "origin": "root",
+              "pointer": ""
+            },
+            "properties": {
+              "include": [
+                "extra"
+              ],
+              "exclude": [],
+              "order": [
+                {
+                  "property": "extra"
+                },
+                "remaining"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

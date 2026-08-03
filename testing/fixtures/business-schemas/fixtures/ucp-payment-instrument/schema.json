@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:ucp-payment-instrument",
+  "$comment": "Adapted and reduced from the Apache-2.0 Universal Commerce Protocol Payment Instrument schema; this file has been changed for offline corpus use.",
+  "title": "Payment Instrument",
+  "description": "The base definition for a payment instrument linked to a payment handler.",
+  "type": "object",
+  "required": ["id", "handler_id", "type"],
+  "properties": {
+    "id": { "type": "string" },
+    "handler_id": { "type": "string" },
+    "type": { "type": "string" },
+    "billing_address": {
+      "$ref": "urn:schemaform:corpus:ucp-payment-instrument:postal-address"
+    },
+    "credential": {
+      "$ref": "urn:schemaform:corpus:ucp-payment-instrument:credential"
+    },
+    "display": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

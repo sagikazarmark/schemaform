@@ -1,0 +1,13 @@
+[
+  {"InputAmount":"1.25"},
+  {"InputAmount":"125e-2"},
+  {"InputAmount":"2.500000000000000000000000000000000001"},
+  {"InputAmount":"-"},
+  {"InputAmount":"1.2500"},
+  {"InputQuantity":"1000"},
+  {"InputQuantity":"1e3"},
+  {"Host":"EquivalentQuantity"},
+  {"Blur":"Quantity"},
+  "Submit",
+  {"InputAmount":"3.75"}
+]

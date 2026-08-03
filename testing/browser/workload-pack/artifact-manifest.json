@@ -1,0 +1,180 @@
+{
+  "version": 1,
+  "rust_wasm_tools": {
+    "binaryen_wasm_opt": "123",
+    "cargo": "1.90.0 (840b83a10 2025-07-30)",
+    "rust": "1.90.0 (1159e78c4 2025-09-14)",
+    "wasm_bindgen_cli": "0.2.126",
+    "wasm_target": "wasm32-unknown-unknown",
+    "wasm_tools": "1.239.0"
+  },
+  "compression": {
+    "brotli": "1.1.0",
+    "quality": 11,
+    "window": 22
+  },
+  "pipeline": [
+    {
+      "arguments": [
+        "build",
+        "--locked",
+        "--release",
+        "--target",
+        "wasm32-unknown-unknown",
+        "-p",
+        "browser-workload-runner"
+      ],
+      "program": "cargo"
+    },
+    {
+      "arguments": [
+        "--target",
+        "web",
+        "--no-typescript",
+        "--out-dir",
+        "testing/browser/artifacts/bindgen",
+        "target/wasm32-unknown-unknown/release/browser_workload_runner.wasm"
+      ],
+      "program": "wasm-bindgen"
+    },
+    {
+      "arguments": [
+        "-Oz",
+        "--enable-bulk-memory",
+        "--enable-nontrapping-float-to-int",
+        "-o",
+        "testing/browser/artifacts/browser_workload_runner_bg.optimized.wasm",
+        "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm"
+      ],
+      "program": "wasm-opt"
+    },
+    {
+      "arguments": [
+        "testing/browser/artifacts/browser_workload_runner_bg.optimized.wasm",
+        "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm"
+      ],
+      "program": "mv"
+    },
+    {
+      "arguments": [
+        "--quality",
+        "11",
+        "--lgwin",
+        "22",
+        "--output",
+        "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm.br",
+        "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm"
+      ],
+      "program": "brotli"
+    },
+    {
+      "arguments": [
+        "--quality",
+        "11",
+        "--lgwin",
+        "22",
+        "--output",
+        "testing/browser/artifacts/bindgen/browser_workload_runner.js.br",
+        "testing/browser/artifacts/bindgen/browser_workload_runner.js"
+      ],
+      "program": "brotli"
+    },
+    {
+      "arguments": [
+        "build",
+        "--locked",
+        "--release",
+        "--target",
+        "wasm32-unknown-unknown",
+        "-p",
+        "browser-workload-empty-shell"
+      ],
+      "program": "cargo"
+    },
+    {
+      "arguments": [
+        "--target",
+        "web",
+        "--no-typescript",
+        "--out-dir",
+        "testing/browser/artifacts/empty-shell",
+        "target/wasm32-unknown-unknown/release/browser_workload_empty_shell.wasm"
+      ],
+      "program": "wasm-bindgen"
+    },
+    {
+      "arguments": [
+        "-Oz",
+        "--enable-bulk-memory",
+        "--enable-nontrapping-float-to-int",
+        "-o",
+        "testing/browser/artifacts/browser_workload_empty_shell_bg.optimized.wasm",
+        "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm"
+      ],
+      "program": "wasm-opt"
+    },
+    {
+      "arguments": [
+        "testing/browser/artifacts/browser_workload_empty_shell_bg.optimized.wasm",
+        "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm"
+      ],
+      "program": "mv"
+    },
+    {
+      "arguments": [
+        "--quality",
+        "11",
+        "--lgwin",
+        "22",
+        "--output",
+        "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm.br",
+        "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm"
+      ],
+      "program": "brotli"
+    }
+  ],
+  "metrics": [
+    {
+      "id": "brotli-wasm-total",
+      "safety_cap_bytes": 1572864
+    },
+    {
+      "id": "brotli-wasm-incremental",
+      "safety_cap_bytes": 524288
+    },
+    {
+      "id": "brotli-runtime-javascript-total",
+      "safety_cap_bytes": 65536
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "production-wasm",
+      "path": "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm"
+    },
+    {
+      "id": "production-javascript",
+      "path": "testing/browser/artifacts/bindgen/browser_workload_runner.js"
+    },
+    {
+      "id": "production-brotli-wasm",
+      "path": "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm.br"
+    },
+    {
+      "id": "production-brotli-javascript",
+      "path": "testing/browser/artifacts/bindgen/browser_workload_runner.js.br"
+    },
+    {
+      "id": "empty-shell-wasm",
+      "path": "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm"
+    },
+    {
+      "id": "empty-shell-javascript",
+      "path": "testing/browser/artifacts/empty-shell/browser_workload_empty_shell.js"
+    },
+    {
+      "id": "empty-shell-brotli-wasm",
+      "path": "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm.br"
+    }
+  ]
+}

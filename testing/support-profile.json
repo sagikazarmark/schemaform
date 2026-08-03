@@ -1,0 +1,1563 @@
+{
+  "format_version": 1,
+  "status": "unpublished-first-release-candidate",
+  "current_product": "implemented",
+  "classifications": [
+    "editing",
+    "validation-only",
+    "annotation",
+    "warning",
+    "capability-blocking"
+  ],
+  "current_states": ["implemented"],
+  "evidence": {
+    "test_targets": [
+      {
+        "id": "validator-official-suite",
+        "path": "crates/schemaform/src/validation/official_suite.rs",
+        "platforms": ["native", "browser-wasm"],
+        "tests": [
+          "mandatory_draft_2020_12_suite_matches_through_the_product_validator",
+          "claimed_optional_draft_2020_12_suite_matches_through_the_product_validator"
+        ]
+      },
+      {
+        "id": "qualification-facade",
+        "path": "crates/schemaform/tests/qualification_facade.rs",
+        "platforms": ["native"],
+        "tests": [
+          "dialect_vocabulary_and_nested_switch_failures_are_distinct",
+          "duplicate_identities_and_anchors_report_both_source_locations",
+          "unresolved_references_are_located_and_follow_caller_order"
+        ]
+      },
+      {
+        "id": "anchored-resource-facade",
+        "path": "crates/schemaform/tests/anchored_resource_graph_facade.rs",
+        "platforms": ["native"],
+        "tests": [
+          "caller_supplied_canonical_resource_and_anchor_compile_with_exact_locations",
+          "anchored_resource_control_validates_edits_and_submits"
+        ]
+      },
+      {
+        "id": "all-of-facade",
+        "path": "crates/schemaform/tests/all_of_fixed_object_facade.rs",
+        "platforms": ["native"],
+        "tests": ["compatible_all_of_compiles_one_deterministic_control_with_every_source_location"]
+      },
+      {
+        "id": "business-schema-product",
+        "path": "crates/schemaform/tests/business_schema_product.rs",
+        "platforms": ["native"],
+        "tests": ["every_business_schema_fixture_has_its_expected_product_outcome"]
+      },
+      {
+        "id": "fixed-object-profile",
+        "path": "crates/schemaform/tests/fixed_object_profile_target.rs",
+        "platforms": ["native", "browser-wasm"],
+        "tests": [
+          "every_fixed_object_scalar_and_presence_state_has_a_public_projection",
+          "fixed_object_authority_and_lifecycle_trace_has_stable_public_outcomes",
+          "fixed_object_finding_families_and_submission_outcomes_are_exhaustive",
+          "indeterminate_validation_discards_partial_findings_and_blocks_submission",
+          "fixed_projection_map_constraints_warn_and_preserve_undeclared_data",
+          "deferred_fixed_object_shapes_have_matching_strict_and_lenient_outcomes"
+        ]
+      },
+      {
+        "id": "deferred-shape-profile",
+        "path": "crates/schemaform/tests/deferred_shape_projection_target.rs",
+        "platforms": ["native", "browser-wasm"],
+        "tests": [
+          "recursive_projection_stops_once_and_keeps_recursive_validation_authoritative",
+          "dynamic_reference_blocks_only_when_it_determines_the_projected_shape",
+          "structural_conditionals_block_without_rejecting_validation_only_conditionals",
+          "unevaluated_items_blocks_when_it_determines_the_item_shape",
+          "validation_only_applicators_keep_an_independently_known_projection"
+        ]
+      },
+      {
+        "id": "scalar-presence-facade",
+        "path": "crates/schemaform/tests/generated_scalar_presence_facade.rs",
+        "platforms": ["native"],
+        "tests": [
+          "nullable_string_exposes_all_scalar_states_without_mutating_form_data",
+          "scalar_operations_follow_presence_requiredness_and_compatibility",
+          "nullable_containers_remain_outside_scalar_presence_support"
+        ]
+      },
+      {
+        "id": "scalar-array-facade",
+        "path": "crates/schemaform/tests/scalar_array_facade.rs",
+        "platforms": ["native", "browser-wasm"],
+        "tests": [
+          "scalar_array_append_and_remove_preserve_surviving_item_identity",
+          "scalar_array_insert_before_targets_duplicate_item_identity",
+          "moving_duplicate_items_preserves_logical_item_state_and_data_revision",
+          "moving_unequal_items_changes_data_revision_and_rejects_boundaries_atomically",
+          "array_assertions_produce_structured_findings_and_never_rewrite_moves",
+          "host_structural_commands_preserve_surviving_logical_items"
+        ]
+      },
+      {
+        "id": "fixed-object-array-facade",
+        "path": "crates/schemaform/tests/fixed_object_array_facade.rs",
+        "platforms": ["native", "browser-wasm"],
+        "tests": [
+          "generated_fixed_object_item_template_edits_nested_rows_and_submits",
+          "arrays_nested_in_fixed_object_items_are_capability_blocking_through_references"
+        ]
+      },
+      {
+        "id": "open-object-facade",
+        "path": "crates/schemaform/tests/open_object_facade.rs",
+        "platforms": ["native"],
+        "tests": [
+          "open_fixed_objects_compile_with_deterministic_nonblocking_warnings",
+          "undeclared_form_data_survives_edits_lifecycle_operations_and_submission",
+          "stock_validation_remains_authoritative_for_undeclared_members"
+        ]
+      },
+      {
+        "id": "generated-annotation-facade",
+        "path": "crates/schemaform/tests/generated_annotation_facade.rs",
+        "platforms": ["native"],
+        "tests": [
+          "title_and_description_are_fallbacks_with_deterministic_conflict_warnings",
+          "nonasserting_annotations_neither_mutate_data_nor_block_submission"
+        ]
+      },
+      {
+        "id": "annotation-authority-facade",
+        "path": "crates/schemaform/tests/annotation_authority_facade.rs",
+        "platforms": ["native"],
+        "tests": [
+          "read_only_rejects_user_mutation_while_host_updates_remain_atomic",
+          "write_only_data_can_be_explicitly_replaced_and_is_preserved_for_submission"
+        ]
+      },
+      {
+        "id": "host-transaction-facade",
+        "path": "crates/schemaform/tests/host_transaction_facade.rs",
+        "platforms": ["native"],
+        "tests": [
+          "related_host_pointer_operations_publish_one_final_transition",
+          "failed_host_transactions_roll_back_all_observable_form_state"
+        ]
+      },
+      {
+        "id": "lifecycle-facade",
+        "path": "crates/schemaform/tests/lifecycle_facade.rs",
+        "platforms": ["native"],
+        "tests": [
+          "reset_restores_valid_baseline_from_invalid_parse_blocked_state",
+          "reinitialize_starts_a_fresh_lifecycle_for_valid_invalid_and_equal_data"
+        ]
+      },
+      {
+        "id": "external-submission-facade",
+        "path": "crates/schemaform/tests/external_submission_facade.rs",
+        "platforms": ["native"],
+        "tests": [
+          "external_batches_replace_by_source_only_for_the_current_data_revision",
+          "validation_and_external_visibility_are_independent_while_parse_blockers_are_immediate",
+          "submission_returns_one_transition_and_every_structured_blocker_or_a_minimal_snapshot"
+        ]
+      },
+      {
+        "id": "authored-ui-schema-facade",
+        "path": "crates/schemaform/tests/authored_ui_schema_facade.rs",
+        "platforms": ["native"],
+        "tests": [
+          "ui_schema_v1_is_the_stable_wire_version",
+          "complete_stable_ui_schema_v1_fixture_round_trips_and_compiles",
+          "empty_widget_symbols_are_rejected_during_ui_schema_parsing",
+          "stable_ui_schema_v1_meta_schema_and_strict_failure_fixtures_agree",
+          "authored_element_ids_are_preserved_fingerprinted_and_unique",
+          "exact_uri_extensions_are_validated_preserved_and_fingerprinted",
+          "required_extensions_must_be_unique_present_and_bounded",
+          "ui_schema_v1_is_strict_and_reports_structured_locations",
+          "authored_widget_symbols_are_preserved_exactly_in_the_definition",
+          "authored_ui_schema_preserves_order_omissions_and_form_semantics",
+          "authored_grid_validates_and_compiles_responsive_semantic_cells",
+          "authored_tabs_compile_labeled_panels_in_document_order",
+          "explicit_auto_selects_and_orders_direct_properties_at_its_authored_position",
+          "explicit_auto_preserves_nested_and_array_definition_identity",
+          "authored_scalar_array_owns_an_empty_item_template_binding",
+          "authored_fixed_object_template_edits_explicit_relative_descendants",
+          "authored_fixed_object_template_root_owns_item_authority_findings_and_repair",
+          "authored_item_auto_materializes_only_its_template_relative_definition",
+          "authored_item_template_duplicate_checks_are_scoped_per_array",
+          "omitted_ui_schema_matches_an_explicit_root_auto",
+          "auto_only_materializes_selected_unsupported_regions",
+          "authored_ui_schema_rejects_invalid_and_duplicate_bindings_with_locations"
+        ]
+      },
+      {
+        "id": "browser-csr",
+        "path": "crates/schemaform-dioxus/tests/browser_csr.rs",
+        "platforms": ["browser-wasm", "chromium", "firefox", "webkit"],
+        "tests": [
+          "authored_ui_schema_renders_semantics_and_preserves_form_behavior",
+          "tabs_support_keyboard_navigation_adapter_local_selection_and_summary_focus",
+          "responsive_grid_preserves_dom_focus_order_and_behavior_at_320_css_pixels",
+          "responsive_grid_behavior_matches_the_active_css_viewport",
+          "explicit_auto_renders_only_at_its_authored_position",
+          "every_in_profile_business_schema_executes_through_the_default_browser_adapter",
+          "authored_array_rows_render_edit_focus_and_submit_in_the_browser",
+          "authored_scalar_array_rows_edit_focus_and_submit_in_the_browser",
+          "exact_widget_binding_is_definition_stable_and_grants_only_node_capabilities",
+          "renderer_bind_preflight_reports_missing_exact_widgets_and_priority_ties",
+          "exact_uri_extensions_preflight_and_decorate_in_canonical_order",
+          "highest_static_matcher_wins_once_and_below_floor_leaves_the_builtin",
+          "custom_item_widget_renders_under_adapter_owned_array",
+          "custom_presenters_receive_one_deterministic_collection_per_target",
+          "locale_and_presenter_changes_update_only_reactive_plain_text_presentation",
+          "ime_composition_stays_local_across_presentation_updates_and_commits_on_end"
+        ]
+      }
+    ],
+    "accepted_keywords": [
+      {
+        "profile_cases": [
+          "core.schema.draft-2020-12",
+          "core.vocabulary.supported",
+          "core.id.resource",
+          "core.anchor.resolved",
+          "core.dynamic-reference.validation",
+          "core.dynamic-anchor",
+          "core.defs.referenced",
+          "core.ref.resolved",
+          "core.ref.supplied-resource",
+          "core.comment"
+        ],
+        "tests": [
+          "validator-official-suite::mandatory_draft_2020_12_suite_matches_through_the_product_validator",
+          "qualification-facade::dialect_vocabulary_and_nested_switch_failures_are_distinct",
+          "anchored-resource-facade::caller_supplied_canonical_resource_and_anchor_compile_with_exact_locations",
+          "deferred-shape-profile::dynamic_reference_blocks_only_when_it_determines_the_projected_shape"
+        ]
+      },
+      {
+        "profile_cases": [
+          "validation.type.editable",
+          "validation.enum.static",
+          "validation.enum.predicate",
+          "validation.const.scalar",
+          "validation.required",
+          "validation.minimum.numeric",
+          "validation.maximum.numeric",
+          "validation.exclusive-minimum.numeric",
+          "validation.exclusive-maximum.numeric",
+          "validation.multiple-of",
+          "validation.min-length",
+          "validation.max-length",
+          "validation.pattern",
+          "validation.min-properties",
+          "validation.max-properties",
+          "validation.dependent-required"
+        ],
+        "tests": [
+          "validator-official-suite::mandatory_draft_2020_12_suite_matches_through_the_product_validator",
+          "fixed-object-profile::every_fixed_object_scalar_and_presence_state_has_a_public_projection"
+        ]
+      },
+      {
+        "profile_cases": [
+          "validation.min-items",
+          "validation.max-items",
+          "validation.unique-items",
+          "validation.contains",
+          "validation.min-contains",
+          "validation.max-contains"
+        ],
+        "tests": [
+          "validator-official-suite::mandatory_draft_2020_12_suite_matches_through_the_product_validator",
+          "scalar-array-facade::array_assertions_produce_structured_findings_and_never_rewrite_moves"
+        ]
+      },
+      {
+        "profile_cases": [
+          "applicator.properties.fixed",
+          "applicator.items.homogeneous",
+          "applicator.additional-properties.closed",
+          "applicator.all-of.compatible"
+        ],
+        "tests": [
+          "business-schema-product::every_business_schema_fixture_has_its_expected_product_outcome",
+          "fixed-object-array-facade::generated_fixed_object_item_template_edits_nested_rows_and_submits",
+          "all-of-facade::compatible_all_of_compiles_one_deterministic_control_with_every_source_location"
+        ]
+      },
+      {
+        "profile_cases": [
+          "applicator.properties.predicate",
+          "applicator.not.independent-kind",
+          "applicator.if.validation",
+          "applicator.then.validation",
+          "applicator.else.validation",
+          "applicator.dependent-schemas.validation",
+          "unevaluated.properties.validation",
+          "unevaluated.items.validation"
+        ],
+        "tests": [
+          "validator-official-suite::mandatory_draft_2020_12_suite_matches_through_the_product_validator",
+          "deferred-shape-profile::validation_only_applicators_keep_an_independently_known_projection"
+        ]
+      },
+      {
+        "profile_cases": [
+          "applicator.additional-properties.open",
+          "applicator.additional-properties.schema-projection",
+          "applicator.pattern-properties.fixed-projection",
+          "applicator.property-names"
+        ],
+        "tests": [
+          "open-object-facade::open_fixed_objects_compile_with_deterministic_nonblocking_warnings",
+          "open-object-facade::stock_validation_remains_authoritative_for_undeclared_members",
+          "fixed-object-profile::fixed_projection_map_constraints_warn_and_preserve_undeclared_data"
+        ]
+      },
+      {
+        "profile_cases": [
+          "format.default-annotation",
+          "content.encoding",
+          "content.media-type",
+          "content.schema",
+          "metadata.title",
+          "metadata.description",
+          "metadata.default",
+          "metadata.deprecated",
+          "metadata.read-only",
+          "metadata.write-only",
+          "metadata.examples"
+        ],
+        "tests": [
+          "generated-annotation-facade::nonasserting_annotations_neither_mutate_data_nor_block_submission",
+          "generated-annotation-facade::title_and_description_are_fallbacks_with_deterministic_conflict_warnings",
+          "annotation-authority-facade::read_only_rejects_user_mutation_while_host_updates_remain_atomic",
+          "annotation-authority-facade::write_only_data_can_be_explicitly_replaced_and_is_preserved_for_submission"
+        ]
+      }
+    ],
+    "structures": [
+      {
+        "profile_cases": [
+          "structure.root.fixed-object",
+          "structure.root.scalar",
+          "structure.root.array",
+          "structure.object.nested-fixed",
+          "structure.object.array-item-nested-fixed",
+          "structure.object.nullable-fixed",
+          "structure.scalar.string",
+          "structure.scalar.number",
+          "structure.scalar.integer",
+          "structure.scalar.boolean",
+          "structure.scalar.null-only",
+          "structure.scalar.nullable",
+          "structure.array.homogeneous-scalar",
+          "structure.array.homogeneous-fixed-object",
+          "structure.array.nullable",
+          "structure.array.nested",
+          "structure.recursive.validation",
+          "structure.recursive.projection"
+        ],
+        "tests": [
+          "fixed-object-profile::every_fixed_object_scalar_and_presence_state_has_a_public_projection",
+          "fixed-object-profile::deferred_fixed_object_shapes_have_matching_strict_and_lenient_outcomes",
+          "scalar-array-facade::scalar_array_append_and_remove_preserve_surviving_item_identity",
+          "fixed-object-array-facade::generated_fixed_object_item_template_edits_nested_rows_and_submits",
+          "fixed-object-array-facade::arrays_nested_in_fixed_object_items_are_capability_blocking_through_references",
+          "scalar-presence-facade::nullable_containers_remain_outside_scalar_presence_support",
+          "deferred-shape-profile::recursive_projection_stops_once_and_keeps_recursive_validation_authoritative"
+        ]
+      }
+    ],
+    "ui_schema": [
+      {
+        "profile_cases": ["ui-schema.document.v1"],
+        "tests": [
+          "authored-ui-schema-facade::ui_schema_v1_is_the_stable_wire_version",
+          "authored-ui-schema-facade::complete_stable_ui_schema_v1_fixture_round_trips_and_compiles",
+          "authored-ui-schema-facade::stable_ui_schema_v1_meta_schema_and_strict_failure_fixtures_agree",
+          "authored-ui-schema-facade::ui_schema_v1_is_strict_and_reports_structured_locations"
+        ]
+      },
+      {
+        "profile_cases": ["ui-schema.document.omitted"],
+        "tests": ["authored-ui-schema-facade::omitted_ui_schema_matches_an_explicit_root_auto"]
+      },
+      {
+        "profile_cases": [
+          "ui-schema.element.control",
+          "ui-schema.element.stack",
+          "ui-schema.element.group",
+          "ui-schema.element.text",
+          "ui-schema.authored.omission",
+          "ui-schema.text.localization",
+          "ui-schema.text.annotation-policy"
+        ],
+        "tests": [
+          "authored-ui-schema-facade::authored_ui_schema_preserves_order_omissions_and_form_semantics",
+          "browser-csr::authored_ui_schema_renders_semantics_and_preserves_form_behavior"
+        ]
+      },
+      {
+        "profile_cases": ["ui-schema.element.auto"],
+        "tests": [
+          "authored-ui-schema-facade::explicit_auto_selects_and_orders_direct_properties_at_its_authored_position",
+          "authored-ui-schema-facade::explicit_auto_preserves_nested_and_array_definition_identity",
+          "browser-csr::explicit_auto_renders_only_at_its_authored_position"
+        ]
+      },
+      {
+        "profile_cases": ["ui-schema.element.grid"],
+        "tests": [
+          "authored-ui-schema-facade::authored_grid_validates_and_compiles_responsive_semantic_cells",
+          "browser-csr::responsive_grid_preserves_dom_focus_order_and_behavior_at_320_css_pixels",
+          "browser-csr::responsive_grid_behavior_matches_the_active_css_viewport"
+        ]
+      },
+      {
+        "profile_cases": ["ui-schema.element.tabs"],
+        "tests": [
+          "authored-ui-schema-facade::authored_tabs_compile_labeled_panels_in_document_order",
+          "browser-csr::tabs_support_keyboard_navigation_adapter_local_selection_and_summary_focus"
+        ]
+      },
+      {
+        "profile_cases": ["ui-schema.binding.root"],
+        "tests": [
+          "authored-ui-schema-facade::authored_ui_schema_preserves_order_omissions_and_form_semantics",
+          "authored-ui-schema-facade::authored_ui_schema_rejects_invalid_and_duplicate_bindings_with_locations"
+        ]
+      },
+      {
+        "profile_cases": [
+          "ui-schema.binding.template",
+          "ui-schema.item-template.inline"
+        ],
+        "tests": [
+          "authored-ui-schema-facade::authored_scalar_array_owns_an_empty_item_template_binding",
+          "authored-ui-schema-facade::authored_fixed_object_template_edits_explicit_relative_descendants",
+          "authored-ui-schema-facade::authored_item_auto_materializes_only_its_template_relative_definition",
+          "authored-ui-schema-facade::authored_item_template_duplicate_checks_are_scoped_per_array",
+          "browser-csr::authored_array_rows_render_edit_focus_and_submit_in_the_browser",
+          "browser-csr::authored_scalar_array_rows_edit_focus_and_submit_in_the_browser"
+        ]
+      },
+      {
+        "profile_cases": ["ui-schema.element.identity"],
+        "tests": ["authored-ui-schema-facade::authored_element_ids_are_preserved_fingerprinted_and_unique"]
+      },
+      {
+        "profile_cases": ["ui-schema.widget.available"],
+        "tests": [
+          "authored-ui-schema-facade::authored_widget_symbols_are_preserved_exactly_in_the_definition",
+          "browser-csr::exact_widget_binding_is_definition_stable_and_grants_only_node_capabilities",
+          "browser-csr::custom_item_widget_renders_under_adapter_owned_array"
+        ]
+      },
+      {
+        "profile_cases": ["ui-schema.widget.unavailable"],
+        "tests": ["browser-csr::renderer_bind_preflight_reports_missing_exact_widgets_and_priority_ties"]
+      },
+      {
+        "profile_cases": ["ui-schema.widget.collection"],
+        "tests": ["browser-csr::renderer_bind_preflight_reports_missing_exact_widgets_and_priority_ties"]
+      },
+      {
+        "profile_cases": ["ui-schema.extension.optional"],
+        "tests": [
+          "authored-ui-schema-facade::exact_uri_extensions_are_validated_preserved_and_fingerprinted",
+          "browser-csr::exact_uri_extensions_preflight_and_decorate_in_canonical_order"
+        ]
+      },
+      {
+        "profile_cases": ["ui-schema.extension.required"],
+        "tests": [
+          "authored-ui-schema-facade::required_extensions_must_be_unique_present_and_bounded",
+          "browser-csr::exact_uri_extensions_preflight_and_decorate_in_canonical_order"
+        ]
+      },
+      {
+        "profile_cases": ["ui-schema.extension.unavailable"],
+        "tests": ["browser-csr::exact_uri_extensions_preflight_and_decorate_in_canonical_order"]
+      }
+    ],
+    "adapter": [
+      {
+        "profile_cases": ["adapter.render-configuration"],
+        "tests": [
+          "browser-csr::exact_widget_binding_is_definition_stable_and_grants_only_node_capabilities",
+          "browser-csr::exact_uri_extensions_preflight_and_decorate_in_canonical_order",
+          "browser-csr::custom_presenters_receive_one_deterministic_collection_per_target",
+          "browser-csr::locale_and_presenter_changes_update_only_reactive_plain_text_presentation"
+        ]
+      },
+      {
+        "profile_cases": ["adapter.renderer-matcher.ambiguous"],
+        "tests": ["browser-csr::renderer_bind_preflight_reports_missing_exact_widgets_and_priority_ties"]
+      },
+      {
+        "profile_cases": ["adapter.custom-control"],
+        "tests": [
+          "browser-csr::exact_widget_binding_is_definition_stable_and_grants_only_node_capabilities",
+          "browser-csr::custom_item_widget_renders_under_adapter_owned_array"
+        ]
+      },
+      {
+        "profile_cases": ["adapter.layout-renderers"],
+        "tests": [
+          "browser-csr::authored_ui_schema_renders_semantics_and_preserves_form_behavior",
+          "browser-csr::tabs_support_keyboard_navigation_adapter_local_selection_and_summary_focus",
+          "browser-csr::responsive_grid_behavior_matches_the_active_css_viewport",
+          "browser-csr::explicit_auto_renders_only_at_its_authored_position"
+        ]
+      },
+      {
+        "profile_cases": ["adapter.finding-presenters"],
+        "tests": [
+          "browser-csr::custom_presenters_receive_one_deterministic_collection_per_target",
+          "browser-csr::locale_and_presenter_changes_update_only_reactive_plain_text_presentation"
+        ]
+      },
+      {
+        "profile_cases": ["adapter.localization"],
+        "tests": [
+          "browser-csr::authored_ui_schema_renders_semantics_and_preserves_form_behavior",
+          "browser-csr::locale_and_presenter_changes_update_only_reactive_plain_text_presentation"
+        ]
+      },
+      {
+        "profile_cases": ["adapter.extension-order"],
+        "tests": ["browser-csr::exact_uri_extensions_preflight_and_decorate_in_canonical_order"]
+      },
+      {
+        "profile_cases": ["adapter.ime-composition"],
+        "tests": ["browser-csr::ime_composition_stays_local_across_presentation_updates_and_commits_on_end"]
+      },
+      {
+        "profile_cases": ["adapter.browser-csr"],
+        "tests": ["browser-csr::every_in_profile_business_schema_executes_through_the_default_browser_adapter"]
+      }
+    ],
+    "scalar_states": [
+      { "id": "missing", "tests": ["scalar-presence-facade::nullable_string_exposes_all_scalar_states_without_mutating_form_data"] },
+      { "id": "null", "tests": ["scalar-presence-facade::nullable_string_exposes_all_scalar_states_without_mutating_form_data"] },
+      { "id": "empty", "tests": ["scalar-presence-facade::nullable_string_exposes_all_scalar_states_without_mutating_form_data"] },
+      { "id": "compatible", "tests": ["scalar-presence-facade::nullable_string_exposes_all_scalar_states_without_mutating_form_data"] },
+      { "id": "incompatible", "tests": ["scalar-presence-facade::nullable_string_exposes_all_scalar_states_without_mutating_form_data"] }
+    ],
+    "commands": [
+      { "id": "user.input-text", "tests": ["fixed-object-profile::fixed_object_authority_and_lifecycle_trace_has_stable_public_outcomes"] },
+      { "id": "user.blur", "tests": ["fixed-object-profile::fixed_object_authority_and_lifecycle_trace_has_stable_public_outcomes"] },
+      { "id": "user.set-value", "tests": ["fixed-object-profile::fixed_object_authority_and_lifecycle_trace_has_stable_public_outcomes"] },
+      { "id": "user.set-null", "tests": ["fixed-object-profile::fixed_object_authority_and_lifecycle_trace_has_stable_public_outcomes"] },
+      { "id": "user.remove-value", "tests": ["fixed-object-profile::fixed_object_authority_and_lifecycle_trace_has_stable_public_outcomes"] },
+      { "id": "user.replace-value", "tests": ["fixed-object-profile::fixed_object_authority_and_lifecycle_trace_has_stable_public_outcomes"] },
+      { "id": "user.materialize", "tests": ["fixed-object-profile::fixed_object_authority_and_lifecycle_trace_has_stable_public_outcomes"] },
+      { "id": "user.append-item", "tests": ["scalar-array-facade::scalar_array_append_and_remove_preserve_surviving_item_identity"] },
+      { "id": "user.insert-item-before", "tests": ["scalar-array-facade::scalar_array_insert_before_targets_duplicate_item_identity"] },
+      { "id": "user.remove-item", "tests": ["scalar-array-facade::scalar_array_append_and_remove_preserve_surviving_item_identity"] },
+      { "id": "user.move-item-up", "tests": ["scalar-array-facade::moving_duplicate_items_preserves_logical_item_state_and_data_revision"] },
+      { "id": "user.move-item-down", "tests": ["scalar-array-facade::moving_unequal_items_changes_data_revision_and_rejects_boundaries_atomically"] },
+      { "id": "host.set", "tests": ["host-transaction-facade::related_host_pointer_operations_publish_one_final_transition"] },
+      { "id": "host.remove", "tests": ["host-transaction-facade::related_host_pointer_operations_publish_one_final_transition"] },
+      { "id": "host.replace-all", "tests": ["host-transaction-facade::failed_host_transactions_roll_back_all_observable_form_state"] },
+      { "id": "host.append-item", "tests": ["scalar-array-facade::host_structural_commands_preserve_surviving_logical_items"] },
+      { "id": "host.insert-item-before", "tests": ["scalar-array-facade::host_structural_commands_preserve_surviving_logical_items"] },
+      { "id": "host.remove-item", "tests": ["scalar-array-facade::host_structural_commands_preserve_surviving_logical_items"] },
+      { "id": "host.move-item-up", "tests": ["scalar-array-facade::host_structural_commands_preserve_surviving_logical_items"] },
+      { "id": "host.move-item-down", "tests": ["scalar-array-facade::host_structural_commands_preserve_surviving_logical_items"] }
+    ],
+    "finding_families": [
+      { "id": "validation", "tests": ["fixed-object-profile::fixed_object_finding_families_and_submission_outcomes_are_exhaustive"] },
+      { "id": "validation-findings-truncated", "tests": ["fixed-object-profile::fixed_object_finding_families_and_submission_outcomes_are_exhaustive"] },
+      { "id": "indeterminate", "tests": ["fixed-object-profile::indeterminate_validation_discards_partial_findings_and_blocks_submission"] },
+      { "id": "capability", "tests": ["fixed-object-profile::fixed_object_finding_families_and_submission_outcomes_are_exhaustive"] },
+      { "id": "external", "tests": ["fixed-object-profile::fixed_object_finding_families_and_submission_outcomes_are_exhaustive"] },
+      { "id": "parse", "tests": ["fixed-object-profile::fixed_object_finding_families_and_submission_outcomes_are_exhaustive"] }
+    ],
+    "lifecycle_operations": [
+      { "id": "reset", "tests": ["lifecycle-facade::reset_restores_valid_baseline_from_invalid_parse_blocked_state"] },
+      { "id": "reinitialize", "tests": ["lifecycle-facade::reinitialize_starts_a_fresh_lifecycle_for_valid_invalid_and_equal_data"] },
+      { "id": "host-transaction", "tests": ["host-transaction-facade::related_host_pointer_operations_publish_one_final_transition"] },
+      { "id": "replace-external-findings", "tests": ["external-submission-facade::external_batches_replace_by_source_only_for_the_current_data_revision"] },
+      { "id": "set-finding-visibility", "tests": ["external-submission-facade::validation_and_external_visibility_are_independent_while_parse_blockers_are_immediate"] }
+    ],
+    "submission_outcomes": [
+      { "id": "ready", "tests": ["external-submission-facade::submission_returns_one_transition_and_every_structured_blocker_or_a_minimal_snapshot"] },
+      { "id": "blocked", "tests": ["external-submission-facade::submission_returns_one_transition_and_every_structured_blocker_or_a_minimal_snapshot"] }
+    ],
+    "business_schema_corpus": {
+      "manifest": "testing/fixtures/business-schemas/manifest.json",
+      "core_test": "business-schema-product::every_business_schema_fixture_has_its_expected_product_outcome",
+      "browser_test": "browser-csr::every_in_profile_business_schema_executes_through_the_default_browser_adapter"
+    }
+  },
+  "qualification_failures": [
+    {
+      "id": "qualification.data-schema.invalid-json",
+      "context": "Invalid or over-limit data-schema input",
+      "target": "qualification-error",
+      "current": "implemented"
+    },
+    {
+      "id": "qualification.data-schema.dialect",
+      "context": "Missing dialect without an explicit default, an unsupported dialect, or nested dialect switching",
+      "target": "qualification-error",
+      "current": "implemented"
+    },
+    {
+      "id": "qualification.data-schema.vocabulary",
+      "context": "Unsupported required vocabulary",
+      "target": "qualification-error",
+      "current": "implemented"
+    },
+    {
+      "id": "qualification.data-schema.meta-schema",
+      "context": "A resource that is invalid against its resolved meta-schema",
+      "target": "qualification-error",
+      "current": "implemented"
+    },
+    {
+      "id": "qualification.data-schema.resource-identity",
+      "context": "Duplicate, relative, fragmented, or otherwise invalid required resource identity",
+      "target": "qualification-error",
+      "current": "implemented"
+    },
+    {
+      "id": "qualification.data-schema.reference",
+      "context": "Unresolved or unsupported reference target",
+      "target": "qualification-error",
+      "current": "implemented"
+    },
+    {
+      "id": "qualification.ui-schema.invalid-document",
+      "context": "Any wire version other than integer 1, unknown core field or element (including reusable-template syntax), malformed binding, duplicate editor, or inconsistent required-extension declaration is rejected",
+      "target": "qualification-error",
+      "current": "implemented"
+    }
+  ],
+  "cases": [
+    {
+      "id": "structure.root.fixed-object",
+      "construct": "root",
+      "context": "One non-null fixed-object root",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.root.scalar",
+      "construct": "root",
+      "context": "Root scalar form",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.root.array",
+      "construct": "root",
+      "context": "Root array form",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.object.nested-fixed",
+      "construct": "object",
+      "context": "Nested fixed objects outside an array",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.object.array-item-nested-fixed",
+      "construct": "object",
+      "context": "Nested fixed objects inside an array item",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.object.nullable-fixed",
+      "construct": "object",
+      "context": "One fixed-object kind plus null requested as a control",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.scalar.string",
+      "construct": "string",
+      "context": "String property control",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.scalar.number",
+      "construct": "number",
+      "context": "Arbitrary-precision decimal number property control",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.scalar.integer",
+      "construct": "integer",
+      "context": "Arbitrary-precision integer property control",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.scalar.boolean",
+      "construct": "boolean",
+      "context": "Boolean property control",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.scalar.null-only",
+      "construct": "null",
+      "context": "Null-only property control",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.scalar.nullable",
+      "construct": "nullable scalar",
+      "context": "One supported non-null scalar kind plus null",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.array.homogeneous-scalar",
+      "construct": "array",
+      "context": "Homogeneous scalar items with no earlier array on the branch",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.array.homogeneous-fixed-object",
+      "construct": "array",
+      "context": "Homogeneous fixed-object items with no earlier array on the branch",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.array.nullable",
+      "construct": "array",
+      "context": "One homogeneous array kind plus null requested as a control",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.array.nested",
+      "construct": "array",
+      "context": "An array directly or indirectly below an array item",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.recursive.validation",
+      "construct": "recursive reference",
+      "context": "A legal recursive graph used only by authoritative validation",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "structure.recursive.projection",
+      "construct": "recursive reference",
+      "context": "Projection re-enters a schema location active on the definition-expansion path",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "core.schema.draft-2020-12",
+      "construct": "$schema",
+      "context": "Accepted canonical Draft 2020-12 declaration",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "core.vocabulary.supported",
+      "construct": "$vocabulary",
+      "context": "Required or optional vocabulary supported by the qualified standard dialect",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "core.id.resource",
+      "construct": "$id",
+      "context": "Resolved resource identity",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "core.anchor.resolved",
+      "construct": "$anchor",
+      "context": "Resolved anchor in the caller-supplied resource graph",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "core.dynamic-reference.validation",
+      "construct": "$dynamicRef",
+      "context": "Dynamic reference affects validation but not the projected editable shape",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "core.dynamic-reference.shape",
+      "construct": "$dynamicRef",
+      "context": "Dynamic reference is required to determine the projected editable shape",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "core.dynamic-anchor",
+      "construct": "$dynamicAnchor",
+      "context": "Dynamic anchor participates in qualified validation",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "core.defs.referenced",
+      "construct": "$defs",
+      "context": "Referenced reusable schema for a local nested fixed object",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "core.ref.resolved",
+      "construct": "$ref",
+      "context": "Resolved local JSON Pointer target in the editable closure",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "core.ref.supplied-resource",
+      "construct": "$ref",
+      "context": "Resolved supplied-resource target in the editable closure",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "core.comment",
+      "construct": "$comment",
+      "context": "Preserved schema comment with no form behavior",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "core.boolean.with-independent-kind",
+      "construct": "boolean schema",
+      "context": "Another applicable schema independently supplies an editable kind",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "core.boolean.unconstrained",
+      "construct": "boolean schema",
+      "context": "No applicable schema supplies an editable kind",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.type.editable",
+      "construct": "type",
+      "context": "Supported unambiguous instance kind",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.type.ambiguous",
+      "construct": "type",
+      "context": "Multiple non-null kinds without a supported finite scalar choice",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.type.unconstrained",
+      "construct": "type",
+      "context": "No semantic kind can be inferred from applicable schemas",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.enum.static",
+      "construct": "enum",
+      "context": "Finite unique scalar choices, including mixed scalar kinds and null",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.enum.predicate",
+      "construct": "enum",
+      "context": "Choice constraint inside a structural predicate with an independently editable shape",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.enum.conditional",
+      "construct": "enum",
+      "context": "Choices changed by a structural conditional",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.enum.structured",
+      "construct": "enum",
+      "context": "Object or array choices",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.const.scalar",
+      "construct": "const",
+      "context": "One scalar constant, including null",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.const.structured",
+      "construct": "const",
+      "context": "Object or array constant requested as an editable control",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.required",
+      "construct": "required",
+      "context": "Fixed-object property presence",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.minimum.numeric",
+      "construct": "minimum",
+      "context": "Numeric control facet and authoritative assertion",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.maximum.numeric",
+      "construct": "maximum",
+      "context": "Numeric control facet and authoritative assertion",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.exclusive-minimum.numeric",
+      "construct": "exclusiveMinimum",
+      "context": "Exclusive numeric control facet and authoritative assertion",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.exclusive-maximum.numeric",
+      "construct": "exclusiveMaximum",
+      "context": "Exclusive numeric control facet and authoritative assertion",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.multiple-of",
+      "construct": "multipleOf",
+      "context": "Numeric assertion without built-in mutation behavior",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.min-length",
+      "construct": "minLength",
+      "context": "String assertion without a distinct control kind",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.max-length",
+      "construct": "maxLength",
+      "context": "String assertion without a distinct control kind",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.pattern",
+      "construct": "pattern",
+      "context": "String assertion without a dedicated operation",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.min-items",
+      "construct": "minItems",
+      "context": "Lower bound on permitted array removal",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.max-items",
+      "construct": "maxItems",
+      "context": "Upper bound on permitted array append or insertion",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.unique-items",
+      "construct": "uniqueItems",
+      "context": "Array assertion without automatic deduplication",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.contains",
+      "construct": "contains",
+      "context": "Array assertion without operation rewriting",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.min-contains",
+      "construct": "minContains",
+      "context": "Array assertion without operation rewriting",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.max-contains",
+      "construct": "maxContains",
+      "context": "Array assertion without operation rewriting",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.min-properties",
+      "construct": "minProperties",
+      "context": "Fixed-object assertion without dynamic-key operations",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.max-properties",
+      "construct": "maxProperties",
+      "context": "Fixed-object assertion without dynamic-key operations",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "validation.dependent-required",
+      "construct": "dependentRequired",
+      "context": "Object assertion and finding attachment without destructive reaction",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.properties.fixed",
+      "construct": "properties",
+      "context": "Declared fixed-object properties",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.properties.predicate",
+      "construct": "properties",
+      "context": "Property constraint inside a structural predicate",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.properties.conditional",
+      "construct": "properties",
+      "context": "Property shape changed by a structural conditional",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.items.homogeneous",
+      "construct": "items",
+      "context": "Homogeneous items within the one-array-per-branch closure",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.additional-properties.closed",
+      "construct": "additionalProperties",
+      "context": "Closed fixed object",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.additional-properties.open",
+      "construct": "additionalProperties",
+      "context": "Open object with an independently fixed declared projection",
+      "target": "warning",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.additional-properties.schema-projection",
+      "construct": "additionalProperties",
+      "context": "Schema-valued additional properties with an independently fixed declared projection",
+      "target": "warning",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.additional-properties.dynamic-map",
+      "construct": "additionalProperties",
+      "context": "A requested control requires arbitrary-key creation or editing",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.pattern-properties.fixed-projection",
+      "construct": "patternProperties",
+      "context": "Pattern properties coexist with an independently fixed declared projection",
+      "target": "warning",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.pattern-properties.shape",
+      "construct": "patternProperties",
+      "context": "Pattern properties are required to determine requested editable members",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.property-names",
+      "construct": "propertyNames",
+      "context": "Property-name assertion while dynamic-key editing is unavailable",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.all-of.compatible",
+      "construct": "allOf",
+      "context": "Compatible conjunctive semantics with one editable kind",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.all-of.conditional",
+      "construct": "allOf",
+      "context": "Composition contains a shape-changing structural conditional",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.all-of.ambiguous",
+      "construct": "allOf",
+      "context": "Conjunctive schemas do not yield one compatible editable kind and facets",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.not.independent-kind",
+      "construct": "not",
+      "context": "Another applicable schema independently supplies an editable kind",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.not.shape",
+      "construct": "not",
+      "context": "The negated schema would be needed to infer the editable kind",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.prefix-items",
+      "construct": "prefixItems",
+      "context": "Tuple or position-specific item editing",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.one-of",
+      "construct": "oneOf",
+      "context": "General branch selection or migration",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.any-of",
+      "construct": "anyOf",
+      "context": "General multi-branch editing",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.if.validation",
+      "construct": "if",
+      "context": "Conditional evaluation affects validation but not the independently projected shape",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.if.structural",
+      "construct": "if",
+      "context": "Predicate participates in shape-changing conditional editing",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.then.validation",
+      "construct": "then",
+      "context": "Selected branch affects validation but not the independently projected shape",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.then.structural",
+      "construct": "then",
+      "context": "Selected branch changes the requested editable shape",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.else.validation",
+      "construct": "else",
+      "context": "Selected branch affects validation but not the independently projected shape",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.else.structural",
+      "construct": "else",
+      "context": "Selected branch changes the requested editable shape",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.dependent-schemas.validation",
+      "construct": "dependentSchemas",
+      "context": "Dependent schema affects validation but not the independently projected shape",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.dependent-schemas.structural",
+      "construct": "dependentSchemas",
+      "context": "Dependent schema changes the requested editable shape",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "unevaluated.properties.validation",
+      "construct": "unevaluatedProperties",
+      "context": "Assertion does not determine the independently fixed declared projection",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "unevaluated.properties.shape",
+      "construct": "unevaluatedProperties",
+      "context": "Evaluation semantics are required to determine editable object members",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "unevaluated.items.validation",
+      "construct": "unevaluatedItems",
+      "context": "Assertion does not determine the independently homogeneous item projection",
+      "target": "validation-only",
+      "current": "implemented"
+    },
+    {
+      "id": "unevaluated.items.shape",
+      "construct": "unevaluatedItems",
+      "context": "Evaluation semantics are required to determine editable array items",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "format.default-annotation",
+      "construct": "format",
+      "context": "Default Draft 2020-12 annotation; built-ins remain plain string controls",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "content.encoding",
+      "construct": "contentEncoding",
+      "context": "Collected annotation without decoding or file behavior",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "content.media-type",
+      "construct": "contentMediaType",
+      "context": "Collected annotation without authorizing HTML or content rendering",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "content.schema",
+      "construct": "contentSchema",
+      "context": "Collected annotation without nested decoded-content editing",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "metadata.title",
+      "construct": "title",
+      "context": "Label fallback",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "metadata.description",
+      "construct": "description",
+      "context": "Help-text fallback",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "metadata.default",
+      "construct": "default",
+      "context": "Declared default without implicit materialization",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "metadata.deprecated",
+      "construct": "deprecated",
+      "context": "Preserved deprecation facet",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "metadata.read-only",
+      "construct": "readOnly",
+      "context": "User-edit restriction with privileged host authority retained",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "metadata.write-only",
+      "construct": "writeOnly",
+      "context": "Sensitive replacement presentation without exposing an existing value",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "metadata.examples",
+      "construct": "examples",
+      "context": "Preserved examples without automatic data mutation",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.document.v1",
+      "construct": "UI schema document",
+      "context": "Accepted documents use exactly integer wire version 1",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.document.omitted",
+      "construct": "UI schema omission",
+      "context": "No UI schema is exactly one generated root Auto",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.element.control",
+      "construct": "Control",
+      "context": "One semantic editor for one instantiated binding",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.element.auto",
+      "construct": "Auto",
+      "context": "Deterministic direct-property generation with inclusion, exclusion, ordering, and one remaining-properties position",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.element.stack",
+      "construct": "Stack",
+      "context": "Ordered semantic flow",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.element.grid",
+      "construct": "Grid",
+      "context": "Responsive compact and wide spans that preserve semantic order",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.element.group",
+      "construct": "Group",
+      "context": "Labeled semantic field grouping",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.element.tabs",
+      "construct": "Tabs",
+      "context": "Labeled panel subtrees with adapter-local selection",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.element.text",
+      "construct": "Text",
+      "context": "Escaped plain text with no HTML or Markdown semantics",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.authored.omission",
+      "construct": "authored omission",
+      "context": "An authored document omits a valid data location without implicit generation",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.binding.root",
+      "construct": "control binding",
+      "context": "Root-origin RFC 6901 pointer",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.binding.template",
+      "construct": "control binding",
+      "context": "Template-origin RFC 6901 pointer inside an array-owned item template",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.item-template.inline",
+      "construct": "item template",
+      "context": "One inline semantic subtree owned by a homogeneous array control",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.element.identity",
+      "construct": "element ID",
+      "context": "Optional explicit ID or deterministic derived definition identity",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.text.localization",
+      "construct": "text reference",
+      "context": "Required literal fallback with an optional localization key",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.text.annotation-policy",
+      "construct": "label and help policy",
+      "context": "Inherit, override, or suppress data-schema title and description",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.widget.available",
+      "construct": "widget symbol",
+      "context": "Exact symbolic request on an eligible non-collection control is available in the bound render configuration",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.widget.unavailable",
+      "construct": "widget symbol",
+      "context": "Exact symbolic request has no registered renderer",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.widget.collection",
+      "construct": "widget symbol",
+      "context": "Exact symbolic request on a homogeneous array is preserved by compilation and rejected during Dioxus binding because collection composition is adapter-owned",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.extension.optional",
+      "construct": "extension namespace",
+      "context": "Bounded opaque value for an optional exact absolute namespace URI",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.extension.required",
+      "construct": "required extension",
+      "context": "Declared namespace is present and available during atomic adapter preflight",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "ui-schema.extension.unavailable",
+      "construct": "required extension",
+      "context": "Declared required namespace has no valid handler during adapter preflight",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "adapter.render-configuration",
+      "construct": "RenderConfiguration",
+      "context": "Immutable renderer, presenter, localizer, and extension configuration binds atomically before mount",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "adapter.renderer-matcher.ambiguous",
+      "construct": "renderer matcher",
+      "context": "Two definition-level renderer matchers tie at the highest priority during atomic preflight",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "adapter.custom-control",
+      "construct": "custom control",
+      "context": "Node projection, identity-targeted approved actions, accessibility data, localized text, and automatically applied prepared extension decorators only; no raw schema or normalized facet API",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "adapter.layout-renderers",
+      "construct": "layout renderer",
+      "context": "All seven semantic elements, including homogeneous array composition and collection actions, are adapter-owned with no parallel layout registry",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "adapter.finding-presenters",
+      "construct": "finding presenter",
+      "context": "Exactly one local and one summary collection presenter receive prepared focus actions but no mutation authority",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "adapter.localization",
+      "construct": "localizer",
+      "context": "Reactive escaped plain-text localization without core revision changes",
+      "target": "annotation",
+      "current": "implemented"
+    },
+    {
+      "id": "adapter.extension-order",
+      "construct": "extension handler",
+      "context": "Exact-URI occurrences are prepared in canonical URI order with one documented decorator nesting direction",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "adapter.ime-composition",
+      "construct": "text-like browser control",
+      "context": "Composition input remains adapter-local across presentation updates and commits once composition ends",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
+      "id": "adapter.browser-csr",
+      "construct": "platform",
+      "context": "Browser client-side rendering through accessible unstyled semantic HTML",
+      "target": "editing",
+      "current": "implemented"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:openkyc-customer-onboarding",
+  "$comment": "Adapted and reduced from Lazy Jack Ltd's Apache-2.0 OpenKYCAML 1.19.0 NaturalPerson and NaturalPersonNameIdentifier definitions; this file has been changed for offline corpus use.",
+  "title": "Natural-person KYC onboarding",
+  "description": "Structured legal names and core residence and identity fields for customer due diligence.",
+  "type": "object",
+  "required": ["name"],
+  "properties": {
+    "name": {
+      "type": "object",
+      "required": ["nameIdentifier"],
+      "properties": {
+        "nameIdentifier": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/naturalPersonNameIdentifier" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "customerIdentification": { "type": "string" },
+    "countryOfResidence": { "type": "string", "pattern": "^[A-Z]{2}$" },
+    "nationality": { "type": "string", "pattern": "^[A-Z]{2}$" },
+    "gender": {
+      "type": "string",
+      "enum": ["MALE", "FEMALE", "NON_BINARY", "OTHER", "PREFER_NOT_TO_SAY"]
+    }
+  },
+  "$defs": {
+    "naturalPersonNameIdentifier": {
+      "type": "object",
+      "required": ["primaryIdentifier", "nameIdentifierType"],
+      "properties": {
+        "primaryIdentifier": { "type": "string" },
+        "secondaryIdentifier": { "type": "string" },
+        "nameIdentifierType": {
+          "type": "string",
+          "enum": ["ALIA", "BIRT", "MAID", "LEGL", "MISC"]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,67 @@
+[package]
+name = "schemaform-fuzz"
+version = "0.0.0"
+description = "cargo-fuzz targets for schemaform"
+# Not a workspace member (see the root `exclude`), so package fields and
+# dependencies cannot be inherited from `[workspace.package]`.
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+schemaform-fuzz-harness = { path = "../crates/schemaform-fuzz-harness" }
+
+libfuzzer-sys = "=0.4.13"
+
+[[bin]]
+name = "resource_compilation"
+path = "fuzz_targets/resource_compilation.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ui_schema_compilation"
+path = "fuzz_targets/ui_schema_compilation.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "form_construction"
+path = "fuzz_targets/form_construction.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "uri_pointer"
+path = "fuzz_targets/uri_pointer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "user_commands"
+path = "fuzz_targets/user_commands.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "host_transactions"
+path = "fuzz_targets/host_transactions.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "external_findings"
+path = "fuzz_targets/external_findings.rs"
+test = false
+doc = false
+bench = false

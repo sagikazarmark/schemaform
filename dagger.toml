@@ -1,0 +1,9 @@
+[modules.rust]
+source = "github.com/sagikazarmark/daggerverse-beta/rust"
+
+settings.version = "1.97-slim-trixie"
+
+[modules.dagger-gha]
+source = "github.com/sagikazarmark/daggerverse-beta/dagger-gha"
+
+settings.lock = '"PINNED"'

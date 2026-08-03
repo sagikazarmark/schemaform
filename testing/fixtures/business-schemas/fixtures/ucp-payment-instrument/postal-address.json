@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:ucp-payment-instrument:postal-address",
+  "$comment": "Adapted from the Apache-2.0 Universal Commerce Protocol Postal Address schema; this file has been changed only to use an offline corpus identity and explicit open-object policy.",
+  "title": "Postal Address",
+  "type": "object",
+  "properties": {
+    "extended_address": { "type": "string" },
+    "street_address": { "type": "string" },
+    "address_locality": { "type": "string" },
+    "address_region": { "type": "string" },
+    "address_country": { "type": "string" },
+    "postal_code": { "type": "string" },
+    "first_name": { "type": "string" },
+    "last_name": { "type": "string" },
+    "phone_number": { "type": "string" }
+  },
+  "additionalProperties": true
+}

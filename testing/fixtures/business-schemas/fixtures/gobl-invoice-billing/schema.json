@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:gobl-invoice-billing",
+  "$comment": "Adapted and reduced from Invopop's Apache-2.0 GOBL Invoice schema; this file has been changed for offline corpus use.",
+  "title": "Business invoice",
+  "description": "Invoice header, parties, line items, payment terms, and calculated total.",
+  "type": "object",
+  "required": ["issueDate", "currency", "supplier", "customer", "lines"],
+  "properties": {
+    "invoiceType": { "type": "string", "enum": ["standard", "credit-note", "proforma"] },
+    "issueDate": { "type": "string", "format": "date" },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "supplier": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "taxId": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "customer": { "$ref": "#/$defs/party" },
+    "lines": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/line" }
+    },
+    "paymentTerms": { "type": "string" },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "total": { "type": "number", "readOnly": true }
+  },
+  "$defs": {
+    "party": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "taxId": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "line": {
+      "type": "object",
+      "required": ["description", "quantity", "unitPrice"],
+      "properties": {
+        "description": { "type": "string" },
+        "quantity": { "type": "number", "minimum": 0 },
+        "unitPrice": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,8 @@
+[
+  {"External":{"fresh":true,"source":"Server","target":"Name","blocking":true}},
+  {"Visibility":{"validation":"Immediate","external":"Immediate"}},
+  {"InputQuantity":"-"},
+  {"Host":"ClosureFailed"},
+  {"Host":"InvalidOperation"},
+  "Submit"
+]

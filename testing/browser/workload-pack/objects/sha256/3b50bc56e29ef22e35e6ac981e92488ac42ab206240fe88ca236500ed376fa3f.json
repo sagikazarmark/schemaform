@@ -1,0 +1,476 @@
+{
+  "version": 1,
+  "id": "O50-generated-valid",
+  "profile": "O50",
+  "variant": "generated",
+  "state": "valid",
+  "data_schema": {
+    "$id": "urn:schemaform:browser-workload:object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "level_1": {
+        "additionalProperties": false,
+        "properties": {
+          "level_2": {
+            "additionalProperties": false,
+            "properties": {
+              "level_3": {
+                "additionalProperties": false,
+                "properties": {
+                  "field_000": {
+                    "minimum": 0,
+                    "title": "Field 000",
+                    "type": "integer"
+                  },
+                  "field_001": {
+                    "minLength": 1,
+                    "title": "Field 001",
+                    "type": "string"
+                  },
+                  "field_002": {
+                    "minimum": 0,
+                    "title": "Field 002",
+                    "type": "number"
+                  },
+                  "field_003": {
+                    "title": "Field 003",
+                    "type": "boolean"
+                  },
+                  "field_004": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 004"
+                  },
+                  "field_005": {
+                    "minimum": 0,
+                    "title": "Field 005",
+                    "type": "integer"
+                  },
+                  "field_006": {
+                    "minLength": 1,
+                    "title": "Field 006",
+                    "type": "string"
+                  },
+                  "field_007": {
+                    "minimum": 0,
+                    "title": "Field 007",
+                    "type": "number"
+                  },
+                  "field_008": {
+                    "title": "Field 008",
+                    "type": "boolean"
+                  },
+                  "field_009": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 009"
+                  },
+                  "field_010": {
+                    "minimum": 0,
+                    "title": "Field 010",
+                    "type": "integer"
+                  },
+                  "field_011": {
+                    "minLength": 1,
+                    "title": "Field 011",
+                    "type": "string"
+                  },
+                  "field_012": {
+                    "minimum": 0,
+                    "title": "Field 012",
+                    "type": "number"
+                  },
+                  "field_013": {
+                    "title": "Field 013",
+                    "type": "boolean"
+                  },
+                  "field_014": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 014"
+                  },
+                  "field_015": {
+                    "minimum": 0,
+                    "title": "Field 015",
+                    "type": "integer"
+                  },
+                  "field_016": {
+                    "minLength": 1,
+                    "title": "Field 016",
+                    "type": "string"
+                  },
+                  "field_017": {
+                    "minimum": 0,
+                    "title": "Field 017",
+                    "type": "number"
+                  },
+                  "field_018": {
+                    "title": "Field 018",
+                    "type": "boolean"
+                  },
+                  "field_019": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 019"
+                  },
+                  "field_020": {
+                    "minimum": 0,
+                    "title": "Field 020",
+                    "type": "integer"
+                  },
+                  "field_021": {
+                    "minLength": 1,
+                    "title": "Field 021",
+                    "type": "string"
+                  },
+                  "field_022": {
+                    "minimum": 0,
+                    "title": "Field 022",
+                    "type": "number"
+                  },
+                  "field_023": {
+                    "title": "Field 023",
+                    "type": "boolean"
+                  },
+                  "field_024": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 024"
+                  },
+                  "field_025": {
+                    "minimum": 0,
+                    "title": "Field 025",
+                    "type": "integer"
+                  },
+                  "field_026": {
+                    "minLength": 1,
+                    "title": "Field 026",
+                    "type": "string"
+                  },
+                  "field_027": {
+                    "minimum": 0,
+                    "title": "Field 027",
+                    "type": "number"
+                  },
+                  "field_028": {
+                    "title": "Field 028",
+                    "type": "boolean"
+                  },
+                  "field_029": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 029"
+                  },
+                  "field_030": {
+                    "minimum": 0,
+                    "title": "Field 030",
+                    "type": "integer"
+                  },
+                  "field_031": {
+                    "minLength": 1,
+                    "title": "Field 031",
+                    "type": "string"
+                  },
+                  "field_032": {
+                    "minimum": 0,
+                    "title": "Field 032",
+                    "type": "number"
+                  },
+                  "field_033": {
+                    "title": "Field 033",
+                    "type": "boolean"
+                  },
+                  "field_034": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 034"
+                  },
+                  "field_035": {
+                    "minimum": 0,
+                    "title": "Field 035",
+                    "type": "integer"
+                  },
+                  "field_036": {
+                    "minLength": 1,
+                    "title": "Field 036",
+                    "type": "string"
+                  },
+                  "field_037": {
+                    "minimum": 0,
+                    "title": "Field 037",
+                    "type": "number"
+                  },
+                  "field_038": {
+                    "title": "Field 038",
+                    "type": "boolean"
+                  },
+                  "field_039": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 039"
+                  },
+                  "field_040": {
+                    "minimum": 0,
+                    "title": "Field 040",
+                    "type": "integer"
+                  },
+                  "field_041": {
+                    "minLength": 1,
+                    "title": "Field 041",
+                    "type": "string"
+                  },
+                  "field_042": {
+                    "minimum": 0,
+                    "title": "Field 042",
+                    "type": "number"
+                  },
+                  "field_043": {
+                    "title": "Field 043",
+                    "type": "boolean"
+                  },
+                  "field_044": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 044"
+                  },
+                  "field_045": {
+                    "minimum": 0,
+                    "title": "Field 045",
+                    "type": "integer"
+                  },
+                  "field_046": {
+                    "minLength": 1,
+                    "title": "Field 046",
+                    "type": "string"
+                  },
+                  "field_047": {
+                    "minimum": 0,
+                    "title": "Field 047",
+                    "type": "number"
+                  },
+                  "field_048": {
+                    "title": "Field 048",
+                    "type": "boolean"
+                  },
+                  "field_049": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 049"
+                  }
+                },
+                "required": [
+                  "field_000",
+                  "field_001",
+                  "field_002",
+                  "field_003",
+                  "field_004",
+                  "field_005",
+                  "field_006",
+                  "field_007",
+                  "field_008",
+                  "field_009",
+                  "field_010",
+                  "field_011",
+                  "field_012",
+                  "field_013",
+                  "field_014",
+                  "field_015",
+                  "field_016",
+                  "field_017",
+                  "field_018",
+                  "field_019",
+                  "field_020",
+                  "field_021",
+                  "field_022",
+                  "field_023",
+                  "field_024",
+                  "field_025",
+                  "field_026",
+                  "field_027",
+                  "field_028",
+                  "field_029",
+                  "field_030",
+                  "field_031",
+                  "field_032",
+                  "field_033",
+                  "field_034",
+                  "field_035",
+                  "field_036",
+                  "field_037",
+                  "field_038",
+                  "field_039",
+                  "field_040",
+                  "field_041",
+                  "field_042",
+                  "field_043",
+                  "field_044",
+                  "field_045",
+                  "field_046",
+                  "field_047",
+                  "field_048",
+                  "field_049"
+                ],
+                "title": "Representative object controls",
+                "type": "object"
+              }
+            },
+            "required": [
+              "level_3"
+            ],
+            "title": "Level 2",
+            "type": "object"
+          }
+        },
+        "required": [
+          "level_2"
+        ],
+        "title": "Level 1",
+        "type": "object"
+      }
+    },
+    "required": [
+      "level_1"
+    ],
+    "title": "Representative object workload",
+    "type": "object"
+  },
+  "ui_schema": null,
+  "initial_form_data": {
+    "level_1": {
+      "level_2": {
+        "level_3": {
+          "field_000": 0,
+          "field_001": "value-001",
+          "field_002": 3.25,
+          "field_003": false,
+          "field_004": "alpha",
+          "field_005": 5,
+          "field_006": "value-006",
+          "field_007": 8.25,
+          "field_008": true,
+          "field_009": "alpha",
+          "field_010": 10,
+          "field_011": "value-011",
+          "field_012": 13.25,
+          "field_013": false,
+          "field_014": "alpha",
+          "field_015": 15,
+          "field_016": "value-016",
+          "field_017": 18.25,
+          "field_018": true,
+          "field_019": "alpha",
+          "field_020": 20,
+          "field_021": "value-021",
+          "field_022": 23.25,
+          "field_023": false,
+          "field_024": "alpha",
+          "field_025": 25,
+          "field_026": "value-026",
+          "field_027": 28.25,
+          "field_028": true,
+          "field_029": "alpha",
+          "field_030": 30,
+          "field_031": "value-031",
+          "field_032": 33.25,
+          "field_033": false,
+          "field_034": "alpha",
+          "field_035": 35,
+          "field_036": "value-036",
+          "field_037": 38.25,
+          "field_038": true,
+          "field_039": "alpha",
+          "field_040": 40,
+          "field_041": "value-041",
+          "field_042": 43.25,
+          "field_043": false,
+          "field_044": "alpha",
+          "field_045": 45,
+          "field_046": "value-046",
+          "field_047": 48.25,
+          "field_048": true,
+          "field_049": "alpha"
+        }
+      }
+    }
+  },
+  "setup": [],
+  "workloads": [
+    {
+      "workload": "compilation",
+      "cold": true,
+      "fresh_browser_context": true
+    },
+    {
+      "workload": "mount",
+      "cold": true,
+      "fresh_browser_context": true
+    },
+    {
+      "workload": "edit",
+      "binding": "/level_1/level_2/level_3/field_000",
+      "alternating_values": [
+        "1",
+        "2"
+      ]
+    },
+    {
+      "workload": "findings",
+      "binding": "/level_1/level_2/level_3/field_000",
+      "count": 64,
+      "alternating_actions": [
+        "install",
+        "clear"
+      ]
+    },
+    {
+      "workload": "visibility",
+      "policies": [
+        "immediate",
+        "submission-only"
+      ]
+    },
+    {
+      "workload": "localization",
+      "locales": [
+        "en",
+        "hu"
+      ],
+      "message_source": "generated-fallback"
+    },
+    {
+      "workload": "submission",
+      "expected": "ready"
+    }
+  ]
+}

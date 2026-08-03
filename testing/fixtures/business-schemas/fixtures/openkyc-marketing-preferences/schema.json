@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:openkyc-marketing-preferences",
+  "$comment": "Adapted and reduced from Lazy Jack Ltd's Apache-2.0 OpenKYCAML 1.19.0 schema; this file has been changed for offline corpus use.",
+  "title": "Marketing preferences",
+  "description": "Marketing opt-out and preferred communication channel from a customer KYC profile.",
+  "type": "object",
+  "properties": {
+    "marketingOptOut": { "type": "boolean" },
+    "preferredCommunicationChannel": {
+      "type": "string",
+      "enum": ["EMAIL", "PHONE", "SMS", "POST", "PORTAL", "OTHER"]
+    }
+  },
+  "additionalProperties": false
+}

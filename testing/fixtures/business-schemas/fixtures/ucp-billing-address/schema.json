@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:ucp-billing-address",
+  "$comment": "Adapted and reduced from the Apache-2.0 Universal Commerce Protocol PostalAddress schema; this file has been changed for offline corpus use.",
+  "title": "Checkout billing address",
+  "description": "A postal address suitable for billing and fulfillment.",
+  "type": "object",
+  "required": ["line1", "city", "country"],
+  "properties": {
+    "name": { "type": "string" },
+    "company": { "type": "string" },
+    "line1": { "type": "string" },
+    "line2": { "type": "string" },
+    "city": { "type": "string" },
+    "region": { "type": "string" },
+    "postalCode": { "type": "string" },
+    "country": { "type": "string", "enum": ["AU", "CA", "DE", "FR", "GB", "US"] },
+    "phone": { "type": "string", "pattern": "^\\+[1-9][0-9]{7,14}$" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,17 @@
+[package]
+name = "browser-workload-pack"
+version.workspace = true
+description = "Shared schema and workload fixtures for the browser test workloads"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[dependencies]
+schemaform = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }

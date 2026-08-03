@@ -1,0 +1,12 @@
+[
+  {"Input":{"target":"Last","field":"Amount","text":"-"}},
+  {"Blur":{"target":"Last","field":"Amount"}},
+  {"External":{"fresh":true,"target":"Last","field":"Name","blocking":true}},
+  {"MoveUp":"Last"},
+  "Submit",
+  {"MoveDown":"First"},
+  {"Input":{"target":"Last","field":"Amount","text":"1"}},
+  {"Input":{"target":"Last","field":"Name","text":"other"}},
+  "Submit",
+  {"Input":{"target":"First","field":"Name","text":"later"}}
+]

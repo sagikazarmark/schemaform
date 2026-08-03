@@ -1,0 +1,297 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemaform.rs/schema/ui-schema-v1.schema.json",
+  "title": "Schemaform UI schema v1",
+  "$comment": "Stable JSON vocabulary and framework-neutral headless meaning; DOM structure, styling, and accessibility corrections are not frozen.",
+  "type": "object",
+  "required": ["version", "root"],
+  "properties": {
+    "version": { "const": 1 },
+    "required_extensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/extensionNamespace" },
+      "default": []
+    },
+    "root": { "$ref": "#/$defs/element" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "extensionNamespace": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:(?:[^%\\s]|%[0-9A-Fa-f]{2})*$"
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/extensionNamespace" },
+      "additionalProperties": true,
+      "default": {}
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "pointer": {
+      "type": "string",
+      "pattern": "^(|/(?:[^~/]|~[01])*)*$"
+    },
+    "binding": {
+      "type": "object",
+      "required": ["origin", "pointer"],
+      "properties": {
+        "origin": { "enum": ["root", "item_template"] },
+        "pointer": { "$ref": "#/$defs/pointer" }
+      },
+      "additionalProperties": false
+    },
+    "textReference": {
+      "type": "object",
+      "required": ["fallback"],
+      "properties": {
+        "fallback": { "type": "string" },
+        "key": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "textSetting": {
+      "oneOf": [
+        { "enum": ["inherit", "suppress"] },
+        {
+          "type": "object",
+          "required": ["value"],
+          "properties": { "value": { "$ref": "#/$defs/textReference" } },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "propertyPosition": {
+      "oneOf": [
+        { "const": "remaining" },
+        {
+          "type": "object",
+          "required": ["property"],
+          "properties": { "property": { "type": "string" } },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "propertySelection": {
+      "type": "object",
+      "properties": {
+        "include": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "exclude": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "order": { "type": "array", "items": { "$ref": "#/$defs/propertyPosition" }, "default": [] }
+      },
+      "additionalProperties": false
+    },
+    "controlValue": {
+      "allOf": [
+        { "$ref": "#/$defs/meta" },
+        {
+          "type": "object",
+          "required": ["binding"],
+          "properties": {
+            "binding": { "$ref": "#/$defs/binding" },
+            "label": { "$ref": "#/$defs/textSetting" },
+            "help": { "$ref": "#/$defs/textSetting" },
+            "widget": { "type": ["string", "null"], "minLength": 1 },
+            "item_template": {
+              "oneOf": [
+                { "$ref": "#/$defs/element" },
+                { "type": "null" }
+              ]
+            },
+            "item_label": {
+              "oneOf": [
+                { "$ref": "#/$defs/textReference" },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "autoValue": {
+      "allOf": [
+        { "$ref": "#/$defs/meta" },
+        {
+          "type": "object",
+          "required": ["binding"],
+          "properties": {
+            "binding": { "$ref": "#/$defs/binding" },
+            "properties": { "$ref": "#/$defs/propertySelection" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "stackValue": {
+      "allOf": [
+        { "$ref": "#/$defs/meta" },
+        {
+          "type": "object",
+          "required": ["children"],
+          "properties": {
+            "children": { "type": "array", "items": { "$ref": "#/$defs/element" } }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "span": { "type": "integer", "minimum": 1, "maximum": 12 },
+    "gridCell": {
+      "type": "object",
+      "required": ["compact_span", "child"],
+      "properties": {
+        "compact_span": { "$ref": "#/$defs/span" },
+        "wide_span": {
+          "oneOf": [
+            { "$ref": "#/$defs/span" },
+            { "type": "null" }
+          ]
+        },
+        "child": { "$ref": "#/$defs/element" }
+      },
+      "additionalProperties": false
+    },
+    "gridValue": {
+      "allOf": [
+        { "$ref": "#/$defs/meta" },
+        {
+          "type": "object",
+          "required": ["cells"],
+          "properties": {
+            "cells": { "type": "array", "items": { "$ref": "#/$defs/gridCell" } }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "groupValue": {
+      "allOf": [
+        { "$ref": "#/$defs/meta" },
+        {
+          "type": "object",
+          "required": ["title", "child"],
+          "properties": {
+            "title": { "$ref": "#/$defs/textReference" },
+            "child": { "$ref": "#/$defs/element" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "tabPanel": {
+      "type": "object",
+      "required": ["title", "child"],
+      "properties": {
+        "title": { "$ref": "#/$defs/textReference" },
+        "child": { "$ref": "#/$defs/element" }
+      },
+      "additionalProperties": false
+    },
+    "tabsValue": {
+      "allOf": [
+        { "$ref": "#/$defs/meta" },
+        {
+          "type": "object",
+          "required": ["panels"],
+          "properties": {
+            "panels": { "type": "array", "items": { "$ref": "#/$defs/tabPanel" } }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "textValue": {
+      "allOf": [
+        { "$ref": "#/$defs/meta" },
+        {
+          "type": "object",
+          "required": ["content"],
+          "properties": { "content": { "$ref": "#/$defs/textReference" } }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "control": {
+      "type": "object",
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "control" },
+        "value": { "$ref": "#/$defs/controlValue" }
+      },
+      "additionalProperties": false
+    },
+    "auto": {
+      "type": "object",
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "auto" },
+        "value": { "$ref": "#/$defs/autoValue" }
+      },
+      "additionalProperties": false
+    },
+    "stack": {
+      "type": "object",
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "stack" },
+        "value": { "$ref": "#/$defs/stackValue" }
+      },
+      "additionalProperties": false
+    },
+    "grid": {
+      "type": "object",
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "grid" },
+        "value": { "$ref": "#/$defs/gridValue" }
+      },
+      "additionalProperties": false
+    },
+    "group": {
+      "type": "object",
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "group" },
+        "value": { "$ref": "#/$defs/groupValue" }
+      },
+      "additionalProperties": false
+    },
+    "tabs": {
+      "type": "object",
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "tabs" },
+        "value": { "$ref": "#/$defs/tabsValue" }
+      },
+      "additionalProperties": false
+    },
+    "text": {
+      "type": "object",
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "text" },
+        "value": { "$ref": "#/$defs/textValue" }
+      },
+      "additionalProperties": false
+    },
+    "element": {
+      "oneOf": [
+        { "$ref": "#/$defs/control" },
+        { "$ref": "#/$defs/auto" },
+        { "$ref": "#/$defs/stack" },
+        { "$ref": "#/$defs/grid" },
+        { "$ref": "#/$defs/group" },
+        { "$ref": "#/$defs/tabs" },
+        { "$ref": "#/$defs/text" }
+      ]
+    }
+  }
+}

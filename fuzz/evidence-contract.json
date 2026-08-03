@@ -1,0 +1,99 @@
+{
+  "version": 2,
+  "trust_boundary": "Compilation mutations use bounded parsers or synthesized allowlist schemas; runtime mutations select bounded operations over one reviewed fixed schema. Attacker bytes never become an unreviewed schema compiled by stock validation or an attacker-sized runtime allocation.",
+  "decoder": {
+    "max_input_bytes": 65536,
+    "max_address_bytes": 4096,
+    "max_address_operations": 16,
+    "max_generated_resources": 8,
+    "max_generated_schema_nodes": 256,
+    "max_generated_schema_depth": 16,
+    "max_generated_references": 128,
+    "max_runtime_commands": 64,
+    "max_transaction_operations": 8,
+    "max_findings_per_batch": 17,
+    "data_schema": { "bytes": 65536, "tokens": 4096, "depth": 16, "nodes": 256, "members": 256, "resources": 8, "references": 128, "traversal": 1024 },
+    "ui_schema": { "bytes": 65536, "tokens": 8192, "depth": 16, "nodes": 1024, "members": 1024, "collection_length": 64, "scalar_bytes": 4096 },
+    "form_data": { "bytes": 65536, "tokens": 8192, "depth": 16, "nodes": 1024, "members": 1024, "collection_length": 64, "scalar_bytes": 4096, "form_tree_nodes": 1024, "repeated_items": 64 }
+  },
+  "execution": {
+    "nightly_toolchain": "nightly-2026-07-23",
+    "cargo_fuzz_version": "0.13.2",
+    "libfuzzer_sys_version": "0.4.13",
+    "sanitizer": "address",
+    "pull_request_seconds_per_target": 60,
+    "nightly_seconds_per_target": 900,
+    "release_seconds_per_target": 7200,
+    "mutation_job_timeout_minutes": 180,
+    "corpus_minimization_timeout_minutes": 20,
+    "timeout_seconds_per_input": 10,
+    "rss_limit_mib": 4096,
+    "retain_minimized_corpus": true,
+    "browser_wasm_replay_only": true
+  },
+  "targets": [
+    {
+      "name": "form_construction",
+      "seed_classes": ["official", "corpus", "regression"],
+      "seeds": [
+        { "name": "official-empty-object", "source": "official", "provenance": "JSON-Schema-Test-Suite@c0b038ad: mandatory/boolean_schema.json, boolean schema 'true', empty object is valid; reduced to instance bytes", "retention": "reviewed-seed", "expected_outcome": "form:success", "outcome_sha256": "23e6fa56d5fbe11c2cee110d993cd1af248f594900e7d9846cf636135a33a0cc", "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356" },
+        { "name": "corpus-business-data", "source": "corpus", "provenance": "testing/fixtures/business-schemas/manifest.json: openkyc-customer-onboarding and hubverse-account-settings scalar/array fields; reduced composite instance", "retention": "reviewed-seed", "expected_outcome": "form:success", "outcome_sha256": "23733f9b42730520a7d712274cf6c9affde8dd24dc863248600f0b3beb4a0d84", "sha256": "8ac286f7bbe822393db3c83450a7678df702eda56cda77f5f1be9c0fe44db362" },
+        { "name": "regression-incompatible-array", "source": "regression", "provenance": "Issue #96 reviewed incompatible-array regression boundary; no native fuzz failure is claimed", "retention": "reviewed-regression-boundary", "expected_outcome": "form:success", "outcome_sha256": "b07882a5943c49ad0631cae79afa94756f581b9cc723eda29c35cf5d4149eaa8", "sha256": "776c1a67756790713c75866a6203e7d5eed10c7e2d0e6bc7e0bcfe866b4e16e5", "artifact_path": "fuzz/retained-artifacts/form_construction/regression-incompatible-array", "artifact_sha256": "776c1a67756790713c75866a6203e7d5eed10c7e2d0e6bc7e0bcfe866b4e16e5" }
+      ]
+    },
+    {
+      "name": "resource_compilation",
+      "seed_classes": ["official", "corpus", "regression"],
+      "seeds": [
+        { "name": "official-local-reference", "source": "official", "provenance": "JSON-Schema-Test-Suite@c0b038ad: mandatory/ref.json; reduced into bounded local-$defs grammar selector", "retention": "reviewed-seed", "expected_outcome": "resource-compile:success", "outcome_sha256": "87320c975bec29b10bd57883ac63f431495cec6e76d0a2f0620aa5b3489a2388", "sha256": "7665cc1e8e4cc22ff981f5a8bbc2d92d881138ad72dde4f7017bb86030f77451" },
+        { "name": "corpus-supplied-resource", "source": "corpus", "provenance": "testing/fixtures/business-schemas/manifest.json: bods-address-international root plus country retrieval resource; reduced into bounded supplied-resource grammar selector", "retention": "reviewed-seed", "expected_outcome": "resource-compile:success", "outcome_sha256": "87320c975bec29b10bd57883ac63f431495cec6e76d0a2f0620aa5b3489a2388", "sha256": "78b3abdd47010fb6a3fe2ed608597e89044b5959efab902b7bb5e9d70f8f34c0" },
+        { "name": "regression-unresolved", "source": "regression", "provenance": "Issue #95 reviewed unresolved-reference regression boundary; no native fuzz failure is claimed", "retention": "reviewed-regression-boundary", "expected_outcome": "resource-compile:unresolved-reference", "outcome_sha256": "a0ae49785ed2cb2a4ddeab9d33304045fcbc1e89e7be0787c2a1870539e49bb7", "sha256": "d53968aacedc33dca956b12900131a091719170cbec66cdcd5bd099575e5939c", "artifact_path": "fuzz/retained-artifacts/resource_compilation/regression-unresolved", "artifact_sha256": "d53968aacedc33dca956b12900131a091719170cbec66cdcd5bd099575e5939c" }
+      ]
+    },
+    {
+      "name": "ui_schema_compilation",
+      "seed_classes": ["official", "corpus", "regression"],
+      "seeds": [
+        { "name": "official-stack", "source": "official", "provenance": "crates/schemaform/tests/fixtures/ui-schema-v1/complete.json: stack wire shape; reduced to empty accepted stack", "retention": "reviewed-seed", "expected_outcome": "ui-schema:success", "outcome_sha256": "b2965f7acc3292708180e6702c6caae6d1cc70461e106e286a48d2591198ad5d", "sha256": "000e87444ded398d8569389a9f91ce8d270decb5f480dbe265765bb8d3a63b35" },
+        { "name": "corpus-controls", "source": "corpus", "provenance": "testing/fixtures/business-schemas/fixtures/openkyc-customer-onboarding/schema.json identity fields; reduced to authored name and age controls", "retention": "reviewed-seed", "expected_outcome": "ui-schema:success", "outcome_sha256": "b2965f7acc3292708180e6702c6caae6d1cc70461e106e286a48d2591198ad5d", "sha256": "d342b6c81a13387335e1158c4297541633031359806689a70829e843c364e5cb" },
+        { "name": "regression-invalid-binding", "source": "regression", "provenance": "Issue #96 reviewed invalid-binding regression boundary; no native fuzz failure is claimed", "retention": "reviewed-regression-boundary", "expected_outcome": "ui-schema:error", "outcome_sha256": "df85352993d66b6cd827cdb2104206dd6cd8f320dfc0a3f7e762160faa6341ae", "sha256": "0f5621989c4fee991d41712b63aaae62356b187f8b0e105bd62fc0e3760f16bd", "artifact_path": "fuzz/retained-artifacts/ui_schema_compilation/regression-invalid-binding", "artifact_sha256": "0f5621989c4fee991d41712b63aaae62356b187f8b0e105bd62fc0e3760f16bd" }
+      ]
+    },
+    {
+      "name": "uri_pointer",
+      "seed_classes": ["official", "corpus", "regression"],
+      "seeds": [
+        { "name": "official-rfc6901", "source": "official", "provenance": "RFC 6901 root and escaped-token examples", "retention": "reviewed-seed", "expected_outcome": "addresses:observed", "outcome_sha256": "7aac6ec251981e91abbedbb351648d7e63a4e91230d50b78e72062cc29949931", "sha256": "96bf5cae65279a87e2ba988a4ba0d56b242510c2450cd16d6612f8722eb9aa84" },
+        { "name": "corpus-resource-uris", "source": "corpus", "provenance": "offline business corpus retrieval URI forms", "retention": "reviewed-seed", "expected_outcome": "addresses:observed", "outcome_sha256": "dcf0cac04b68e8e7cf0a4284128b89dce0d3af94a17ca28769c520215a6fc534", "sha256": "9c41e91fc712f169f9473b95b45422c20689089ff1dbbd621f981762f33b9148" },
+        { "name": "regression-invalid-addresses", "source": "regression", "provenance": "Reviewed invalid-address regression boundary; no native fuzz failure is claimed", "retention": "reviewed-regression-boundary", "expected_outcome": "addresses:observed", "outcome_sha256": "00b461c5dd3d0327776e0e2fb2040fc08982eb2672076e04dee4d592296b3bb3", "sha256": "0047a1b0165744065cd1ba17d8382f19b8e95c5d6ee38f3b2e7ef42ab9fdefc3", "artifact_path": "fuzz/retained-artifacts/uri_pointer/regression-invalid-addresses", "artifact_sha256": "0047a1b0165744065cd1ba17d8382f19b8e95c5d6ee38f3b2e7ef42ab9fdefc3" }
+      ]
+    },
+    {
+      "name": "user_commands",
+      "seed_classes": ["model", "corpus", "regression"],
+      "seeds": [
+        { "name": "model-all-user-actions", "source": "model", "provenance": "Issue #101 reviewed runtime command model spanning every UserActions method", "retention": "reviewed-seed", "expected_outcome": "user-commands:completed", "outcome_sha256": "a5d95805815fe03a1eb048e7ad07933bbd822f7be2d00cbf306d02cddbb34dd1", "sha256": "189a78b1dc50776ca4d86a52b3f0ace3f568535b0ffe7419d5e5bd7f3960d773" },
+        { "name": "corpus-identity-movement", "source": "corpus", "provenance": "Repository duplicate-valued fixed-object array identity scenarios reduced to append, insert, and movement selectors", "retention": "reviewed-seed", "expected_outcome": "user-commands:completed", "outcome_sha256": "5ae60f4bbac5cb5266de0a8837ddba13b542f00f7b12e9a8c30e2f42bbc4bba2", "sha256": "8d248a4aae4b77460cd7001e9dbbfb1a68fc842b8de9561e61c87f1cc78921b6" },
+        { "name": "regression-retired-target", "source": "regression", "provenance": "Issue #101 reviewed retired-target regression boundary; no native fuzz failure is claimed", "retention": "reviewed-regression-boundary", "expected_outcome": "user-commands:completed", "outcome_sha256": "186e53e08c26f4d9b2fc32f632a862da562798436cd83e1d93d3052fa702fe17", "sha256": "777c08464e6142b4ef3ab43e03d5d648e78aee3090686baaebdaf3bb755d5d08", "artifact_path": "fuzz/retained-artifacts/user_commands/regression-retired-target", "artifact_sha256": "777c08464e6142b4ef3ab43e03d5d648e78aee3090686baaebdaf3bb755d5d08" }
+      ]
+    },
+    {
+      "name": "host_transactions",
+      "seed_classes": ["model", "corpus", "regression"],
+      "seeds": [
+        { "name": "model-typed-host-methods", "source": "model", "provenance": "Issue #101 reviewed transaction model selecting every typed HostTransaction method", "retention": "reviewed-seed", "expected_outcome": "host-transactions:completed", "outcome_sha256": "075c644147227685e80b636af7762b4be6343aceab77ab08fab96baf69a90c6c", "sha256": "241f8f051e5d58676910240ab18461fb99fdcfa7984670c125b2b0161c081543" },
+        { "name": "corpus-atomic-mixed-transaction", "source": "corpus", "provenance": "Repository host transaction facade scenarios reduced to mixed typed operations above and below the configured operation limit", "retention": "reviewed-seed", "expected_outcome": "host-transactions:completed", "outcome_sha256": "7cf391d6676f2be4c8fa7b81792a1407a99bafc916e8a62c2cae62d13f99c752", "sha256": "3e1d07fbfeeb38681816c0afbf6d91d8fef7dd663a8a6d56ce86e85e03f8b650" },
+        { "name": "regression-closure-rollback", "source": "regression", "provenance": "Issue #101 reviewed closure-rollback regression boundary; no native fuzz failure is claimed", "retention": "reviewed-regression-boundary", "expected_outcome": "host-transactions:completed", "outcome_sha256": "be794f77cb2051b36721e3ebcb1f73839bd4ce62e6e5d184f5d6e675fb748d70", "sha256": "0a55dad4a1f6052629b247f5ed6e8c2f94a911bdd6d112109f688529df089310", "artifact_path": "fuzz/retained-artifacts/host_transactions/regression-closure-rollback", "artifact_sha256": "0a55dad4a1f6052629b247f5ed6e8c2f94a911bdd6d112109f688529df089310" }
+      ]
+    },
+    {
+      "name": "external_findings",
+      "seed_classes": ["model", "corpus", "regression"],
+      "seeds": [
+        { "name": "model-revision-scopes", "source": "model", "provenance": "Issue #101 reviewed current, stale, and foreign data-revision selectors", "retention": "reviewed-seed", "expected_outcome": "external-findings:completed", "outcome_sha256": "309add2c0d986f8857e7b5192a83f8749a484c2023e91016a2ce1fafd3d5a9c4", "sha256": "8e209f7d45e867e5a3e8dfd777852ceea65617689c3a2100d078b0b99e8940de" },
+        { "name": "corpus-replace-empty-dedup", "source": "corpus", "provenance": "Repository external submission facade scenarios reduced to source replacement, empty removal, duplicate, and reversed findings", "retention": "reviewed-seed", "expected_outcome": "external-findings:completed", "outcome_sha256": "ef34badd8d40fdd36fe3728ab832a9b4946287868360dd170762b2b9b1bcad9b", "sha256": "e1647015b2efbd0fa86dda191d861cfa68aa6e65e4bb3f539c1abcff78084d91" },
+        { "name": "regression-over-limit-batch", "source": "regression", "provenance": "Issue #101 reviewed active-limit regression boundary; no native fuzz failure is claimed", "retention": "reviewed-regression-boundary", "expected_outcome": "external-findings:completed", "outcome_sha256": "9e1c6584b60ddba86748f42f07a6ddb10c7c37ba320ba2b48610644f5099d08f", "sha256": "a414b9f6d674bb476e0da12ab22a7276ee3f76d7bd3bb63101763ec54309b5e6", "artifact_path": "fuzz/retained-artifacts/external_findings/regression-over-limit-batch", "artifact_sha256": "a414b9f6d674bb476e0da12ab22a7276ee3f76d7bd3bb63101763ec54309b5e6" }
+      ]
+    }
+  ]
+}

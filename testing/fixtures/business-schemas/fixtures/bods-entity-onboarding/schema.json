@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:bods-entity-onboarding",
+  "$comment": "Adapted and reduced from Open Ownership's Apache-2.0 BODS 0.4 Entity Record Details schema; this file has been changed for offline corpus use.",
+  "title": "Organization onboarding",
+  "description": "Registration details for a legal entity or organization.",
+  "type": "object",
+  "required": ["entityType", "name"],
+  "properties": {
+    "entityType": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["registeredEntity", "legalEntity", "arrangement", "anonymousEntity", "unknownEntity", "state", "stateBody"]
+        },
+        "subtype": {
+          "type": "string",
+          "enum": ["governmentDepartment", "stateAgency", "other", "trust", "nomination"]
+        },
+        "details": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": { "enum": ["arrangement"] }
+            }
+          },
+          "then": {
+            "properties": {
+              "subtype": { "enum": ["trust", "nomination", "other"] }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "name": { "type": "string" },
+    "jurisdiction": {
+      "type": "object",
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "identifiers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string" },
+          "scheme": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "formedOn": { "type": "string", "format": "date" },
+    "listed": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

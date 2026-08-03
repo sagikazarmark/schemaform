@@ -1,0 +1,3812 @@
+{
+  "version": 1,
+  "id": "O500-generated-64-finding",
+  "profile": "O500",
+  "variant": "generated",
+  "state": "64-finding",
+  "data_schema": {
+    "$id": "urn:schemaform:browser-workload:object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "level_1": {
+        "additionalProperties": false,
+        "properties": {
+          "level_2": {
+            "additionalProperties": false,
+            "properties": {
+              "level_3": {
+                "additionalProperties": false,
+                "properties": {
+                  "field_000": {
+                    "minimum": 0,
+                    "title": "Field 000",
+                    "type": "integer"
+                  },
+                  "field_001": {
+                    "minLength": 1,
+                    "title": "Field 001",
+                    "type": "string"
+                  },
+                  "field_002": {
+                    "minimum": 0,
+                    "title": "Field 002",
+                    "type": "number"
+                  },
+                  "field_003": {
+                    "title": "Field 003",
+                    "type": "boolean"
+                  },
+                  "field_004": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 004"
+                  },
+                  "field_005": {
+                    "minimum": 0,
+                    "title": "Field 005",
+                    "type": "integer"
+                  },
+                  "field_006": {
+                    "minLength": 1,
+                    "title": "Field 006",
+                    "type": "string"
+                  },
+                  "field_007": {
+                    "minimum": 0,
+                    "title": "Field 007",
+                    "type": "number"
+                  },
+                  "field_008": {
+                    "title": "Field 008",
+                    "type": "boolean"
+                  },
+                  "field_009": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 009"
+                  },
+                  "field_010": {
+                    "minimum": 0,
+                    "title": "Field 010",
+                    "type": "integer"
+                  },
+                  "field_011": {
+                    "minLength": 1,
+                    "title": "Field 011",
+                    "type": "string"
+                  },
+                  "field_012": {
+                    "minimum": 0,
+                    "title": "Field 012",
+                    "type": "number"
+                  },
+                  "field_013": {
+                    "title": "Field 013",
+                    "type": "boolean"
+                  },
+                  "field_014": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 014"
+                  },
+                  "field_015": {
+                    "minimum": 0,
+                    "title": "Field 015",
+                    "type": "integer"
+                  },
+                  "field_016": {
+                    "minLength": 1,
+                    "title": "Field 016",
+                    "type": "string"
+                  },
+                  "field_017": {
+                    "minimum": 0,
+                    "title": "Field 017",
+                    "type": "number"
+                  },
+                  "field_018": {
+                    "title": "Field 018",
+                    "type": "boolean"
+                  },
+                  "field_019": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 019"
+                  },
+                  "field_020": {
+                    "minimum": 0,
+                    "title": "Field 020",
+                    "type": "integer"
+                  },
+                  "field_021": {
+                    "minLength": 1,
+                    "title": "Field 021",
+                    "type": "string"
+                  },
+                  "field_022": {
+                    "minimum": 0,
+                    "title": "Field 022",
+                    "type": "number"
+                  },
+                  "field_023": {
+                    "title": "Field 023",
+                    "type": "boolean"
+                  },
+                  "field_024": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 024"
+                  },
+                  "field_025": {
+                    "minimum": 0,
+                    "title": "Field 025",
+                    "type": "integer"
+                  },
+                  "field_026": {
+                    "minLength": 1,
+                    "title": "Field 026",
+                    "type": "string"
+                  },
+                  "field_027": {
+                    "minimum": 0,
+                    "title": "Field 027",
+                    "type": "number"
+                  },
+                  "field_028": {
+                    "title": "Field 028",
+                    "type": "boolean"
+                  },
+                  "field_029": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 029"
+                  },
+                  "field_030": {
+                    "minimum": 0,
+                    "title": "Field 030",
+                    "type": "integer"
+                  },
+                  "field_031": {
+                    "minLength": 1,
+                    "title": "Field 031",
+                    "type": "string"
+                  },
+                  "field_032": {
+                    "minimum": 0,
+                    "title": "Field 032",
+                    "type": "number"
+                  },
+                  "field_033": {
+                    "title": "Field 033",
+                    "type": "boolean"
+                  },
+                  "field_034": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 034"
+                  },
+                  "field_035": {
+                    "minimum": 0,
+                    "title": "Field 035",
+                    "type": "integer"
+                  },
+                  "field_036": {
+                    "minLength": 1,
+                    "title": "Field 036",
+                    "type": "string"
+                  },
+                  "field_037": {
+                    "minimum": 0,
+                    "title": "Field 037",
+                    "type": "number"
+                  },
+                  "field_038": {
+                    "title": "Field 038",
+                    "type": "boolean"
+                  },
+                  "field_039": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 039"
+                  },
+                  "field_040": {
+                    "minimum": 0,
+                    "title": "Field 040",
+                    "type": "integer"
+                  },
+                  "field_041": {
+                    "minLength": 1,
+                    "title": "Field 041",
+                    "type": "string"
+                  },
+                  "field_042": {
+                    "minimum": 0,
+                    "title": "Field 042",
+                    "type": "number"
+                  },
+                  "field_043": {
+                    "title": "Field 043",
+                    "type": "boolean"
+                  },
+                  "field_044": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 044"
+                  },
+                  "field_045": {
+                    "minimum": 0,
+                    "title": "Field 045",
+                    "type": "integer"
+                  },
+                  "field_046": {
+                    "minLength": 1,
+                    "title": "Field 046",
+                    "type": "string"
+                  },
+                  "field_047": {
+                    "minimum": 0,
+                    "title": "Field 047",
+                    "type": "number"
+                  },
+                  "field_048": {
+                    "title": "Field 048",
+                    "type": "boolean"
+                  },
+                  "field_049": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 049"
+                  },
+                  "field_050": {
+                    "minimum": 0,
+                    "title": "Field 050",
+                    "type": "integer"
+                  },
+                  "field_051": {
+                    "minLength": 1,
+                    "title": "Field 051",
+                    "type": "string"
+                  },
+                  "field_052": {
+                    "minimum": 0,
+                    "title": "Field 052",
+                    "type": "number"
+                  },
+                  "field_053": {
+                    "title": "Field 053",
+                    "type": "boolean"
+                  },
+                  "field_054": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 054"
+                  },
+                  "field_055": {
+                    "minimum": 0,
+                    "title": "Field 055",
+                    "type": "integer"
+                  },
+                  "field_056": {
+                    "minLength": 1,
+                    "title": "Field 056",
+                    "type": "string"
+                  },
+                  "field_057": {
+                    "minimum": 0,
+                    "title": "Field 057",
+                    "type": "number"
+                  },
+                  "field_058": {
+                    "title": "Field 058",
+                    "type": "boolean"
+                  },
+                  "field_059": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 059"
+                  },
+                  "field_060": {
+                    "minimum": 0,
+                    "title": "Field 060",
+                    "type": "integer"
+                  },
+                  "field_061": {
+                    "minLength": 1,
+                    "title": "Field 061",
+                    "type": "string"
+                  },
+                  "field_062": {
+                    "minimum": 0,
+                    "title": "Field 062",
+                    "type": "number"
+                  },
+                  "field_063": {
+                    "title": "Field 063",
+                    "type": "boolean"
+                  },
+                  "field_064": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 064"
+                  },
+                  "field_065": {
+                    "minimum": 0,
+                    "title": "Field 065",
+                    "type": "integer"
+                  },
+                  "field_066": {
+                    "minLength": 1,
+                    "title": "Field 066",
+                    "type": "string"
+                  },
+                  "field_067": {
+                    "minimum": 0,
+                    "title": "Field 067",
+                    "type": "number"
+                  },
+                  "field_068": {
+                    "title": "Field 068",
+                    "type": "boolean"
+                  },
+                  "field_069": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 069"
+                  },
+                  "field_070": {
+                    "minimum": 0,
+                    "title": "Field 070",
+                    "type": "integer"
+                  },
+                  "field_071": {
+                    "minLength": 1,
+                    "title": "Field 071",
+                    "type": "string"
+                  },
+                  "field_072": {
+                    "minimum": 0,
+                    "title": "Field 072",
+                    "type": "number"
+                  },
+                  "field_073": {
+                    "title": "Field 073",
+                    "type": "boolean"
+                  },
+                  "field_074": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 074"
+                  },
+                  "field_075": {
+                    "minimum": 0,
+                    "title": "Field 075",
+                    "type": "integer"
+                  },
+                  "field_076": {
+                    "minLength": 1,
+                    "title": "Field 076",
+                    "type": "string"
+                  },
+                  "field_077": {
+                    "minimum": 0,
+                    "title": "Field 077",
+                    "type": "number"
+                  },
+                  "field_078": {
+                    "title": "Field 078",
+                    "type": "boolean"
+                  },
+                  "field_079": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 079"
+                  },
+                  "field_080": {
+                    "minimum": 0,
+                    "title": "Field 080",
+                    "type": "integer"
+                  },
+                  "field_081": {
+                    "minLength": 1,
+                    "title": "Field 081",
+                    "type": "string"
+                  },
+                  "field_082": {
+                    "minimum": 0,
+                    "title": "Field 082",
+                    "type": "number"
+                  },
+                  "field_083": {
+                    "title": "Field 083",
+                    "type": "boolean"
+                  },
+                  "field_084": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 084"
+                  },
+                  "field_085": {
+                    "minimum": 0,
+                    "title": "Field 085",
+                    "type": "integer"
+                  },
+                  "field_086": {
+                    "minLength": 1,
+                    "title": "Field 086",
+                    "type": "string"
+                  },
+                  "field_087": {
+                    "minimum": 0,
+                    "title": "Field 087",
+                    "type": "number"
+                  },
+                  "field_088": {
+                    "title": "Field 088",
+                    "type": "boolean"
+                  },
+                  "field_089": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 089"
+                  },
+                  "field_090": {
+                    "minimum": 0,
+                    "title": "Field 090",
+                    "type": "integer"
+                  },
+                  "field_091": {
+                    "minLength": 1,
+                    "title": "Field 091",
+                    "type": "string"
+                  },
+                  "field_092": {
+                    "minimum": 0,
+                    "title": "Field 092",
+                    "type": "number"
+                  },
+                  "field_093": {
+                    "title": "Field 093",
+                    "type": "boolean"
+                  },
+                  "field_094": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 094"
+                  },
+                  "field_095": {
+                    "minimum": 0,
+                    "title": "Field 095",
+                    "type": "integer"
+                  },
+                  "field_096": {
+                    "minLength": 1,
+                    "title": "Field 096",
+                    "type": "string"
+                  },
+                  "field_097": {
+                    "minimum": 0,
+                    "title": "Field 097",
+                    "type": "number"
+                  },
+                  "field_098": {
+                    "title": "Field 098",
+                    "type": "boolean"
+                  },
+                  "field_099": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 099"
+                  },
+                  "field_100": {
+                    "minimum": 0,
+                    "title": "Field 100",
+                    "type": "integer"
+                  },
+                  "field_101": {
+                    "minLength": 1,
+                    "title": "Field 101",
+                    "type": "string"
+                  },
+                  "field_102": {
+                    "minimum": 0,
+                    "title": "Field 102",
+                    "type": "number"
+                  },
+                  "field_103": {
+                    "title": "Field 103",
+                    "type": "boolean"
+                  },
+                  "field_104": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 104"
+                  },
+                  "field_105": {
+                    "minimum": 0,
+                    "title": "Field 105",
+                    "type": "integer"
+                  },
+                  "field_106": {
+                    "minLength": 1,
+                    "title": "Field 106",
+                    "type": "string"
+                  },
+                  "field_107": {
+                    "minimum": 0,
+                    "title": "Field 107",
+                    "type": "number"
+                  },
+                  "field_108": {
+                    "title": "Field 108",
+                    "type": "boolean"
+                  },
+                  "field_109": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 109"
+                  },
+                  "field_110": {
+                    "minimum": 0,
+                    "title": "Field 110",
+                    "type": "integer"
+                  },
+                  "field_111": {
+                    "minLength": 1,
+                    "title": "Field 111",
+                    "type": "string"
+                  },
+                  "field_112": {
+                    "minimum": 0,
+                    "title": "Field 112",
+                    "type": "number"
+                  },
+                  "field_113": {
+                    "title": "Field 113",
+                    "type": "boolean"
+                  },
+                  "field_114": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 114"
+                  },
+                  "field_115": {
+                    "minimum": 0,
+                    "title": "Field 115",
+                    "type": "integer"
+                  },
+                  "field_116": {
+                    "minLength": 1,
+                    "title": "Field 116",
+                    "type": "string"
+                  },
+                  "field_117": {
+                    "minimum": 0,
+                    "title": "Field 117",
+                    "type": "number"
+                  },
+                  "field_118": {
+                    "title": "Field 118",
+                    "type": "boolean"
+                  },
+                  "field_119": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 119"
+                  },
+                  "field_120": {
+                    "minimum": 0,
+                    "title": "Field 120",
+                    "type": "integer"
+                  },
+                  "field_121": {
+                    "minLength": 1,
+                    "title": "Field 121",
+                    "type": "string"
+                  },
+                  "field_122": {
+                    "minimum": 0,
+                    "title": "Field 122",
+                    "type": "number"
+                  },
+                  "field_123": {
+                    "title": "Field 123",
+                    "type": "boolean"
+                  },
+                  "field_124": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 124"
+                  },
+                  "field_125": {
+                    "minimum": 0,
+                    "title": "Field 125",
+                    "type": "integer"
+                  },
+                  "field_126": {
+                    "minLength": 1,
+                    "title": "Field 126",
+                    "type": "string"
+                  },
+                  "field_127": {
+                    "minimum": 0,
+                    "title": "Field 127",
+                    "type": "number"
+                  },
+                  "field_128": {
+                    "title": "Field 128",
+                    "type": "boolean"
+                  },
+                  "field_129": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 129"
+                  },
+                  "field_130": {
+                    "minimum": 0,
+                    "title": "Field 130",
+                    "type": "integer"
+                  },
+                  "field_131": {
+                    "minLength": 1,
+                    "title": "Field 131",
+                    "type": "string"
+                  },
+                  "field_132": {
+                    "minimum": 0,
+                    "title": "Field 132",
+                    "type": "number"
+                  },
+                  "field_133": {
+                    "title": "Field 133",
+                    "type": "boolean"
+                  },
+                  "field_134": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 134"
+                  },
+                  "field_135": {
+                    "minimum": 0,
+                    "title": "Field 135",
+                    "type": "integer"
+                  },
+                  "field_136": {
+                    "minLength": 1,
+                    "title": "Field 136",
+                    "type": "string"
+                  },
+                  "field_137": {
+                    "minimum": 0,
+                    "title": "Field 137",
+                    "type": "number"
+                  },
+                  "field_138": {
+                    "title": "Field 138",
+                    "type": "boolean"
+                  },
+                  "field_139": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 139"
+                  },
+                  "field_140": {
+                    "minimum": 0,
+                    "title": "Field 140",
+                    "type": "integer"
+                  },
+                  "field_141": {
+                    "minLength": 1,
+                    "title": "Field 141",
+                    "type": "string"
+                  },
+                  "field_142": {
+                    "minimum": 0,
+                    "title": "Field 142",
+                    "type": "number"
+                  },
+                  "field_143": {
+                    "title": "Field 143",
+                    "type": "boolean"
+                  },
+                  "field_144": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 144"
+                  },
+                  "field_145": {
+                    "minimum": 0,
+                    "title": "Field 145",
+                    "type": "integer"
+                  },
+                  "field_146": {
+                    "minLength": 1,
+                    "title": "Field 146",
+                    "type": "string"
+                  },
+                  "field_147": {
+                    "minimum": 0,
+                    "title": "Field 147",
+                    "type": "number"
+                  },
+                  "field_148": {
+                    "title": "Field 148",
+                    "type": "boolean"
+                  },
+                  "field_149": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 149"
+                  },
+                  "field_150": {
+                    "minimum": 0,
+                    "title": "Field 150",
+                    "type": "integer"
+                  },
+                  "field_151": {
+                    "minLength": 1,
+                    "title": "Field 151",
+                    "type": "string"
+                  },
+                  "field_152": {
+                    "minimum": 0,
+                    "title": "Field 152",
+                    "type": "number"
+                  },
+                  "field_153": {
+                    "title": "Field 153",
+                    "type": "boolean"
+                  },
+                  "field_154": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 154"
+                  },
+                  "field_155": {
+                    "minimum": 0,
+                    "title": "Field 155",
+                    "type": "integer"
+                  },
+                  "field_156": {
+                    "minLength": 1,
+                    "title": "Field 156",
+                    "type": "string"
+                  },
+                  "field_157": {
+                    "minimum": 0,
+                    "title": "Field 157",
+                    "type": "number"
+                  },
+                  "field_158": {
+                    "title": "Field 158",
+                    "type": "boolean"
+                  },
+                  "field_159": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 159"
+                  },
+                  "field_160": {
+                    "minimum": 0,
+                    "title": "Field 160",
+                    "type": "integer"
+                  },
+                  "field_161": {
+                    "minLength": 1,
+                    "title": "Field 161",
+                    "type": "string"
+                  },
+                  "field_162": {
+                    "minimum": 0,
+                    "title": "Field 162",
+                    "type": "number"
+                  },
+                  "field_163": {
+                    "title": "Field 163",
+                    "type": "boolean"
+                  },
+                  "field_164": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 164"
+                  },
+                  "field_165": {
+                    "minimum": 0,
+                    "title": "Field 165",
+                    "type": "integer"
+                  },
+                  "field_166": {
+                    "minLength": 1,
+                    "title": "Field 166",
+                    "type": "string"
+                  },
+                  "field_167": {
+                    "minimum": 0,
+                    "title": "Field 167",
+                    "type": "number"
+                  },
+                  "field_168": {
+                    "title": "Field 168",
+                    "type": "boolean"
+                  },
+                  "field_169": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 169"
+                  },
+                  "field_170": {
+                    "minimum": 0,
+                    "title": "Field 170",
+                    "type": "integer"
+                  },
+                  "field_171": {
+                    "minLength": 1,
+                    "title": "Field 171",
+                    "type": "string"
+                  },
+                  "field_172": {
+                    "minimum": 0,
+                    "title": "Field 172",
+                    "type": "number"
+                  },
+                  "field_173": {
+                    "title": "Field 173",
+                    "type": "boolean"
+                  },
+                  "field_174": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 174"
+                  },
+                  "field_175": {
+                    "minimum": 0,
+                    "title": "Field 175",
+                    "type": "integer"
+                  },
+                  "field_176": {
+                    "minLength": 1,
+                    "title": "Field 176",
+                    "type": "string"
+                  },
+                  "field_177": {
+                    "minimum": 0,
+                    "title": "Field 177",
+                    "type": "number"
+                  },
+                  "field_178": {
+                    "title": "Field 178",
+                    "type": "boolean"
+                  },
+                  "field_179": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 179"
+                  },
+                  "field_180": {
+                    "minimum": 0,
+                    "title": "Field 180",
+                    "type": "integer"
+                  },
+                  "field_181": {
+                    "minLength": 1,
+                    "title": "Field 181",
+                    "type": "string"
+                  },
+                  "field_182": {
+                    "minimum": 0,
+                    "title": "Field 182",
+                    "type": "number"
+                  },
+                  "field_183": {
+                    "title": "Field 183",
+                    "type": "boolean"
+                  },
+                  "field_184": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 184"
+                  },
+                  "field_185": {
+                    "minimum": 0,
+                    "title": "Field 185",
+                    "type": "integer"
+                  },
+                  "field_186": {
+                    "minLength": 1,
+                    "title": "Field 186",
+                    "type": "string"
+                  },
+                  "field_187": {
+                    "minimum": 0,
+                    "title": "Field 187",
+                    "type": "number"
+                  },
+                  "field_188": {
+                    "title": "Field 188",
+                    "type": "boolean"
+                  },
+                  "field_189": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 189"
+                  },
+                  "field_190": {
+                    "minimum": 0,
+                    "title": "Field 190",
+                    "type": "integer"
+                  },
+                  "field_191": {
+                    "minLength": 1,
+                    "title": "Field 191",
+                    "type": "string"
+                  },
+                  "field_192": {
+                    "minimum": 0,
+                    "title": "Field 192",
+                    "type": "number"
+                  },
+                  "field_193": {
+                    "title": "Field 193",
+                    "type": "boolean"
+                  },
+                  "field_194": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 194"
+                  },
+                  "field_195": {
+                    "minimum": 0,
+                    "title": "Field 195",
+                    "type": "integer"
+                  },
+                  "field_196": {
+                    "minLength": 1,
+                    "title": "Field 196",
+                    "type": "string"
+                  },
+                  "field_197": {
+                    "minimum": 0,
+                    "title": "Field 197",
+                    "type": "number"
+                  },
+                  "field_198": {
+                    "title": "Field 198",
+                    "type": "boolean"
+                  },
+                  "field_199": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 199"
+                  },
+                  "field_200": {
+                    "minimum": 0,
+                    "title": "Field 200",
+                    "type": "integer"
+                  },
+                  "field_201": {
+                    "minLength": 1,
+                    "title": "Field 201",
+                    "type": "string"
+                  },
+                  "field_202": {
+                    "minimum": 0,
+                    "title": "Field 202",
+                    "type": "number"
+                  },
+                  "field_203": {
+                    "title": "Field 203",
+                    "type": "boolean"
+                  },
+                  "field_204": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 204"
+                  },
+                  "field_205": {
+                    "minimum": 0,
+                    "title": "Field 205",
+                    "type": "integer"
+                  },
+                  "field_206": {
+                    "minLength": 1,
+                    "title": "Field 206",
+                    "type": "string"
+                  },
+                  "field_207": {
+                    "minimum": 0,
+                    "title": "Field 207",
+                    "type": "number"
+                  },
+                  "field_208": {
+                    "title": "Field 208",
+                    "type": "boolean"
+                  },
+                  "field_209": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 209"
+                  },
+                  "field_210": {
+                    "minimum": 0,
+                    "title": "Field 210",
+                    "type": "integer"
+                  },
+                  "field_211": {
+                    "minLength": 1,
+                    "title": "Field 211",
+                    "type": "string"
+                  },
+                  "field_212": {
+                    "minimum": 0,
+                    "title": "Field 212",
+                    "type": "number"
+                  },
+                  "field_213": {
+                    "title": "Field 213",
+                    "type": "boolean"
+                  },
+                  "field_214": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 214"
+                  },
+                  "field_215": {
+                    "minimum": 0,
+                    "title": "Field 215",
+                    "type": "integer"
+                  },
+                  "field_216": {
+                    "minLength": 1,
+                    "title": "Field 216",
+                    "type": "string"
+                  },
+                  "field_217": {
+                    "minimum": 0,
+                    "title": "Field 217",
+                    "type": "number"
+                  },
+                  "field_218": {
+                    "title": "Field 218",
+                    "type": "boolean"
+                  },
+                  "field_219": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 219"
+                  },
+                  "field_220": {
+                    "minimum": 0,
+                    "title": "Field 220",
+                    "type": "integer"
+                  },
+                  "field_221": {
+                    "minLength": 1,
+                    "title": "Field 221",
+                    "type": "string"
+                  },
+                  "field_222": {
+                    "minimum": 0,
+                    "title": "Field 222",
+                    "type": "number"
+                  },
+                  "field_223": {
+                    "title": "Field 223",
+                    "type": "boolean"
+                  },
+                  "field_224": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 224"
+                  },
+                  "field_225": {
+                    "minimum": 0,
+                    "title": "Field 225",
+                    "type": "integer"
+                  },
+                  "field_226": {
+                    "minLength": 1,
+                    "title": "Field 226",
+                    "type": "string"
+                  },
+                  "field_227": {
+                    "minimum": 0,
+                    "title": "Field 227",
+                    "type": "number"
+                  },
+                  "field_228": {
+                    "title": "Field 228",
+                    "type": "boolean"
+                  },
+                  "field_229": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 229"
+                  },
+                  "field_230": {
+                    "minimum": 0,
+                    "title": "Field 230",
+                    "type": "integer"
+                  },
+                  "field_231": {
+                    "minLength": 1,
+                    "title": "Field 231",
+                    "type": "string"
+                  },
+                  "field_232": {
+                    "minimum": 0,
+                    "title": "Field 232",
+                    "type": "number"
+                  },
+                  "field_233": {
+                    "title": "Field 233",
+                    "type": "boolean"
+                  },
+                  "field_234": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 234"
+                  },
+                  "field_235": {
+                    "minimum": 0,
+                    "title": "Field 235",
+                    "type": "integer"
+                  },
+                  "field_236": {
+                    "minLength": 1,
+                    "title": "Field 236",
+                    "type": "string"
+                  },
+                  "field_237": {
+                    "minimum": 0,
+                    "title": "Field 237",
+                    "type": "number"
+                  },
+                  "field_238": {
+                    "title": "Field 238",
+                    "type": "boolean"
+                  },
+                  "field_239": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 239"
+                  },
+                  "field_240": {
+                    "minimum": 0,
+                    "title": "Field 240",
+                    "type": "integer"
+                  },
+                  "field_241": {
+                    "minLength": 1,
+                    "title": "Field 241",
+                    "type": "string"
+                  },
+                  "field_242": {
+                    "minimum": 0,
+                    "title": "Field 242",
+                    "type": "number"
+                  },
+                  "field_243": {
+                    "title": "Field 243",
+                    "type": "boolean"
+                  },
+                  "field_244": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 244"
+                  },
+                  "field_245": {
+                    "minimum": 0,
+                    "title": "Field 245",
+                    "type": "integer"
+                  },
+                  "field_246": {
+                    "minLength": 1,
+                    "title": "Field 246",
+                    "type": "string"
+                  },
+                  "field_247": {
+                    "minimum": 0,
+                    "title": "Field 247",
+                    "type": "number"
+                  },
+                  "field_248": {
+                    "title": "Field 248",
+                    "type": "boolean"
+                  },
+                  "field_249": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 249"
+                  },
+                  "field_250": {
+                    "minimum": 0,
+                    "title": "Field 250",
+                    "type": "integer"
+                  },
+                  "field_251": {
+                    "minLength": 1,
+                    "title": "Field 251",
+                    "type": "string"
+                  },
+                  "field_252": {
+                    "minimum": 0,
+                    "title": "Field 252",
+                    "type": "number"
+                  },
+                  "field_253": {
+                    "title": "Field 253",
+                    "type": "boolean"
+                  },
+                  "field_254": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 254"
+                  },
+                  "field_255": {
+                    "minimum": 0,
+                    "title": "Field 255",
+                    "type": "integer"
+                  },
+                  "field_256": {
+                    "minLength": 1,
+                    "title": "Field 256",
+                    "type": "string"
+                  },
+                  "field_257": {
+                    "minimum": 0,
+                    "title": "Field 257",
+                    "type": "number"
+                  },
+                  "field_258": {
+                    "title": "Field 258",
+                    "type": "boolean"
+                  },
+                  "field_259": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 259"
+                  },
+                  "field_260": {
+                    "minimum": 0,
+                    "title": "Field 260",
+                    "type": "integer"
+                  },
+                  "field_261": {
+                    "minLength": 1,
+                    "title": "Field 261",
+                    "type": "string"
+                  },
+                  "field_262": {
+                    "minimum": 0,
+                    "title": "Field 262",
+                    "type": "number"
+                  },
+                  "field_263": {
+                    "title": "Field 263",
+                    "type": "boolean"
+                  },
+                  "field_264": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 264"
+                  },
+                  "field_265": {
+                    "minimum": 0,
+                    "title": "Field 265",
+                    "type": "integer"
+                  },
+                  "field_266": {
+                    "minLength": 1,
+                    "title": "Field 266",
+                    "type": "string"
+                  },
+                  "field_267": {
+                    "minimum": 0,
+                    "title": "Field 267",
+                    "type": "number"
+                  },
+                  "field_268": {
+                    "title": "Field 268",
+                    "type": "boolean"
+                  },
+                  "field_269": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 269"
+                  },
+                  "field_270": {
+                    "minimum": 0,
+                    "title": "Field 270",
+                    "type": "integer"
+                  },
+                  "field_271": {
+                    "minLength": 1,
+                    "title": "Field 271",
+                    "type": "string"
+                  },
+                  "field_272": {
+                    "minimum": 0,
+                    "title": "Field 272",
+                    "type": "number"
+                  },
+                  "field_273": {
+                    "title": "Field 273",
+                    "type": "boolean"
+                  },
+                  "field_274": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 274"
+                  },
+                  "field_275": {
+                    "minimum": 0,
+                    "title": "Field 275",
+                    "type": "integer"
+                  },
+                  "field_276": {
+                    "minLength": 1,
+                    "title": "Field 276",
+                    "type": "string"
+                  },
+                  "field_277": {
+                    "minimum": 0,
+                    "title": "Field 277",
+                    "type": "number"
+                  },
+                  "field_278": {
+                    "title": "Field 278",
+                    "type": "boolean"
+                  },
+                  "field_279": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 279"
+                  },
+                  "field_280": {
+                    "minimum": 0,
+                    "title": "Field 280",
+                    "type": "integer"
+                  },
+                  "field_281": {
+                    "minLength": 1,
+                    "title": "Field 281",
+                    "type": "string"
+                  },
+                  "field_282": {
+                    "minimum": 0,
+                    "title": "Field 282",
+                    "type": "number"
+                  },
+                  "field_283": {
+                    "title": "Field 283",
+                    "type": "boolean"
+                  },
+                  "field_284": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 284"
+                  },
+                  "field_285": {
+                    "minimum": 0,
+                    "title": "Field 285",
+                    "type": "integer"
+                  },
+                  "field_286": {
+                    "minLength": 1,
+                    "title": "Field 286",
+                    "type": "string"
+                  },
+                  "field_287": {
+                    "minimum": 0,
+                    "title": "Field 287",
+                    "type": "number"
+                  },
+                  "field_288": {
+                    "title": "Field 288",
+                    "type": "boolean"
+                  },
+                  "field_289": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 289"
+                  },
+                  "field_290": {
+                    "minimum": 0,
+                    "title": "Field 290",
+                    "type": "integer"
+                  },
+                  "field_291": {
+                    "minLength": 1,
+                    "title": "Field 291",
+                    "type": "string"
+                  },
+                  "field_292": {
+                    "minimum": 0,
+                    "title": "Field 292",
+                    "type": "number"
+                  },
+                  "field_293": {
+                    "title": "Field 293",
+                    "type": "boolean"
+                  },
+                  "field_294": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 294"
+                  },
+                  "field_295": {
+                    "minimum": 0,
+                    "title": "Field 295",
+                    "type": "integer"
+                  },
+                  "field_296": {
+                    "minLength": 1,
+                    "title": "Field 296",
+                    "type": "string"
+                  },
+                  "field_297": {
+                    "minimum": 0,
+                    "title": "Field 297",
+                    "type": "number"
+                  },
+                  "field_298": {
+                    "title": "Field 298",
+                    "type": "boolean"
+                  },
+                  "field_299": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 299"
+                  },
+                  "field_300": {
+                    "minimum": 0,
+                    "title": "Field 300",
+                    "type": "integer"
+                  },
+                  "field_301": {
+                    "minLength": 1,
+                    "title": "Field 301",
+                    "type": "string"
+                  },
+                  "field_302": {
+                    "minimum": 0,
+                    "title": "Field 302",
+                    "type": "number"
+                  },
+                  "field_303": {
+                    "title": "Field 303",
+                    "type": "boolean"
+                  },
+                  "field_304": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 304"
+                  },
+                  "field_305": {
+                    "minimum": 0,
+                    "title": "Field 305",
+                    "type": "integer"
+                  },
+                  "field_306": {
+                    "minLength": 1,
+                    "title": "Field 306",
+                    "type": "string"
+                  },
+                  "field_307": {
+                    "minimum": 0,
+                    "title": "Field 307",
+                    "type": "number"
+                  },
+                  "field_308": {
+                    "title": "Field 308",
+                    "type": "boolean"
+                  },
+                  "field_309": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 309"
+                  },
+                  "field_310": {
+                    "minimum": 0,
+                    "title": "Field 310",
+                    "type": "integer"
+                  },
+                  "field_311": {
+                    "minLength": 1,
+                    "title": "Field 311",
+                    "type": "string"
+                  },
+                  "field_312": {
+                    "minimum": 0,
+                    "title": "Field 312",
+                    "type": "number"
+                  },
+                  "field_313": {
+                    "title": "Field 313",
+                    "type": "boolean"
+                  },
+                  "field_314": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 314"
+                  },
+                  "field_315": {
+                    "minimum": 0,
+                    "title": "Field 315",
+                    "type": "integer"
+                  },
+                  "field_316": {
+                    "minLength": 1,
+                    "title": "Field 316",
+                    "type": "string"
+                  },
+                  "field_317": {
+                    "minimum": 0,
+                    "title": "Field 317",
+                    "type": "number"
+                  },
+                  "field_318": {
+                    "title": "Field 318",
+                    "type": "boolean"
+                  },
+                  "field_319": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 319"
+                  },
+                  "field_320": {
+                    "minimum": 0,
+                    "title": "Field 320",
+                    "type": "integer"
+                  },
+                  "field_321": {
+                    "minLength": 1,
+                    "title": "Field 321",
+                    "type": "string"
+                  },
+                  "field_322": {
+                    "minimum": 0,
+                    "title": "Field 322",
+                    "type": "number"
+                  },
+                  "field_323": {
+                    "title": "Field 323",
+                    "type": "boolean"
+                  },
+                  "field_324": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 324"
+                  },
+                  "field_325": {
+                    "minimum": 0,
+                    "title": "Field 325",
+                    "type": "integer"
+                  },
+                  "field_326": {
+                    "minLength": 1,
+                    "title": "Field 326",
+                    "type": "string"
+                  },
+                  "field_327": {
+                    "minimum": 0,
+                    "title": "Field 327",
+                    "type": "number"
+                  },
+                  "field_328": {
+                    "title": "Field 328",
+                    "type": "boolean"
+                  },
+                  "field_329": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 329"
+                  },
+                  "field_330": {
+                    "minimum": 0,
+                    "title": "Field 330",
+                    "type": "integer"
+                  },
+                  "field_331": {
+                    "minLength": 1,
+                    "title": "Field 331",
+                    "type": "string"
+                  },
+                  "field_332": {
+                    "minimum": 0,
+                    "title": "Field 332",
+                    "type": "number"
+                  },
+                  "field_333": {
+                    "title": "Field 333",
+                    "type": "boolean"
+                  },
+                  "field_334": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 334"
+                  },
+                  "field_335": {
+                    "minimum": 0,
+                    "title": "Field 335",
+                    "type": "integer"
+                  },
+                  "field_336": {
+                    "minLength": 1,
+                    "title": "Field 336",
+                    "type": "string"
+                  },
+                  "field_337": {
+                    "minimum": 0,
+                    "title": "Field 337",
+                    "type": "number"
+                  },
+                  "field_338": {
+                    "title": "Field 338",
+                    "type": "boolean"
+                  },
+                  "field_339": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 339"
+                  },
+                  "field_340": {
+                    "minimum": 0,
+                    "title": "Field 340",
+                    "type": "integer"
+                  },
+                  "field_341": {
+                    "minLength": 1,
+                    "title": "Field 341",
+                    "type": "string"
+                  },
+                  "field_342": {
+                    "minimum": 0,
+                    "title": "Field 342",
+                    "type": "number"
+                  },
+                  "field_343": {
+                    "title": "Field 343",
+                    "type": "boolean"
+                  },
+                  "field_344": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 344"
+                  },
+                  "field_345": {
+                    "minimum": 0,
+                    "title": "Field 345",
+                    "type": "integer"
+                  },
+                  "field_346": {
+                    "minLength": 1,
+                    "title": "Field 346",
+                    "type": "string"
+                  },
+                  "field_347": {
+                    "minimum": 0,
+                    "title": "Field 347",
+                    "type": "number"
+                  },
+                  "field_348": {
+                    "title": "Field 348",
+                    "type": "boolean"
+                  },
+                  "field_349": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 349"
+                  },
+                  "field_350": {
+                    "minimum": 0,
+                    "title": "Field 350",
+                    "type": "integer"
+                  },
+                  "field_351": {
+                    "minLength": 1,
+                    "title": "Field 351",
+                    "type": "string"
+                  },
+                  "field_352": {
+                    "minimum": 0,
+                    "title": "Field 352",
+                    "type": "number"
+                  },
+                  "field_353": {
+                    "title": "Field 353",
+                    "type": "boolean"
+                  },
+                  "field_354": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 354"
+                  },
+                  "field_355": {
+                    "minimum": 0,
+                    "title": "Field 355",
+                    "type": "integer"
+                  },
+                  "field_356": {
+                    "minLength": 1,
+                    "title": "Field 356",
+                    "type": "string"
+                  },
+                  "field_357": {
+                    "minimum": 0,
+                    "title": "Field 357",
+                    "type": "number"
+                  },
+                  "field_358": {
+                    "title": "Field 358",
+                    "type": "boolean"
+                  },
+                  "field_359": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 359"
+                  },
+                  "field_360": {
+                    "minimum": 0,
+                    "title": "Field 360",
+                    "type": "integer"
+                  },
+                  "field_361": {
+                    "minLength": 1,
+                    "title": "Field 361",
+                    "type": "string"
+                  },
+                  "field_362": {
+                    "minimum": 0,
+                    "title": "Field 362",
+                    "type": "number"
+                  },
+                  "field_363": {
+                    "title": "Field 363",
+                    "type": "boolean"
+                  },
+                  "field_364": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 364"
+                  },
+                  "field_365": {
+                    "minimum": 0,
+                    "title": "Field 365",
+                    "type": "integer"
+                  },
+                  "field_366": {
+                    "minLength": 1,
+                    "title": "Field 366",
+                    "type": "string"
+                  },
+                  "field_367": {
+                    "minimum": 0,
+                    "title": "Field 367",
+                    "type": "number"
+                  },
+                  "field_368": {
+                    "title": "Field 368",
+                    "type": "boolean"
+                  },
+                  "field_369": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 369"
+                  },
+                  "field_370": {
+                    "minimum": 0,
+                    "title": "Field 370",
+                    "type": "integer"
+                  },
+                  "field_371": {
+                    "minLength": 1,
+                    "title": "Field 371",
+                    "type": "string"
+                  },
+                  "field_372": {
+                    "minimum": 0,
+                    "title": "Field 372",
+                    "type": "number"
+                  },
+                  "field_373": {
+                    "title": "Field 373",
+                    "type": "boolean"
+                  },
+                  "field_374": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 374"
+                  },
+                  "field_375": {
+                    "minimum": 0,
+                    "title": "Field 375",
+                    "type": "integer"
+                  },
+                  "field_376": {
+                    "minLength": 1,
+                    "title": "Field 376",
+                    "type": "string"
+                  },
+                  "field_377": {
+                    "minimum": 0,
+                    "title": "Field 377",
+                    "type": "number"
+                  },
+                  "field_378": {
+                    "title": "Field 378",
+                    "type": "boolean"
+                  },
+                  "field_379": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 379"
+                  },
+                  "field_380": {
+                    "minimum": 0,
+                    "title": "Field 380",
+                    "type": "integer"
+                  },
+                  "field_381": {
+                    "minLength": 1,
+                    "title": "Field 381",
+                    "type": "string"
+                  },
+                  "field_382": {
+                    "minimum": 0,
+                    "title": "Field 382",
+                    "type": "number"
+                  },
+                  "field_383": {
+                    "title": "Field 383",
+                    "type": "boolean"
+                  },
+                  "field_384": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 384"
+                  },
+                  "field_385": {
+                    "minimum": 0,
+                    "title": "Field 385",
+                    "type": "integer"
+                  },
+                  "field_386": {
+                    "minLength": 1,
+                    "title": "Field 386",
+                    "type": "string"
+                  },
+                  "field_387": {
+                    "minimum": 0,
+                    "title": "Field 387",
+                    "type": "number"
+                  },
+                  "field_388": {
+                    "title": "Field 388",
+                    "type": "boolean"
+                  },
+                  "field_389": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 389"
+                  },
+                  "field_390": {
+                    "minimum": 0,
+                    "title": "Field 390",
+                    "type": "integer"
+                  },
+                  "field_391": {
+                    "minLength": 1,
+                    "title": "Field 391",
+                    "type": "string"
+                  },
+                  "field_392": {
+                    "minimum": 0,
+                    "title": "Field 392",
+                    "type": "number"
+                  },
+                  "field_393": {
+                    "title": "Field 393",
+                    "type": "boolean"
+                  },
+                  "field_394": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 394"
+                  },
+                  "field_395": {
+                    "minimum": 0,
+                    "title": "Field 395",
+                    "type": "integer"
+                  },
+                  "field_396": {
+                    "minLength": 1,
+                    "title": "Field 396",
+                    "type": "string"
+                  },
+                  "field_397": {
+                    "minimum": 0,
+                    "title": "Field 397",
+                    "type": "number"
+                  },
+                  "field_398": {
+                    "title": "Field 398",
+                    "type": "boolean"
+                  },
+                  "field_399": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 399"
+                  },
+                  "field_400": {
+                    "minimum": 0,
+                    "title": "Field 400",
+                    "type": "integer"
+                  },
+                  "field_401": {
+                    "minLength": 1,
+                    "title": "Field 401",
+                    "type": "string"
+                  },
+                  "field_402": {
+                    "minimum": 0,
+                    "title": "Field 402",
+                    "type": "number"
+                  },
+                  "field_403": {
+                    "title": "Field 403",
+                    "type": "boolean"
+                  },
+                  "field_404": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 404"
+                  },
+                  "field_405": {
+                    "minimum": 0,
+                    "title": "Field 405",
+                    "type": "integer"
+                  },
+                  "field_406": {
+                    "minLength": 1,
+                    "title": "Field 406",
+                    "type": "string"
+                  },
+                  "field_407": {
+                    "minimum": 0,
+                    "title": "Field 407",
+                    "type": "number"
+                  },
+                  "field_408": {
+                    "title": "Field 408",
+                    "type": "boolean"
+                  },
+                  "field_409": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 409"
+                  },
+                  "field_410": {
+                    "minimum": 0,
+                    "title": "Field 410",
+                    "type": "integer"
+                  },
+                  "field_411": {
+                    "minLength": 1,
+                    "title": "Field 411",
+                    "type": "string"
+                  },
+                  "field_412": {
+                    "minimum": 0,
+                    "title": "Field 412",
+                    "type": "number"
+                  },
+                  "field_413": {
+                    "title": "Field 413",
+                    "type": "boolean"
+                  },
+                  "field_414": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 414"
+                  },
+                  "field_415": {
+                    "minimum": 0,
+                    "title": "Field 415",
+                    "type": "integer"
+                  },
+                  "field_416": {
+                    "minLength": 1,
+                    "title": "Field 416",
+                    "type": "string"
+                  },
+                  "field_417": {
+                    "minimum": 0,
+                    "title": "Field 417",
+                    "type": "number"
+                  },
+                  "field_418": {
+                    "title": "Field 418",
+                    "type": "boolean"
+                  },
+                  "field_419": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 419"
+                  },
+                  "field_420": {
+                    "minimum": 0,
+                    "title": "Field 420",
+                    "type": "integer"
+                  },
+                  "field_421": {
+                    "minLength": 1,
+                    "title": "Field 421",
+                    "type": "string"
+                  },
+                  "field_422": {
+                    "minimum": 0,
+                    "title": "Field 422",
+                    "type": "number"
+                  },
+                  "field_423": {
+                    "title": "Field 423",
+                    "type": "boolean"
+                  },
+                  "field_424": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 424"
+                  },
+                  "field_425": {
+                    "minimum": 0,
+                    "title": "Field 425",
+                    "type": "integer"
+                  },
+                  "field_426": {
+                    "minLength": 1,
+                    "title": "Field 426",
+                    "type": "string"
+                  },
+                  "field_427": {
+                    "minimum": 0,
+                    "title": "Field 427",
+                    "type": "number"
+                  },
+                  "field_428": {
+                    "title": "Field 428",
+                    "type": "boolean"
+                  },
+                  "field_429": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 429"
+                  },
+                  "field_430": {
+                    "minimum": 0,
+                    "title": "Field 430",
+                    "type": "integer"
+                  },
+                  "field_431": {
+                    "minLength": 1,
+                    "title": "Field 431",
+                    "type": "string"
+                  },
+                  "field_432": {
+                    "minimum": 0,
+                    "title": "Field 432",
+                    "type": "number"
+                  },
+                  "field_433": {
+                    "title": "Field 433",
+                    "type": "boolean"
+                  },
+                  "field_434": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 434"
+                  },
+                  "field_435": {
+                    "minimum": 0,
+                    "title": "Field 435",
+                    "type": "integer"
+                  },
+                  "field_436": {
+                    "minLength": 1,
+                    "title": "Field 436",
+                    "type": "string"
+                  },
+                  "field_437": {
+                    "minimum": 0,
+                    "title": "Field 437",
+                    "type": "number"
+                  },
+                  "field_438": {
+                    "title": "Field 438",
+                    "type": "boolean"
+                  },
+                  "field_439": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 439"
+                  },
+                  "field_440": {
+                    "minimum": 0,
+                    "title": "Field 440",
+                    "type": "integer"
+                  },
+                  "field_441": {
+                    "minLength": 1,
+                    "title": "Field 441",
+                    "type": "string"
+                  },
+                  "field_442": {
+                    "minimum": 0,
+                    "title": "Field 442",
+                    "type": "number"
+                  },
+                  "field_443": {
+                    "title": "Field 443",
+                    "type": "boolean"
+                  },
+                  "field_444": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 444"
+                  },
+                  "field_445": {
+                    "minimum": 0,
+                    "title": "Field 445",
+                    "type": "integer"
+                  },
+                  "field_446": {
+                    "minLength": 1,
+                    "title": "Field 446",
+                    "type": "string"
+                  },
+                  "field_447": {
+                    "minimum": 0,
+                    "title": "Field 447",
+                    "type": "number"
+                  },
+                  "field_448": {
+                    "title": "Field 448",
+                    "type": "boolean"
+                  },
+                  "field_449": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 449"
+                  },
+                  "field_450": {
+                    "minimum": 0,
+                    "title": "Field 450",
+                    "type": "integer"
+                  },
+                  "field_451": {
+                    "minLength": 1,
+                    "title": "Field 451",
+                    "type": "string"
+                  },
+                  "field_452": {
+                    "minimum": 0,
+                    "title": "Field 452",
+                    "type": "number"
+                  },
+                  "field_453": {
+                    "title": "Field 453",
+                    "type": "boolean"
+                  },
+                  "field_454": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 454"
+                  },
+                  "field_455": {
+                    "minimum": 0,
+                    "title": "Field 455",
+                    "type": "integer"
+                  },
+                  "field_456": {
+                    "minLength": 1,
+                    "title": "Field 456",
+                    "type": "string"
+                  },
+                  "field_457": {
+                    "minimum": 0,
+                    "title": "Field 457",
+                    "type": "number"
+                  },
+                  "field_458": {
+                    "title": "Field 458",
+                    "type": "boolean"
+                  },
+                  "field_459": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 459"
+                  },
+                  "field_460": {
+                    "minimum": 0,
+                    "title": "Field 460",
+                    "type": "integer"
+                  },
+                  "field_461": {
+                    "minLength": 1,
+                    "title": "Field 461",
+                    "type": "string"
+                  },
+                  "field_462": {
+                    "minimum": 0,
+                    "title": "Field 462",
+                    "type": "number"
+                  },
+                  "field_463": {
+                    "title": "Field 463",
+                    "type": "boolean"
+                  },
+                  "field_464": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 464"
+                  },
+                  "field_465": {
+                    "minimum": 0,
+                    "title": "Field 465",
+                    "type": "integer"
+                  },
+                  "field_466": {
+                    "minLength": 1,
+                    "title": "Field 466",
+                    "type": "string"
+                  },
+                  "field_467": {
+                    "minimum": 0,
+                    "title": "Field 467",
+                    "type": "number"
+                  },
+                  "field_468": {
+                    "title": "Field 468",
+                    "type": "boolean"
+                  },
+                  "field_469": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 469"
+                  },
+                  "field_470": {
+                    "minimum": 0,
+                    "title": "Field 470",
+                    "type": "integer"
+                  },
+                  "field_471": {
+                    "minLength": 1,
+                    "title": "Field 471",
+                    "type": "string"
+                  },
+                  "field_472": {
+                    "minimum": 0,
+                    "title": "Field 472",
+                    "type": "number"
+                  },
+                  "field_473": {
+                    "title": "Field 473",
+                    "type": "boolean"
+                  },
+                  "field_474": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 474"
+                  },
+                  "field_475": {
+                    "minimum": 0,
+                    "title": "Field 475",
+                    "type": "integer"
+                  },
+                  "field_476": {
+                    "minLength": 1,
+                    "title": "Field 476",
+                    "type": "string"
+                  },
+                  "field_477": {
+                    "minimum": 0,
+                    "title": "Field 477",
+                    "type": "number"
+                  },
+                  "field_478": {
+                    "title": "Field 478",
+                    "type": "boolean"
+                  },
+                  "field_479": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 479"
+                  },
+                  "field_480": {
+                    "minimum": 0,
+                    "title": "Field 480",
+                    "type": "integer"
+                  },
+                  "field_481": {
+                    "minLength": 1,
+                    "title": "Field 481",
+                    "type": "string"
+                  },
+                  "field_482": {
+                    "minimum": 0,
+                    "title": "Field 482",
+                    "type": "number"
+                  },
+                  "field_483": {
+                    "title": "Field 483",
+                    "type": "boolean"
+                  },
+                  "field_484": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 484"
+                  },
+                  "field_485": {
+                    "minimum": 0,
+                    "title": "Field 485",
+                    "type": "integer"
+                  },
+                  "field_486": {
+                    "minLength": 1,
+                    "title": "Field 486",
+                    "type": "string"
+                  },
+                  "field_487": {
+                    "minimum": 0,
+                    "title": "Field 487",
+                    "type": "number"
+                  },
+                  "field_488": {
+                    "title": "Field 488",
+                    "type": "boolean"
+                  },
+                  "field_489": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 489"
+                  },
+                  "field_490": {
+                    "minimum": 0,
+                    "title": "Field 490",
+                    "type": "integer"
+                  },
+                  "field_491": {
+                    "minLength": 1,
+                    "title": "Field 491",
+                    "type": "string"
+                  },
+                  "field_492": {
+                    "minimum": 0,
+                    "title": "Field 492",
+                    "type": "number"
+                  },
+                  "field_493": {
+                    "title": "Field 493",
+                    "type": "boolean"
+                  },
+                  "field_494": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 494"
+                  },
+                  "field_495": {
+                    "minimum": 0,
+                    "title": "Field 495",
+                    "type": "integer"
+                  },
+                  "field_496": {
+                    "minLength": 1,
+                    "title": "Field 496",
+                    "type": "string"
+                  },
+                  "field_497": {
+                    "minimum": 0,
+                    "title": "Field 497",
+                    "type": "number"
+                  },
+                  "field_498": {
+                    "title": "Field 498",
+                    "type": "boolean"
+                  },
+                  "field_499": {
+                    "enum": [
+                      "alpha",
+                      "beta",
+                      "gamma"
+                    ],
+                    "title": "Field 499"
+                  }
+                },
+                "required": [
+                  "field_000",
+                  "field_001",
+                  "field_002",
+                  "field_003",
+                  "field_004",
+                  "field_005",
+                  "field_006",
+                  "field_007",
+                  "field_008",
+                  "field_009",
+                  "field_010",
+                  "field_011",
+                  "field_012",
+                  "field_013",
+                  "field_014",
+                  "field_015",
+                  "field_016",
+                  "field_017",
+                  "field_018",
+                  "field_019",
+                  "field_020",
+                  "field_021",
+                  "field_022",
+                  "field_023",
+                  "field_024",
+                  "field_025",
+                  "field_026",
+                  "field_027",
+                  "field_028",
+                  "field_029",
+                  "field_030",
+                  "field_031",
+                  "field_032",
+                  "field_033",
+                  "field_034",
+                  "field_035",
+                  "field_036",
+                  "field_037",
+                  "field_038",
+                  "field_039",
+                  "field_040",
+                  "field_041",
+                  "field_042",
+                  "field_043",
+                  "field_044",
+                  "field_045",
+                  "field_046",
+                  "field_047",
+                  "field_048",
+                  "field_049",
+                  "field_050",
+                  "field_051",
+                  "field_052",
+                  "field_053",
+                  "field_054",
+                  "field_055",
+                  "field_056",
+                  "field_057",
+                  "field_058",
+                  "field_059",
+                  "field_060",
+                  "field_061",
+                  "field_062",
+                  "field_063",
+                  "field_064",
+                  "field_065",
+                  "field_066",
+                  "field_067",
+                  "field_068",
+                  "field_069",
+                  "field_070",
+                  "field_071",
+                  "field_072",
+                  "field_073",
+                  "field_074",
+                  "field_075",
+                  "field_076",
+                  "field_077",
+                  "field_078",
+                  "field_079",
+                  "field_080",
+                  "field_081",
+                  "field_082",
+                  "field_083",
+                  "field_084",
+                  "field_085",
+                  "field_086",
+                  "field_087",
+                  "field_088",
+                  "field_089",
+                  "field_090",
+                  "field_091",
+                  "field_092",
+                  "field_093",
+                  "field_094",
+                  "field_095",
+                  "field_096",
+                  "field_097",
+                  "field_098",
+                  "field_099",
+                  "field_100",
+                  "field_101",
+                  "field_102",
+                  "field_103",
+                  "field_104",
+                  "field_105",
+                  "field_106",
+                  "field_107",
+                  "field_108",
+                  "field_109",
+                  "field_110",
+                  "field_111",
+                  "field_112",
+                  "field_113",
+                  "field_114",
+                  "field_115",
+                  "field_116",
+                  "field_117",
+                  "field_118",
+                  "field_119",
+                  "field_120",
+                  "field_121",
+                  "field_122",
+                  "field_123",
+                  "field_124",
+                  "field_125",
+                  "field_126",
+                  "field_127",
+                  "field_128",
+                  "field_129",
+                  "field_130",
+                  "field_131",
+                  "field_132",
+                  "field_133",
+                  "field_134",
+                  "field_135",
+                  "field_136",
+                  "field_137",
+                  "field_138",
+                  "field_139",
+                  "field_140",
+                  "field_141",
+                  "field_142",
+                  "field_143",
+                  "field_144",
+                  "field_145",
+                  "field_146",
+                  "field_147",
+                  "field_148",
+                  "field_149",
+                  "field_150",
+                  "field_151",
+                  "field_152",
+                  "field_153",
+                  "field_154",
+                  "field_155",
+                  "field_156",
+                  "field_157",
+                  "field_158",
+                  "field_159",
+                  "field_160",
+                  "field_161",
+                  "field_162",
+                  "field_163",
+                  "field_164",
+                  "field_165",
+                  "field_166",
+                  "field_167",
+                  "field_168",
+                  "field_169",
+                  "field_170",
+                  "field_171",
+                  "field_172",
+                  "field_173",
+                  "field_174",
+                  "field_175",
+                  "field_176",
+                  "field_177",
+                  "field_178",
+                  "field_179",
+                  "field_180",
+                  "field_181",
+                  "field_182",
+                  "field_183",
+                  "field_184",
+                  "field_185",
+                  "field_186",
+                  "field_187",
+                  "field_188",
+                  "field_189",
+                  "field_190",
+                  "field_191",
+                  "field_192",
+                  "field_193",
+                  "field_194",
+                  "field_195",
+                  "field_196",
+                  "field_197",
+                  "field_198",
+                  "field_199",
+                  "field_200",
+                  "field_201",
+                  "field_202",
+                  "field_203",
+                  "field_204",
+                  "field_205",
+                  "field_206",
+                  "field_207",
+                  "field_208",
+                  "field_209",
+                  "field_210",
+                  "field_211",
+                  "field_212",
+                  "field_213",
+                  "field_214",
+                  "field_215",
+                  "field_216",
+                  "field_217",
+                  "field_218",
+                  "field_219",
+                  "field_220",
+                  "field_221",
+                  "field_222",
+                  "field_223",
+                  "field_224",
+                  "field_225",
+                  "field_226",
+                  "field_227",
+                  "field_228",
+                  "field_229",
+                  "field_230",
+                  "field_231",
+                  "field_232",
+                  "field_233",
+                  "field_234",
+                  "field_235",
+                  "field_236",
+                  "field_237",
+                  "field_238",
+                  "field_239",
+                  "field_240",
+                  "field_241",
+                  "field_242",
+                  "field_243",
+                  "field_244",
+                  "field_245",
+                  "field_246",
+                  "field_247",
+                  "field_248",
+                  "field_249",
+                  "field_250",
+                  "field_251",
+                  "field_252",
+                  "field_253",
+                  "field_254",
+                  "field_255",
+                  "field_256",
+                  "field_257",
+                  "field_258",
+                  "field_259",
+                  "field_260",
+                  "field_261",
+                  "field_262",
+                  "field_263",
+                  "field_264",
+                  "field_265",
+                  "field_266",
+                  "field_267",
+                  "field_268",
+                  "field_269",
+                  "field_270",
+                  "field_271",
+                  "field_272",
+                  "field_273",
+                  "field_274",
+                  "field_275",
+                  "field_276",
+                  "field_277",
+                  "field_278",
+                  "field_279",
+                  "field_280",
+                  "field_281",
+                  "field_282",
+                  "field_283",
+                  "field_284",
+                  "field_285",
+                  "field_286",
+                  "field_287",
+                  "field_288",
+                  "field_289",
+                  "field_290",
+                  "field_291",
+                  "field_292",
+                  "field_293",
+                  "field_294",
+                  "field_295",
+                  "field_296",
+                  "field_297",
+                  "field_298",
+                  "field_299",
+                  "field_300",
+                  "field_301",
+                  "field_302",
+                  "field_303",
+                  "field_304",
+                  "field_305",
+                  "field_306",
+                  "field_307",
+                  "field_308",
+                  "field_309",
+                  "field_310",
+                  "field_311",
+                  "field_312",
+                  "field_313",
+                  "field_314",
+                  "field_315",
+                  "field_316",
+                  "field_317",
+                  "field_318",
+                  "field_319",
+                  "field_320",
+                  "field_321",
+                  "field_322",
+                  "field_323",
+                  "field_324",
+                  "field_325",
+                  "field_326",
+                  "field_327",
+                  "field_328",
+                  "field_329",
+                  "field_330",
+                  "field_331",
+                  "field_332",
+                  "field_333",
+                  "field_334",
+                  "field_335",
+                  "field_336",
+                  "field_337",
+                  "field_338",
+                  "field_339",
+                  "field_340",
+                  "field_341",
+                  "field_342",
+                  "field_343",
+                  "field_344",
+                  "field_345",
+                  "field_346",
+                  "field_347",
+                  "field_348",
+                  "field_349",
+                  "field_350",
+                  "field_351",
+                  "field_352",
+                  "field_353",
+                  "field_354",
+                  "field_355",
+                  "field_356",
+                  "field_357",
+                  "field_358",
+                  "field_359",
+                  "field_360",
+                  "field_361",
+                  "field_362",
+                  "field_363",
+                  "field_364",
+                  "field_365",
+                  "field_366",
+                  "field_367",
+                  "field_368",
+                  "field_369",
+                  "field_370",
+                  "field_371",
+                  "field_372",
+                  "field_373",
+                  "field_374",
+                  "field_375",
+                  "field_376",
+                  "field_377",
+                  "field_378",
+                  "field_379",
+                  "field_380",
+                  "field_381",
+                  "field_382",
+                  "field_383",
+                  "field_384",
+                  "field_385",
+                  "field_386",
+                  "field_387",
+                  "field_388",
+                  "field_389",
+                  "field_390",
+                  "field_391",
+                  "field_392",
+                  "field_393",
+                  "field_394",
+                  "field_395",
+                  "field_396",
+                  "field_397",
+                  "field_398",
+                  "field_399",
+                  "field_400",
+                  "field_401",
+                  "field_402",
+                  "field_403",
+                  "field_404",
+                  "field_405",
+                  "field_406",
+                  "field_407",
+                  "field_408",
+                  "field_409",
+                  "field_410",
+                  "field_411",
+                  "field_412",
+                  "field_413",
+                  "field_414",
+                  "field_415",
+                  "field_416",
+                  "field_417",
+                  "field_418",
+                  "field_419",
+                  "field_420",
+                  "field_421",
+                  "field_422",
+                  "field_423",
+                  "field_424",
+                  "field_425",
+                  "field_426",
+                  "field_427",
+                  "field_428",
+                  "field_429",
+                  "field_430",
+                  "field_431",
+                  "field_432",
+                  "field_433",
+                  "field_434",
+                  "field_435",
+                  "field_436",
+                  "field_437",
+                  "field_438",
+                  "field_439",
+                  "field_440",
+                  "field_441",
+                  "field_442",
+                  "field_443",
+                  "field_444",
+                  "field_445",
+                  "field_446",
+                  "field_447",
+                  "field_448",
+                  "field_449",
+                  "field_450",
+                  "field_451",
+                  "field_452",
+                  "field_453",
+                  "field_454",
+                  "field_455",
+                  "field_456",
+                  "field_457",
+                  "field_458",
+                  "field_459",
+                  "field_460",
+                  "field_461",
+                  "field_462",
+                  "field_463",
+                  "field_464",
+                  "field_465",
+                  "field_466",
+                  "field_467",
+                  "field_468",
+                  "field_469",
+                  "field_470",
+                  "field_471",
+                  "field_472",
+                  "field_473",
+                  "field_474",
+                  "field_475",
+                  "field_476",
+                  "field_477",
+                  "field_478",
+                  "field_479",
+                  "field_480",
+                  "field_481",
+                  "field_482",
+                  "field_483",
+                  "field_484",
+                  "field_485",
+                  "field_486",
+                  "field_487",
+                  "field_488",
+                  "field_489",
+                  "field_490",
+                  "field_491",
+                  "field_492",
+                  "field_493",
+                  "field_494",
+                  "field_495",
+                  "field_496",
+                  "field_497",
+                  "field_498",
+                  "field_499"
+                ],
+                "title": "Representative object controls",
+                "type": "object"
+              }
+            },
+            "required": [
+              "level_3"
+            ],
+            "title": "Level 2",
+            "type": "object"
+          }
+        },
+        "required": [
+          "level_2"
+        ],
+        "title": "Level 1",
+        "type": "object"
+      }
+    },
+    "required": [
+      "level_1"
+    ],
+    "title": "Representative object workload",
+    "type": "object"
+  },
+  "ui_schema": null,
+  "initial_form_data": {
+    "level_1": {
+      "level_2": {
+        "level_3": {
+          "field_000": -1,
+          "field_001": "",
+          "field_002": -1,
+          "field_003": null,
+          "field_004": "outside-the-finite-choice",
+          "field_005": -1,
+          "field_006": "",
+          "field_007": -1,
+          "field_008": null,
+          "field_009": "outside-the-finite-choice",
+          "field_010": -1,
+          "field_011": "",
+          "field_012": -1,
+          "field_013": null,
+          "field_014": "outside-the-finite-choice",
+          "field_015": -1,
+          "field_016": "",
+          "field_017": -1,
+          "field_018": null,
+          "field_019": "outside-the-finite-choice",
+          "field_020": -1,
+          "field_021": "",
+          "field_022": -1,
+          "field_023": null,
+          "field_024": "outside-the-finite-choice",
+          "field_025": -1,
+          "field_026": "",
+          "field_027": -1,
+          "field_028": null,
+          "field_029": "outside-the-finite-choice",
+          "field_030": -1,
+          "field_031": "",
+          "field_032": 33.25,
+          "field_033": false,
+          "field_034": "alpha",
+          "field_035": 35,
+          "field_036": "value-036",
+          "field_037": 38.25,
+          "field_038": true,
+          "field_039": "alpha",
+          "field_040": 40,
+          "field_041": "value-041",
+          "field_042": 43.25,
+          "field_043": false,
+          "field_044": "alpha",
+          "field_045": 45,
+          "field_046": "value-046",
+          "field_047": 48.25,
+          "field_048": true,
+          "field_049": "alpha",
+          "field_050": 50,
+          "field_051": "value-051",
+          "field_052": 53.25,
+          "field_053": false,
+          "field_054": "alpha",
+          "field_055": 55,
+          "field_056": "value-056",
+          "field_057": 58.25,
+          "field_058": true,
+          "field_059": "alpha",
+          "field_060": 60,
+          "field_061": "value-061",
+          "field_062": 63.25,
+          "field_063": false,
+          "field_064": "alpha",
+          "field_065": 65,
+          "field_066": "value-066",
+          "field_067": 68.25,
+          "field_068": true,
+          "field_069": "alpha",
+          "field_070": 70,
+          "field_071": "value-071",
+          "field_072": 73.25,
+          "field_073": false,
+          "field_074": "alpha",
+          "field_075": 75,
+          "field_076": "value-076",
+          "field_077": 78.25,
+          "field_078": true,
+          "field_079": "alpha",
+          "field_080": 80,
+          "field_081": "value-081",
+          "field_082": 83.25,
+          "field_083": false,
+          "field_084": "alpha",
+          "field_085": 85,
+          "field_086": "value-086",
+          "field_087": 88.25,
+          "field_088": true,
+          "field_089": "alpha",
+          "field_090": 90,
+          "field_091": "value-091",
+          "field_092": 93.25,
+          "field_093": false,
+          "field_094": "alpha",
+          "field_095": 95,
+          "field_096": "value-096",
+          "field_097": 98.25,
+          "field_098": true,
+          "field_099": "alpha",
+          "field_100": 100,
+          "field_101": "value-101",
+          "field_102": 103.25,
+          "field_103": false,
+          "field_104": "alpha",
+          "field_105": 105,
+          "field_106": "value-106",
+          "field_107": 108.25,
+          "field_108": true,
+          "field_109": "alpha",
+          "field_110": 110,
+          "field_111": "value-111",
+          "field_112": 113.25,
+          "field_113": false,
+          "field_114": "alpha",
+          "field_115": 115,
+          "field_116": "value-116",
+          "field_117": 118.25,
+          "field_118": true,
+          "field_119": "alpha",
+          "field_120": 120,
+          "field_121": "value-121",
+          "field_122": 123.25,
+          "field_123": false,
+          "field_124": "alpha",
+          "field_125": 125,
+          "field_126": "value-126",
+          "field_127": 128.25,
+          "field_128": true,
+          "field_129": "alpha",
+          "field_130": 130,
+          "field_131": "value-131",
+          "field_132": 133.25,
+          "field_133": false,
+          "field_134": "alpha",
+          "field_135": 135,
+          "field_136": "value-136",
+          "field_137": 138.25,
+          "field_138": true,
+          "field_139": "alpha",
+          "field_140": 140,
+          "field_141": "value-141",
+          "field_142": 143.25,
+          "field_143": false,
+          "field_144": "alpha",
+          "field_145": 145,
+          "field_146": "value-146",
+          "field_147": 148.25,
+          "field_148": true,
+          "field_149": "alpha",
+          "field_150": 150,
+          "field_151": "value-151",
+          "field_152": 153.25,
+          "field_153": false,
+          "field_154": "alpha",
+          "field_155": 155,
+          "field_156": "value-156",
+          "field_157": 158.25,
+          "field_158": true,
+          "field_159": "alpha",
+          "field_160": 160,
+          "field_161": "value-161",
+          "field_162": 163.25,
+          "field_163": false,
+          "field_164": "alpha",
+          "field_165": 165,
+          "field_166": "value-166",
+          "field_167": 168.25,
+          "field_168": true,
+          "field_169": "alpha",
+          "field_170": 170,
+          "field_171": "value-171",
+          "field_172": 173.25,
+          "field_173": false,
+          "field_174": "alpha",
+          "field_175": 175,
+          "field_176": "value-176",
+          "field_177": 178.25,
+          "field_178": true,
+          "field_179": "alpha",
+          "field_180": 180,
+          "field_181": "value-181",
+          "field_182": 183.25,
+          "field_183": false,
+          "field_184": "alpha",
+          "field_185": 185,
+          "field_186": "value-186",
+          "field_187": 188.25,
+          "field_188": true,
+          "field_189": "alpha",
+          "field_190": 190,
+          "field_191": "value-191",
+          "field_192": 193.25,
+          "field_193": false,
+          "field_194": "alpha",
+          "field_195": 195,
+          "field_196": "value-196",
+          "field_197": 198.25,
+          "field_198": true,
+          "field_199": "alpha",
+          "field_200": 200,
+          "field_201": "value-201",
+          "field_202": 203.25,
+          "field_203": false,
+          "field_204": "alpha",
+          "field_205": 205,
+          "field_206": "value-206",
+          "field_207": 208.25,
+          "field_208": true,
+          "field_209": "alpha",
+          "field_210": 210,
+          "field_211": "value-211",
+          "field_212": 213.25,
+          "field_213": false,
+          "field_214": "alpha",
+          "field_215": 215,
+          "field_216": "value-216",
+          "field_217": 218.25,
+          "field_218": true,
+          "field_219": "alpha",
+          "field_220": 220,
+          "field_221": "value-221",
+          "field_222": 223.25,
+          "field_223": false,
+          "field_224": "alpha",
+          "field_225": 225,
+          "field_226": "value-226",
+          "field_227": 228.25,
+          "field_228": true,
+          "field_229": "alpha",
+          "field_230": 230,
+          "field_231": "value-231",
+          "field_232": 233.25,
+          "field_233": false,
+          "field_234": "alpha",
+          "field_235": 235,
+          "field_236": "value-236",
+          "field_237": 238.25,
+          "field_238": true,
+          "field_239": "alpha",
+          "field_240": 240,
+          "field_241": "value-241",
+          "field_242": 243.25,
+          "field_243": false,
+          "field_244": "alpha",
+          "field_245": 245,
+          "field_246": "value-246",
+          "field_247": 248.25,
+          "field_248": true,
+          "field_249": "alpha",
+          "field_250": 250,
+          "field_251": "value-251",
+          "field_252": 253.25,
+          "field_253": false,
+          "field_254": "alpha",
+          "field_255": 255,
+          "field_256": "value-256",
+          "field_257": 258.25,
+          "field_258": true,
+          "field_259": "alpha",
+          "field_260": 260,
+          "field_261": "value-261",
+          "field_262": 263.25,
+          "field_263": false,
+          "field_264": "alpha",
+          "field_265": 265,
+          "field_266": "value-266",
+          "field_267": 268.25,
+          "field_268": true,
+          "field_269": "alpha",
+          "field_270": 270,
+          "field_271": "value-271",
+          "field_272": 273.25,
+          "field_273": false,
+          "field_274": "alpha",
+          "field_275": 275,
+          "field_276": "value-276",
+          "field_277": 278.25,
+          "field_278": true,
+          "field_279": "alpha",
+          "field_280": 280,
+          "field_281": "value-281",
+          "field_282": 283.25,
+          "field_283": false,
+          "field_284": "alpha",
+          "field_285": 285,
+          "field_286": "value-286",
+          "field_287": 288.25,
+          "field_288": true,
+          "field_289": "alpha",
+          "field_290": 290,
+          "field_291": "value-291",
+          "field_292": 293.25,
+          "field_293": false,
+          "field_294": "alpha",
+          "field_295": 295,
+          "field_296": "value-296",
+          "field_297": 298.25,
+          "field_298": true,
+          "field_299": "alpha",
+          "field_300": 300,
+          "field_301": "value-301",
+          "field_302": 303.25,
+          "field_303": false,
+          "field_304": "alpha",
+          "field_305": 305,
+          "field_306": "value-306",
+          "field_307": 308.25,
+          "field_308": true,
+          "field_309": "alpha",
+          "field_310": 310,
+          "field_311": "value-311",
+          "field_312": 313.25,
+          "field_313": false,
+          "field_314": "alpha",
+          "field_315": 315,
+          "field_316": "value-316",
+          "field_317": 318.25,
+          "field_318": true,
+          "field_319": "alpha",
+          "field_320": 320,
+          "field_321": "value-321",
+          "field_322": 323.25,
+          "field_323": false,
+          "field_324": "alpha",
+          "field_325": 325,
+          "field_326": "value-326",
+          "field_327": 328.25,
+          "field_328": true,
+          "field_329": "alpha",
+          "field_330": 330,
+          "field_331": "value-331",
+          "field_332": 333.25,
+          "field_333": false,
+          "field_334": "alpha",
+          "field_335": 335,
+          "field_336": "value-336",
+          "field_337": 338.25,
+          "field_338": true,
+          "field_339": "alpha",
+          "field_340": 340,
+          "field_341": "value-341",
+          "field_342": 343.25,
+          "field_343": false,
+          "field_344": "alpha",
+          "field_345": 345,
+          "field_346": "value-346",
+          "field_347": 348.25,
+          "field_348": true,
+          "field_349": "alpha",
+          "field_350": 350,
+          "field_351": "value-351",
+          "field_352": 353.25,
+          "field_353": false,
+          "field_354": "alpha",
+          "field_355": 355,
+          "field_356": "value-356",
+          "field_357": 358.25,
+          "field_358": true,
+          "field_359": "alpha",
+          "field_360": 360,
+          "field_361": "value-361",
+          "field_362": 363.25,
+          "field_363": false,
+          "field_364": "alpha",
+          "field_365": 365,
+          "field_366": "value-366",
+          "field_367": 368.25,
+          "field_368": true,
+          "field_369": "alpha",
+          "field_370": 370,
+          "field_371": "value-371",
+          "field_372": 373.25,
+          "field_373": false,
+          "field_374": "alpha",
+          "field_375": 375,
+          "field_376": "value-376",
+          "field_377": 378.25,
+          "field_378": true,
+          "field_379": "alpha",
+          "field_380": 380,
+          "field_381": "value-381",
+          "field_382": 383.25,
+          "field_383": false,
+          "field_384": "alpha",
+          "field_385": 385,
+          "field_386": "value-386",
+          "field_387": 388.25,
+          "field_388": true,
+          "field_389": "alpha",
+          "field_390": 390,
+          "field_391": "value-391",
+          "field_392": 393.25,
+          "field_393": false,
+          "field_394": "alpha",
+          "field_395": 395,
+          "field_396": "value-396",
+          "field_397": 398.25,
+          "field_398": true,
+          "field_399": "alpha",
+          "field_400": 400,
+          "field_401": "value-401",
+          "field_402": 403.25,
+          "field_403": false,
+          "field_404": "alpha",
+          "field_405": 405,
+          "field_406": "value-406",
+          "field_407": 408.25,
+          "field_408": true,
+          "field_409": "alpha",
+          "field_410": 410,
+          "field_411": "value-411",
+          "field_412": 413.25,
+          "field_413": false,
+          "field_414": "alpha",
+          "field_415": 415,
+          "field_416": "value-416",
+          "field_417": 418.25,
+          "field_418": true,
+          "field_419": "alpha",
+          "field_420": 420,
+          "field_421": "value-421",
+          "field_422": 423.25,
+          "field_423": false,
+          "field_424": "alpha",
+          "field_425": 425,
+          "field_426": "value-426",
+          "field_427": 428.25,
+          "field_428": true,
+          "field_429": "alpha",
+          "field_430": 430,
+          "field_431": "value-431",
+          "field_432": 433.25,
+          "field_433": false,
+          "field_434": "alpha",
+          "field_435": 435,
+          "field_436": "value-436",
+          "field_437": 438.25,
+          "field_438": true,
+          "field_439": "alpha",
+          "field_440": 440,
+          "field_441": "value-441",
+          "field_442": 443.25,
+          "field_443": false,
+          "field_444": "alpha",
+          "field_445": 445,
+          "field_446": "value-446",
+          "field_447": 448.25,
+          "field_448": true,
+          "field_449": "alpha",
+          "field_450": 450,
+          "field_451": "value-451",
+          "field_452": 453.25,
+          "field_453": false,
+          "field_454": "alpha",
+          "field_455": 455,
+          "field_456": "value-456",
+          "field_457": 458.25,
+          "field_458": true,
+          "field_459": "alpha",
+          "field_460": 460,
+          "field_461": "value-461",
+          "field_462": 463.25,
+          "field_463": false,
+          "field_464": "alpha",
+          "field_465": 465,
+          "field_466": "value-466",
+          "field_467": 468.25,
+          "field_468": true,
+          "field_469": "alpha",
+          "field_470": 470,
+          "field_471": "value-471",
+          "field_472": 473.25,
+          "field_473": false,
+          "field_474": "alpha",
+          "field_475": 475,
+          "field_476": "value-476",
+          "field_477": 478.25,
+          "field_478": true,
+          "field_479": "alpha",
+          "field_480": 480,
+          "field_481": "value-481",
+          "field_482": 483.25,
+          "field_483": false,
+          "field_484": "alpha",
+          "field_485": 485,
+          "field_486": "value-486",
+          "field_487": 488.25,
+          "field_488": true,
+          "field_489": "alpha",
+          "field_490": 490,
+          "field_491": "value-491",
+          "field_492": 493.25,
+          "field_493": false,
+          "field_494": "alpha",
+          "field_495": 495,
+          "field_496": "value-496",
+          "field_497": 498.25,
+          "field_498": true,
+          "field_499": "alpha"
+        }
+      }
+    }
+  },
+  "setup": [
+    {
+      "operation": "external-findings",
+      "count": 32,
+      "binding": "/level_1/level_2/level_3/field_000"
+    }
+  ],
+  "workloads": [
+    {
+      "workload": "compilation",
+      "cold": true,
+      "fresh_browser_context": true
+    },
+    {
+      "workload": "mount",
+      "cold": true,
+      "fresh_browser_context": true
+    },
+    {
+      "workload": "edit",
+      "binding": "/level_1/level_2/level_3/field_000",
+      "alternating_values": [
+        "1",
+        "2"
+      ]
+    },
+    {
+      "workload": "findings",
+      "binding": "/level_1/level_2/level_3/field_000",
+      "count": 64,
+      "alternating_actions": [
+        "install",
+        "clear"
+      ]
+    },
+    {
+      "workload": "visibility",
+      "policies": [
+        "immediate",
+        "submission-only"
+      ]
+    },
+    {
+      "workload": "localization",
+      "locales": [
+        "en",
+        "hu"
+      ],
+      "message_source": "generated-fallback"
+    },
+    {
+      "workload": "submission",
+      "expected": "blocked"
+    }
+  ]
+}

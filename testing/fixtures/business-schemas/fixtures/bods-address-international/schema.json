@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:bods-address-international",
+  "$comment": "Adapted and reduced from Open Ownership's Apache-2.0 BODS 0.4 Address and Country definitions; this file has been changed for offline corpus use.",
+  "title": "International address",
+  "description": "A semi-structured international address from the Beneficial Ownership Data Standard.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["placeOfBirth", "residence", "registered", "service", "alternative", "business"]
+    },
+    "address": { "type": "string" },
+    "postCode": { "type": "string" },
+    "country": { "$ref": "urn:schemaform:corpus:bods-address-international:country" }
+  },
+  "additionalProperties": true
+}

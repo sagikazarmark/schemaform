@@ -1,0 +1,10 @@
+[modules.demo]
+source = "."
+entrypoint = true
+
+settings.rustVersion = "1.97-trixie"
+
+[modules.dagger-gha]
+source = "github.com/sagikazarmark/daggerverse-beta/dagger-gha"
+
+settings.lock = '"PINNED"'

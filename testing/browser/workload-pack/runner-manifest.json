@@ -1,0 +1,208 @@
+{
+  "affinity": {
+    "browser_process_cpu_list": "2-7",
+    "measurement_cpu_list": "2-7",
+    "runner_process_cpu_list": "2-7"
+  },
+  "browsers": {
+    "chromium": {
+      "revision": "1187",
+      "version": "140.0.7339.16"
+    },
+    "firefox": {
+      "revision": "1490",
+      "version": "141.0"
+    },
+    "playwright": "1.55.0",
+    "webkit": {
+      "revision": "2203",
+      "version": "26.0"
+    }
+  },
+  "comparison_policy": "Abort before measurement when any pinned value differs.",
+  "compression": {
+    "brotli": "1.1.0",
+    "quality": 11,
+    "window": 22
+  },
+  "empty_shell_artifact": {
+    "brotli_wasm": "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm.br",
+    "javascript": "testing/browser/artifacts/empty-shell/browser_workload_empty_shell.js",
+    "wasm": "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm"
+  },
+  "environment": "schemaform-perf-v1",
+  "hardware": {
+    "architecture": "x86_64",
+    "cpu_model": "Intel(R) Xeon(R) E-2388G CPU @ 3.20GHz",
+    "cpu_vendor": "GenuineIntel",
+    "logical_cpus": 16,
+    "memory_bytes": 68719476736,
+    "microcode": "0x2f0005c",
+    "physical_cores": 8
+  },
+  "operating_system": {
+    "distribution": "Ubuntu 24.04.3 LTS",
+    "kernel": "6.8.0-83-generic",
+    "libc": "glibc 2.39"
+  },
+  "power": {
+    "ac_power_required": true,
+    "governor": "performance",
+    "intel_pstate_max_perf_pct": 100,
+    "intel_pstate_min_perf_pct": 100,
+    "turbo": "disabled"
+  },
+  "production_artifact": {
+    "brotli_javascript": "testing/browser/artifacts/bindgen/browser_workload_runner.js.br",
+    "brotli_wasm": "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm.br",
+    "javascript": "testing/browser/artifacts/bindgen/browser_workload_runner.js",
+    "pipeline": [
+      {
+        "arguments": [
+          "testing/browser/scripts/observe-browser-runner.js"
+        ],
+        "program": "node"
+      },
+      {
+        "arguments": [
+          "run",
+          "--locked",
+          "-p",
+          "browser-workload-pack",
+          "--",
+          "verify-runner",
+          "testing/browser/artifacts/runner-observation.json"
+        ],
+        "program": "cargo"
+      },
+      {
+        "arguments": [
+          "build",
+          "--locked",
+          "--release",
+          "--target",
+          "wasm32-unknown-unknown",
+          "-p",
+          "browser-workload-runner"
+        ],
+        "program": "cargo"
+      },
+      {
+        "arguments": [
+          "--target",
+          "web",
+          "--no-typescript",
+          "--out-dir",
+          "testing/browser/artifacts/bindgen",
+          "target/wasm32-unknown-unknown/release/browser_workload_runner.wasm"
+        ],
+        "program": "wasm-bindgen"
+      },
+      {
+        "arguments": [
+          "-Oz",
+          "--enable-bulk-memory",
+          "--enable-nontrapping-float-to-int",
+          "-o",
+          "testing/browser/artifacts/browser_workload_runner_bg.optimized.wasm",
+          "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm"
+        ],
+        "program": "wasm-opt"
+      },
+      {
+        "arguments": [
+          "testing/browser/artifacts/browser_workload_runner_bg.optimized.wasm",
+          "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm"
+        ],
+        "program": "mv"
+      },
+      {
+        "arguments": [
+          "--quality",
+          "11",
+          "--lgwin",
+          "22",
+          "--output",
+          "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm.br",
+          "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm"
+        ],
+        "program": "brotli"
+      },
+      {
+        "arguments": [
+          "--quality",
+          "11",
+          "--lgwin",
+          "22",
+          "--output",
+          "testing/browser/artifacts/bindgen/browser_workload_runner.js.br",
+          "testing/browser/artifacts/bindgen/browser_workload_runner.js"
+        ],
+        "program": "brotli"
+      },
+      {
+        "arguments": [
+          "build",
+          "--locked",
+          "--release",
+          "--target",
+          "wasm32-unknown-unknown",
+          "-p",
+          "browser-workload-empty-shell"
+        ],
+        "program": "cargo"
+      },
+      {
+        "arguments": [
+          "--target",
+          "web",
+          "--no-typescript",
+          "--out-dir",
+          "testing/browser/artifacts/empty-shell",
+          "target/wasm32-unknown-unknown/release/browser_workload_empty_shell.wasm"
+        ],
+        "program": "wasm-bindgen"
+      },
+      {
+        "arguments": [
+          "-Oz",
+          "--enable-bulk-memory",
+          "--enable-nontrapping-float-to-int",
+          "-o",
+          "testing/browser/artifacts/browser_workload_empty_shell_bg.optimized.wasm",
+          "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm"
+        ],
+        "program": "wasm-opt"
+      },
+      {
+        "arguments": [
+          "testing/browser/artifacts/browser_workload_empty_shell_bg.optimized.wasm",
+          "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm"
+        ],
+        "program": "mv"
+      },
+      {
+        "arguments": [
+          "--quality",
+          "11",
+          "--lgwin",
+          "22",
+          "--output",
+          "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm.br",
+          "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm"
+        ],
+        "program": "brotli"
+      }
+    ],
+    "wasm": "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm"
+  },
+  "rust_wasm_tools": {
+    "binaryen_wasm_opt": "123",
+    "cargo": "1.90.0 (840b83a10 2025-07-30)",
+    "rust": "1.90.0 (1159e78c4 2025-09-14)",
+    "wasm_bindgen_cli": "0.2.126",
+    "wasm_target": "wasm32-unknown-unknown",
+    "wasm_tools": "1.239.0"
+  },
+  "version": 1
+}

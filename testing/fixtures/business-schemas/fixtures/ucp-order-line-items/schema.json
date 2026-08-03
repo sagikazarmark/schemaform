@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:ucp-order-line-items",
+  "$comment": "Adapted and reduced from the Apache-2.0 Universal Commerce Protocol Order and Order Line Item schemas; this file has been changed for offline corpus use.",
+  "title": "Order line-item lifecycle",
+  "description": "Purchased lines, fulfillment expectations, and partial refunds.",
+  "type": "object",
+  "required": ["orderId", "status", "lines"],
+  "properties": {
+    "orderId": { "type": "string", "readOnly": true },
+    "status": { "type": "string", "enum": ["created", "confirmed", "fulfilled", "cancelled"] },
+    "lines": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/line" }
+    },
+    "fulfillment": {
+      "type": "object",
+      "properties": {
+        "expectedAt": { "type": "string", "format": "date-time" },
+        "trackingUrl": { "type": "string", "format": "uri" }
+      },
+      "additionalProperties": false
+    },
+    "refunds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["lineId", "quantity"],
+        "properties": {
+          "lineId": { "type": "string" },
+          "quantity": { "type": "integer", "minimum": 1 },
+          "reason": { "type": "string", "enum": ["damaged", "incorrect", "unwanted"] }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "line": {
+      "type": "object",
+      "required": ["title", "orderedQuantity"],
+      "properties": {
+        "title": { "type": "string" },
+        "orderedQuantity": { "type": "integer", "minimum": 1 },
+        "fulfilledQuantity": { "type": "integer", "minimum": 0, "default": 0 },
+        "unitTotal": { "type": "number", "readOnly": true }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

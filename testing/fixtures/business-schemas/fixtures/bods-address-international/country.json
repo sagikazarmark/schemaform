@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:bods-address-international:country",
+  "$comment": "Adapted and reduced from Open Ownership's Apache-2.0 BODS 0.4 Country definition; this file has been changed for offline corpus use.",
+  "title": "Country",
+  "description": "A country name and optional ISO 3166-1 alpha-2 code.",
+  "type": "object",
+  "required": ["name"],
+  "properties": {
+    "name": { "type": "string" },
+    "code": { "type": "string" }
+  },
+  "additionalProperties": true
+}

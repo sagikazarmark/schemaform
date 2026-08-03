@@ -1,0 +1,340 @@
+{
+  "version": 1,
+  "id": "S1-authored-64-finding",
+  "profile": "S1",
+  "variant": "authored",
+  "state": "64-finding",
+  "data_schema": {
+    "$id": "urn:schemaform:browser-workload:object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "allOf": [
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      },
+      {
+        "properties": {
+          "field_000": {
+            "minimum": 0
+          }
+        }
+      }
+    ],
+    "properties": {
+      "field_000": {
+        "title": "Field 000",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "field_000"
+    ],
+    "title": "Representative object controls",
+    "type": "object"
+  },
+  "ui_schema": {
+    "root": {
+      "type": "stack",
+      "value": {
+        "children": [
+          {
+            "type": "control",
+            "value": {
+              "binding": {
+                "origin": "root",
+                "pointer": "/field_000"
+              },
+              "help": {
+                "value": {
+                  "fallback": "Representative control",
+                  "key": "workload.help.000"
+                }
+              },
+              "id": "field-000",
+              "label": {
+                "value": {
+                  "fallback": "Field 000",
+                  "key": "workload.field.000"
+                }
+              }
+            }
+          }
+        ],
+        "id": "workload-root"
+      }
+    },
+    "version": 1
+  },
+  "initial_form_data": {
+    "field_000": -1
+  },
+  "setup": [
+    {
+      "operation": "external-findings",
+      "count": 32,
+      "binding": "/field_000"
+    }
+  ],
+  "workloads": [
+    {
+      "workload": "compilation",
+      "cold": true,
+      "fresh_browser_context": true
+    },
+    {
+      "workload": "mount",
+      "cold": true,
+      "fresh_browser_context": true
+    },
+    {
+      "workload": "edit",
+      "binding": "/field_000",
+      "alternating_values": [
+        "1",
+        "2"
+      ]
+    },
+    {
+      "workload": "findings",
+      "binding": "/field_000",
+      "count": 64,
+      "alternating_actions": [
+        "install",
+        "clear"
+      ]
+    },
+    {
+      "workload": "visibility",
+      "policies": [
+        "immediate",
+        "submission-only"
+      ]
+    },
+    {
+      "workload": "localization",
+      "locales": [
+        "en",
+        "hu"
+      ],
+      "message_source": "ui-schema-key"
+    },
+    {
+      "workload": "submission",
+      "expected": "blocked"
+    }
+  ]
+}

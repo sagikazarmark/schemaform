@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:openkyc-communication-preferences",
+  "$comment": "Adapted and reduced from Lazy Jack Ltd's Apache-2.0 OpenKYCAML 1.19.0 NaturalPerson and EmergencyContact definitions; this file has been changed for offline corpus use.",
+  "title": "Communication and emergency-contact preferences",
+  "description": "Preferred language and channel alongside repeatable emergency contacts.",
+  "type": "object",
+  "properties": {
+    "preferredLanguage": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(-[A-Z]{2})?$"
+    },
+    "preferredCommunicationChannel": {
+      "type": "string",
+      "enum": ["EMAIL", "PHONE", "SMS", "POST", "PORTAL", "OTHER"]
+    },
+    "marketingOptOut": { "type": "boolean" },
+    "emergencyContacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/emergencyContact" }
+    }
+  },
+  "$defs": {
+    "emergencyContact": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "relationship": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "emailAddress": { "type": "string", "format": "email" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:ucp-buyer-account",
+  "$comment": "Adapted and reduced from the Apache-2.0 Universal Commerce Protocol Buyer and AccountInfo schemas; this file has been changed for offline corpus use.",
+  "title": "Buyer account settings",
+  "description": "Buyer identity, contact details, saved addresses, locale, and commerce preferences.",
+  "type": "object",
+  "required": ["email"],
+  "properties": {
+    "id": { "type": "string", "readOnly": true },
+    "email": { "type": "string", "format": "email" },
+    "firstName": { "type": "string" },
+    "lastName": { "type": "string" },
+    "phone": { "type": "string", "pattern": "^\\+[1-9][0-9]{7,14}$" },
+    "locale": { "type": "string", "default": "en-US" },
+    "savedAddresses": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/address" }
+    },
+    "preferences": {
+      "type": "object",
+      "properties": {
+        "currency": { "type": "string", "enum": ["EUR", "GBP", "USD"] },
+        "language": { "type": "string", "enum": ["en", "es", "fr"] },
+        "rememberPayment": { "type": "boolean", "default": false }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "address": {
+      "type": "object",
+      "required": ["line1", "city", "country"],
+      "properties": {
+        "line1": { "type": "string" },
+        "line2": { "type": "string" },
+        "city": { "type": "string" },
+        "country": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

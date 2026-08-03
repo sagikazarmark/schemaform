@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:ucp-cart-line-items",
+  "$comment": "Adapted and reduced from the Apache-2.0 Universal Commerce Protocol Cart and Line Item schemas; this file has been changed for offline corpus use.",
+  "title": "Shopping cart line items",
+  "description": "Buyer context, repeatable products, selected options, totals, and expiry.",
+  "type": "object",
+  "required": ["lines"],
+  "properties": {
+    "id": { "type": "string", "readOnly": true },
+    "buyer": {
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" }
+      },
+      "additionalProperties": false
+    },
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/line" }
+    },
+    "totals": {
+      "type": "object",
+      "properties": {
+        "subtotal": { "type": "number", "readOnly": true },
+        "tax": { "type": "number", "readOnly": true },
+        "total": { "type": "number", "readOnly": true }
+      },
+      "additionalProperties": false
+    },
+    "expiresAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "line": {
+      "type": "object",
+      "required": ["id", "title", "quantity", "unitPrice"],
+      "properties": {
+        "id": { "type": "string", "readOnly": true },
+        "title": { "type": "string" },
+        "quantity": { "type": "integer", "minimum": 1 },
+        "unitPrice": { "type": "number", "minimum": 0 },
+        "selectedOptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "value"],
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

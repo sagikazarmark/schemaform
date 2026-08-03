@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:bods-person-onboarding",
+  "$comment": "Adapted and reduced from Open Ownership's Apache-2.0 BODS 0.4 Person Record Details schema; this file has been changed for offline corpus use.",
+  "title": "Person onboarding",
+  "description": "Identity and political-exposure details collected when onboarding a natural person.",
+  "type": "object",
+  "required": ["personType", "isComponent"],
+  "properties": {
+    "isComponent": {
+      "type": "boolean",
+      "description": "Whether this person participates as a component of an indirect relationship."
+    },
+    "personType": {
+      "type": "string",
+      "enum": ["anonymousPerson", "unknownPerson", "knownPerson"]
+    },
+    "names": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/name"
+      }
+    },
+    "birthDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "politicalExposure": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["isPep", "isNotPep", "unknown"]
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "object",
+      "required": ["fullName"],
+      "properties": {
+        "fullName": {
+          "type": "string"
+        },
+        "familyName": {
+          "type": "string"
+        },
+        "givenName": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

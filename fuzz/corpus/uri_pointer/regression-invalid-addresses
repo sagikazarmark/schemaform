@@ -1,0 +1,4 @@
+#fragment
+relative/path
+/bad~escape
+https://example.com/schema#fragment

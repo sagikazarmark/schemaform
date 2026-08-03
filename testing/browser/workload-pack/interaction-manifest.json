@@ -1,0 +1,515 @@
+{
+  "version": 1,
+  "suite": "schemaform-dioxus/browser_csr",
+  "browsers": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ],
+  "viewport_widths_css_pixels": [
+    320,
+    1280
+  ],
+  "zoom_percents": [
+    100,
+    200
+  ],
+  "zoom_protocol": "Set the Playwright CSS viewport to the requested width, apply CSS zoom to every mounted form root, and assert innerWidth equals the requested CSS width. Harness-owned nested viewport dimensions remain unscaled.",
+  "accessibility": {
+    "engine": "axe-core",
+    "version": "4.10.3",
+    "checkpoints": [
+      {
+        "id": "authored-ui",
+        "trace": "authored_ui_schema_renders_semantics_and_preserves_form_behavior",
+        "coverage": [
+          "ui-control",
+          "ui-stack",
+          "ui-group",
+          "ui-text",
+          "help"
+        ],
+        "aria_required": [
+          "textbox \"Localized second field\"",
+          "Localized family-name help.",
+          "group \"Localized primary details\""
+        ]
+      },
+      {
+        "id": "tabs-blocked",
+        "trace": "tabs_support_keyboard_navigation_adapter_local_selection_and_summary_focus",
+        "coverage": [
+          "ui-tabs",
+          "tabs",
+          "blocked-submission"
+        ],
+        "aria_required": [
+          "tablist \"Tabs\"",
+          "tab \"Contact\" [selected]",
+          "tabpanel \"Contact\"",
+          "button \"Value does not satisfy minLength.\""
+        ]
+      },
+      {
+        "id": "grid",
+        "trace": "responsive_grid_behavior_matches_the_active_css_viewport",
+        "coverage": [
+          "ui-grid"
+        ],
+        "aria_required": [
+          "textbox \"First\"",
+          "textbox \"Second\""
+        ]
+      },
+      {
+        "id": "auto",
+        "trace": "explicit_auto_renders_only_at_its_authored_position",
+        "coverage": [
+          "ui-auto"
+        ],
+        "aria_required": [
+          "paragraph: Generated fields",
+          "textbox \"second\"",
+          "paragraph: End fields"
+        ]
+      },
+      {
+        "id": "string",
+        "trace": "generated_string_control_mounts_edits_and_submits_an_immutable_snapshot",
+        "coverage": [
+          "string-control"
+        ],
+        "aria_required": [
+          "textbox \"Full name\": Ada",
+          "textbox \"Full name\": Lin"
+        ]
+      },
+      {
+        "id": "array-scalar",
+        "trace": "scalar_array_structural_actions_preserve_dom_identity_focus_and_announcements",
+        "coverage": [
+          "arrays"
+        ],
+        "aria_required": [
+          "group \"Tags\"",
+          "button \"Add Tags item\"",
+          "status"
+        ]
+      },
+      {
+        "id": "array-object",
+        "trace": "fixed_object_array_rows_edit_focus_localize_and_submit_in_the_browser",
+        "coverage": [
+          "arrays"
+        ],
+        "aria_required": [
+          "group \"People\"",
+          "group \"Person\"",
+          "group \"Address\"",
+          "City fallback help."
+        ]
+      },
+      {
+        "id": "read-write-only",
+        "trace": "builtins_present_read_only_and_write_only_data_without_losing_submission_values",
+        "coverage": [
+          "read-only",
+          "write-only"
+        ],
+        "aria_required": [
+          "group \"profile\"",
+          "status \"Name\": Ada",
+          "textbox \"Replace Secret\"",
+          "status \"Secret region\": Value is set"
+        ]
+      },
+      {
+        "id": "presence-missing",
+        "trace": "scalar_presence_controls_repair_explicitly_without_render_time_mutation",
+        "coverage": [
+          "presence-missing"
+        ],
+        "aria_required": [
+          "textbox \"Value\"",
+          "button \"Set Value\""
+        ]
+      },
+      {
+        "id": "presence-empty",
+        "trace": "scalar_presence_controls_repair_explicitly_without_render_time_mutation",
+        "coverage": [
+          "presence-empty"
+        ],
+        "aria_required": [
+          "textbox \"Value\"",
+          "button \"Remove Value\""
+        ]
+      },
+      {
+        "id": "presence-null",
+        "trace": "scalar_presence_controls_repair_explicitly_without_render_time_mutation",
+        "coverage": [
+          "presence-null"
+        ],
+        "aria_required": [
+          "textbox \"Value\": \"null\"",
+          "button \"Remove Value\""
+        ]
+      },
+      {
+        "id": "presence-incompatible",
+        "trace": "scalar_presence_controls_repair_explicitly_without_render_time_mutation",
+        "coverage": [
+          "presence-incompatible"
+        ],
+        "aria_required": [
+          "textbox \"Value\": \"7\"",
+          "status: \"7\"",
+          "button \"Replace Value\""
+        ]
+      },
+      {
+        "id": "presence-compatible",
+        "trace": "scalar_presence_controls_repair_explicitly_without_render_time_mutation",
+        "coverage": [
+          "presence-compatible"
+        ],
+        "aria_required": [
+          "textbox \"Value\"",
+          "button \"Set Value to null\""
+        ]
+      },
+      {
+        "id": "integer-parse-blocked",
+        "trace": "arbitrary_precision_integer_browser_trace_matches_the_core_facade",
+        "coverage": [
+          "integer-control",
+          "parse-findings",
+          "blocked-submission"
+        ],
+        "aria_required": [
+          "button \"Enter a valid integer.\"",
+          "textbox \"Quantity\": \"-\""
+        ]
+      },
+      {
+        "id": "number-validation-blocked",
+        "trace": "arbitrary_precision_decimal_browser_trace_matches_the_core_facade",
+        "coverage": [
+          "number-control",
+          "validation-findings",
+          "blocked-submission"
+        ],
+        "aria_required": [
+          "button \"Value must be at least",
+          "textbox \"Rate\": \"0.10000000000000000000000000000000000000009\""
+        ]
+      },
+      {
+        "id": "boolean-constant",
+        "trace": "boolean_and_scalar_constant_controls_preserve_native_semantics",
+        "coverage": [
+          "boolean-control",
+          "constant-control"
+        ],
+        "aria_required": [
+          "checkbox \"Enabled\"",
+          "status \"Region\": EU"
+        ]
+      },
+      {
+        "id": "choice",
+        "trace": "finite_scalar_choices_use_opaque_tokens_and_submit_exact_values",
+        "coverage": [
+          "choice-control"
+        ],
+        "aria_required": [
+          "combobox \"Choice\"",
+          "option \"null\" [selected]",
+          "status \"Region\": EU"
+        ]
+      },
+      {
+        "id": "unsupported",
+        "trace": "unsupported_one_of_region_is_presented_and_blocks_browser_submission",
+        "coverage": [
+          "unsupported-regions",
+          "capability-findings",
+          "blocked-submission"
+        ],
+        "aria_required": [
+          "region \"Contact\"",
+          "button \"This form region cannot be edited because oneOf branch selection is unsupported.\""
+        ]
+      },
+      {
+        "id": "fixed-object",
+        "trace": "optional_fixed_object_materializes_repairs_removes_and_submits_in_the_browser",
+        "coverage": [
+          "fixed-object-control"
+        ],
+        "aria_required": [
+          "group \"Settings\"",
+          "button \"Add Settings\"",
+          "textbox \"Name\""
+        ]
+      },
+      {
+        "id": "external-parse-blocked",
+        "trace": "external_visibility_parse_feedback_and_submission_focus_follow_core_policy",
+        "coverage": [
+          "external-findings",
+          "parse-findings",
+          "blocked-submission"
+        ],
+        "aria_required": [
+          "button \"server reported server-retry-required.\"",
+          "button \"Enter a valid integer.\"",
+          "textbox \"Quantity\": \"-\""
+        ]
+      },
+      {
+        "id": "indeterminate-blocked",
+        "trace": "indeterminate_validation_is_presented_and_blocks_browser_submission",
+        "coverage": [
+          "indeterminate-findings",
+          "blocked-submission"
+        ],
+        "aria_required": [
+          "button \"Validation could not be completed reliably.\"",
+          "textbox \"Name\""
+        ]
+      }
+    ],
+    "reviewed_exceptions": []
+  },
+  "scenarios": [
+    {
+      "area": "controls",
+      "traces": [
+        "generated_string_control_mounts_edits_and_submits_an_immutable_snapshot",
+        "boolean_and_scalar_constant_controls_preserve_native_semantics",
+        "finite_scalar_choices_use_opaque_tokens_and_submit_exact_values",
+        "authored_ui_schema_renders_semantics_and_preserves_form_behavior"
+      ],
+      "assertions": [
+        "form-data",
+        "submission-callback"
+      ]
+    },
+    {
+      "area": "keyboard-order",
+      "traces": [
+        "responsive_grid_behavior_matches_the_active_css_viewport",
+        "tabs_support_keyboard_navigation_adapter_local_selection_and_summary_focus"
+      ],
+      "assertions": [
+        "focus"
+      ]
+    },
+    {
+      "area": "presence-repair",
+      "traces": [
+        "scalar_presence_controls_repair_explicitly_without_render_time_mutation",
+        "optional_fixed_object_materializes_repairs_removes_and_submits_in_the_browser"
+      ],
+      "assertions": [
+        "form-data",
+        "submission-callback"
+      ]
+    },
+    {
+      "area": "array-focus",
+      "traces": [
+        "scalar_array_structural_actions_preserve_dom_identity_focus_and_announcements",
+        "fixed_object_array_rows_edit_focus_localize_and_submit_in_the_browser",
+        "duplicate_fixed_object_array_lifecycle_updates_dom_keys_by_item_identity",
+        "scalar_array_add_focuses_the_first_focusable_row_action"
+      ],
+      "assertions": [
+        "announcements",
+        "dom-identity",
+        "focus",
+        "form-data",
+        "submission-callback"
+      ]
+    },
+    {
+      "area": "tabs",
+      "traces": [
+        "tabs_support_keyboard_navigation_adapter_local_selection_and_summary_focus"
+      ],
+      "assertions": [
+        "dom-identity",
+        "focus",
+        "form-data",
+        "submission-callback"
+      ]
+    },
+    {
+      "area": "ime",
+      "traces": [
+        "ime_composition_stays_local_across_presentation_updates_and_commits_on_end"
+      ],
+      "assertions": [
+        "dom-identity",
+        "form-data"
+      ]
+    },
+    {
+      "area": "exact-numbers",
+      "traces": [
+        "arbitrary_precision_integer_browser_trace_matches_the_core_facade",
+        "arbitrary_precision_decimal_browser_trace_matches_the_core_facade"
+      ],
+      "assertions": [
+        "form-data",
+        "submission-callback"
+      ]
+    },
+    {
+      "area": "grids",
+      "traces": [
+        "responsive_grid_behavior_matches_the_active_css_viewport"
+      ],
+      "assertions": [
+        "dom-identity",
+        "focus",
+        "form-data",
+        "submission-callback"
+      ]
+    },
+    {
+      "area": "findings",
+      "traces": [
+        "external_visibility_parse_feedback_and_submission_focus_follow_core_policy",
+        "custom_presenters_receive_one_deterministic_collection_per_target"
+      ],
+      "assertions": [
+        "focus",
+        "form-data",
+        "submission-callback"
+      ]
+    },
+    {
+      "area": "localization",
+      "traces": [
+        "locale_and_presenter_changes_update_only_reactive_plain_text_presentation",
+        "fixed_object_array_rows_edit_focus_localize_and_submit_in_the_browser"
+      ],
+      "assertions": [
+        "dom-identity",
+        "form-data"
+      ]
+    },
+    {
+      "area": "reactivity",
+      "traces": [
+        "ordinary_scalar_edit_updates_only_subscribed_displayed_state_generated",
+        "ordinary_scalar_edit_updates_only_subscribed_displayed_state_authored"
+      ],
+      "assertions": [
+        "dom-identity",
+        "mount-drop",
+        "renderer-entry"
+      ]
+    },
+    {
+      "area": "submission",
+      "traces": [
+        "generated_string_control_mounts_edits_and_submits_an_immutable_snapshot",
+        "external_visibility_parse_feedback_and_submission_focus_follow_core_policy"
+      ],
+      "assertions": [
+        "focus",
+        "form-data",
+        "submission-callback"
+      ]
+    },
+    {
+      "area": "business-schema-corpus",
+      "traces": [
+        "every_in_profile_business_schema_executes_through_the_default_browser_adapter"
+      ],
+      "assertions": [
+        "default-renderers",
+        "form-data",
+        "submission"
+      ]
+    }
+  ],
+  "cells": [
+    {
+      "id": "chromium-320-100",
+      "browser": "chromium",
+      "viewport_width_css_pixels": 320,
+      "zoom_percent": 100
+    },
+    {
+      "id": "chromium-320-200",
+      "browser": "chromium",
+      "viewport_width_css_pixels": 320,
+      "zoom_percent": 200
+    },
+    {
+      "id": "chromium-1280-100",
+      "browser": "chromium",
+      "viewport_width_css_pixels": 1280,
+      "zoom_percent": 100
+    },
+    {
+      "id": "chromium-1280-200",
+      "browser": "chromium",
+      "viewport_width_css_pixels": 1280,
+      "zoom_percent": 200
+    },
+    {
+      "id": "firefox-320-100",
+      "browser": "firefox",
+      "viewport_width_css_pixels": 320,
+      "zoom_percent": 100
+    },
+    {
+      "id": "firefox-320-200",
+      "browser": "firefox",
+      "viewport_width_css_pixels": 320,
+      "zoom_percent": 200
+    },
+    {
+      "id": "firefox-1280-100",
+      "browser": "firefox",
+      "viewport_width_css_pixels": 1280,
+      "zoom_percent": 100
+    },
+    {
+      "id": "firefox-1280-200",
+      "browser": "firefox",
+      "viewport_width_css_pixels": 1280,
+      "zoom_percent": 200
+    },
+    {
+      "id": "webkit-320-100",
+      "browser": "webkit",
+      "viewport_width_css_pixels": 320,
+      "zoom_percent": 100
+    },
+    {
+      "id": "webkit-320-200",
+      "browser": "webkit",
+      "viewport_width_css_pixels": 320,
+      "zoom_percent": 200
+    },
+    {
+      "id": "webkit-1280-100",
+      "browser": "webkit",
+      "viewport_width_css_pixels": 1280,
+      "zoom_percent": 100
+    },
+    {
+      "id": "webkit-1280-200",
+      "browser": "webkit",
+      "viewport_width_css_pixels": 1280,
+      "zoom_percent": 200
+    }
+  ]
+}

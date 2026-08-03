@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:ucp-card-payment",
+  "$comment": "Adapted and reduced from the Apache-2.0 Universal Commerce Protocol Card Payment Instrument schema; this file has been changed for offline corpus use.",
+  "title": "Card payment instrument",
+  "description": "A card payment instrument composed with common payment identity fields.",
+  "type": "object",
+  "required": ["instrumentId", "brand", "lastDigits"],
+  "properties": {
+    "instrumentId": { "type": "string", "readOnly": true },
+    "selected": { "type": "boolean", "default": false },
+    "brand": { "type": "string", "enum": ["amex", "mastercard", "visa"] },
+    "lastDigits": { "type": "string", "pattern": "^[0-9]{4}$" },
+    "expiryMonth": { "type": "integer" },
+    "expiryYear": { "type": "integer" },
+    "billingAddress": { "$ref": "#/$defs/address" }
+  },
+  "$defs": {
+    "address": {
+      "type": "object",
+      "required": ["line1", "city", "country"],
+      "properties": {
+        "line1": { "type": "string" },
+        "city": { "type": "string" },
+        "postalCode": { "type": "string" },
+        "country": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "expiryYear": { "minimum": 2026 }
+      }
+    },
+    {
+      "properties": {
+        "expiryMonth": { "minimum": 1, "maximum": 12 }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

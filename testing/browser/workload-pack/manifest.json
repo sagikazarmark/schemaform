@@ -1,0 +1,623 @@
+{
+  "version": 1,
+  "hash_algorithm": "sha256",
+  "object_directory": "objects/sha256",
+  "scenarios": [
+    {
+      "id": "S1-generated-valid",
+      "profile": "S1",
+      "variant": "generated",
+      "state": "valid",
+      "controls": 1,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "fae369f6f06c8254bba3778c5daf8600fe0bd312bf303c0f24a0f117a1e42670",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "S1-generated-invalid",
+      "profile": "S1",
+      "variant": "generated",
+      "state": "invalid",
+      "controls": 1,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "e5ba1d717b4ce3b6aa3ec5341d7ccbce4ba3f572641aa6976a76c471624af8ed",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "S1-generated-parse-blocked",
+      "profile": "S1",
+      "variant": "generated",
+      "state": "parse-blocked",
+      "controls": 1,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "5d83f7e480ec4f6764d8cc95a6dc8c22b9c86928a3cb11dfec3d5b297c88d4f2",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "S1-generated-64-finding",
+      "profile": "S1",
+      "variant": "generated",
+      "state": "64-finding",
+      "controls": 1,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "db965bbd7c42342f2cb741ab7e46394b78f35ca3524998fcc0335448b94a474f",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "S1-authored-valid",
+      "profile": "S1",
+      "variant": "authored",
+      "state": "valid",
+      "controls": 1,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "dc1c396d88542b91113ab1df0ffa6cd3d65da6853e5faa73530962bae0854543",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "S1-authored-invalid",
+      "profile": "S1",
+      "variant": "authored",
+      "state": "invalid",
+      "controls": 1,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "946c2c245b8a69d80787e51fb99eff79e817392c400014f5fd1df55578392c31",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "S1-authored-parse-blocked",
+      "profile": "S1",
+      "variant": "authored",
+      "state": "parse-blocked",
+      "controls": 1,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "6855774f05a3b66f49cc690384c9971eacbc279b0e3148328239465ec54f4bc8",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "S1-authored-64-finding",
+      "profile": "S1",
+      "variant": "authored",
+      "state": "64-finding",
+      "controls": 1,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "ceab2763435e3505c50c05e307e897e4bb9cb7aa0c3f28a9cb357c36b33a93ae",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O50-generated-valid",
+      "profile": "O50",
+      "variant": "generated",
+      "state": "valid",
+      "controls": 50,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "3b50bc56e29ef22e35e6ac981e92488ac42ab206240fe88ca236500ed376fa3f",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O50-generated-invalid",
+      "profile": "O50",
+      "variant": "generated",
+      "state": "invalid",
+      "controls": 50,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "866a22bc09f15def0944b70af960cf46d2cb8734934d0aa9394fbe2fbcad0a51",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O50-generated-parse-blocked",
+      "profile": "O50",
+      "variant": "generated",
+      "state": "parse-blocked",
+      "controls": 50,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "a048b5f9a84a3b525d31e696af64d9328e935711f2e1ad9de402ee32c41483f8",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O50-generated-64-finding",
+      "profile": "O50",
+      "variant": "generated",
+      "state": "64-finding",
+      "controls": 50,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "e96406570b7fbc506372e5eb41f8e5f66c6d2ecaa81c26f3e17cb3dc8b96e1d1",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O50-authored-valid",
+      "profile": "O50",
+      "variant": "authored",
+      "state": "valid",
+      "controls": 50,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "ceb7c8b970ec5192864a40df51bf24b404aafd832ebea024678ea1da535d577a",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O50-authored-invalid",
+      "profile": "O50",
+      "variant": "authored",
+      "state": "invalid",
+      "controls": 50,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "7b85d39f65e0d52546ec5613f555a17783a9a193b38e413201df201434bf6b7e",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O50-authored-parse-blocked",
+      "profile": "O50",
+      "variant": "authored",
+      "state": "parse-blocked",
+      "controls": 50,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "0c7ef761f164dc1f73c3238229e2d20c49de29e6b3fb1b4298e931bddce7c207",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O50-authored-64-finding",
+      "profile": "O50",
+      "variant": "authored",
+      "state": "64-finding",
+      "controls": 50,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "0d168a0afe92f534193b71aee5798fd21ed4f0ec81a3656dc84ee62a1bf46de2",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O500-generated-valid",
+      "profile": "O500",
+      "variant": "generated",
+      "state": "valid",
+      "controls": 500,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "4fe0bed461e225e8a17b6f9e162a9348961ace533d2f8f53c11e36f5b916615f",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O500-generated-invalid",
+      "profile": "O500",
+      "variant": "generated",
+      "state": "invalid",
+      "controls": 500,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "803f9cdf579f9e589de52fbad4f96857c0a01ee6fbdaf09741a331c5942bf418",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O500-generated-parse-blocked",
+      "profile": "O500",
+      "variant": "generated",
+      "state": "parse-blocked",
+      "controls": 500,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "1b00078c535c889930c890ec270ade2f8734c1f7c73bdd57ceec37f62a8deb5e",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O500-generated-64-finding",
+      "profile": "O500",
+      "variant": "generated",
+      "state": "64-finding",
+      "controls": 500,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "507102e3a0f7f9c5b904b8e47194b674123e794435cbd407049478f9500d2417",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O500-authored-valid",
+      "profile": "O500",
+      "variant": "authored",
+      "state": "valid",
+      "controls": 500,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "8e679fa18ae1a77d2b6898642d0a2b51aea7ab40ccb901007e16ff719d3cbe1c",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O500-authored-invalid",
+      "profile": "O500",
+      "variant": "authored",
+      "state": "invalid",
+      "controls": 500,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "13e353816ed3957998a725ac633abaaa0aad4430011843019720e5430197f7a1",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O500-authored-parse-blocked",
+      "profile": "O500",
+      "variant": "authored",
+      "state": "parse-blocked",
+      "controls": 500,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "63cac3a8c77e2da3712595703a00c02a4ea1502902f6b31d69515bc7780db3b3",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "O500-authored-64-finding",
+      "profile": "O500",
+      "variant": "authored",
+      "state": "64-finding",
+      "controls": 500,
+      "rows": 0,
+      "controls_per_row": 0,
+      "object_sha256": "2c4afe337b5e928a0b2ae3db9349bc39a39f1c69170328007f509c75ded12f32",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission"
+      ]
+    },
+    {
+      "id": "A100x5-generated-valid",
+      "profile": "A100x5",
+      "variant": "generated",
+      "state": "valid",
+      "controls": 500,
+      "rows": 100,
+      "controls_per_row": 5,
+      "object_sha256": "afdf321bd2c58cca6460f472688edf674c3cbb0bd87f645422d249bd123663f3",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission",
+        "arrays"
+      ]
+    },
+    {
+      "id": "A100x5-generated-invalid",
+      "profile": "A100x5",
+      "variant": "generated",
+      "state": "invalid",
+      "controls": 500,
+      "rows": 100,
+      "controls_per_row": 5,
+      "object_sha256": "33e639e829fdaa369469fdd70219c74587cdec3ac71e9b3707cea7006b8534b7",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission",
+        "arrays"
+      ]
+    },
+    {
+      "id": "A100x5-generated-parse-blocked",
+      "profile": "A100x5",
+      "variant": "generated",
+      "state": "parse-blocked",
+      "controls": 500,
+      "rows": 100,
+      "controls_per_row": 5,
+      "object_sha256": "bc2066c711e3a53c052ff167ee555300071abd9a3b44f6ab47d58df0a7ce4936",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission",
+        "arrays"
+      ]
+    },
+    {
+      "id": "A100x5-generated-64-finding",
+      "profile": "A100x5",
+      "variant": "generated",
+      "state": "64-finding",
+      "controls": 500,
+      "rows": 100,
+      "controls_per_row": 5,
+      "object_sha256": "495df3aa94f5cd4de870a73460eadeff3473c2b16f946344a1e8cef0b5606230",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission",
+        "arrays"
+      ]
+    },
+    {
+      "id": "A100x5-authored-valid",
+      "profile": "A100x5",
+      "variant": "authored",
+      "state": "valid",
+      "controls": 500,
+      "rows": 100,
+      "controls_per_row": 5,
+      "object_sha256": "f86740c23efef3595da0f935db60380352d8edc2f6016daca531f1262c0e18bd",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission",
+        "arrays"
+      ]
+    },
+    {
+      "id": "A100x5-authored-invalid",
+      "profile": "A100x5",
+      "variant": "authored",
+      "state": "invalid",
+      "controls": 500,
+      "rows": 100,
+      "controls_per_row": 5,
+      "object_sha256": "38bc89ff39015691905f39a498c324ee3a715944a33429b2140073c71699e099",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission",
+        "arrays"
+      ]
+    },
+    {
+      "id": "A100x5-authored-parse-blocked",
+      "profile": "A100x5",
+      "variant": "authored",
+      "state": "parse-blocked",
+      "controls": 500,
+      "rows": 100,
+      "controls_per_row": 5,
+      "object_sha256": "e5e2e613cea4575396ffe8926673dde7404325daa2cf3fbba1b8acec135cdf9b",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission",
+        "arrays"
+      ]
+    },
+    {
+      "id": "A100x5-authored-64-finding",
+      "profile": "A100x5",
+      "variant": "authored",
+      "state": "64-finding",
+      "controls": 500,
+      "rows": 100,
+      "controls_per_row": 5,
+      "object_sha256": "91d7ee8841e19cb927840a84c0c8ebf7f1b030c46346a5d55d4cf01776598834",
+      "workloads": [
+        "compilation",
+        "mount",
+        "edit",
+        "findings",
+        "visibility",
+        "localization",
+        "submission",
+        "arrays"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:gobl-payment-terms",
+  "$comment": "Adapted and reduced from Invopop's Apache-2.0 GOBL PaymentDetails, Terms, Record, and Instructions schemas; this file has been changed for offline corpus use.",
+  "title": "Payment details",
+  "description": "Payment terms, advance records, and instructions for a business invoice.",
+  "type": "object",
+  "properties": {
+    "terms": { "$ref": "#/$defs/terms" },
+    "advances": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/record" }
+    },
+    "instructions": { "$ref": "#/$defs/instructions" }
+  },
+  "$defs": {
+    "terms": {
+      "type": "object",
+      "properties": {
+        "key": { "type": "string", "enum": ["end-of-month", "due-date", "deferred", "instant", "advanced"] },
+        "due_dates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dueDate" }
+        },
+        "notes": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "dueDate": {
+      "type": "object",
+      "required": ["date", "amount"],
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "notes": { "type": "string" },
+        "amount": { "type": "string", "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$" },
+        "percent": { "type": "number" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+      },
+      "additionalProperties": false
+    },
+    "record": {
+      "type": "object",
+      "required": ["amount"],
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "key": { "type": "string", "enum": ["cash", "card", "credit-transfer", "direct-debit", "online", "other"] },
+        "ref": { "type": "string" },
+        "amount": { "type": "string", "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$" }
+      },
+      "additionalProperties": false
+    },
+    "instructions": {
+      "type": "object",
+      "required": ["key"],
+      "properties": {
+        "key": { "type": "string", "enum": ["any", "card", "credit-transfer", "direct-debit", "cash", "online", "other"] },
+        "detail": { "type": "string" },
+        "ref": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

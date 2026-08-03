@@ -1,0 +1,22 @@
+[package]
+name = "browser-workload-empty-shell"
+version.workspace = true
+description = "Baseline browser workload rendering no form, for measurement subtraction"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+browser-workload-pack = { workspace = true }
+
+dioxus = { workspace = true }
+dioxus-web = { workspace = true }
+serde_json = { workspace = true }
+wasm-bindgen = { workspace = true }
+web-sys = { workspace = true, features = ["Performance", "Window"] }

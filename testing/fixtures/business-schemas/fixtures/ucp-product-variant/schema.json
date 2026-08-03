@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:schemaform:corpus:ucp-product-variant",
+  "$comment": "Adapted and reduced from the Apache-2.0 Universal Commerce Protocol Variant schema; this file has been changed for offline corpus use.",
+  "title": "Product variant",
+  "description": "SKU identity, selected options, price, inventory, media, and package dimensions.",
+  "type": "object",
+  "required": ["sku", "selectedOptions", "price"],
+  "properties": {
+    "sku": { "type": "string" },
+    "barcode": { "type": "string" },
+    "selectedOptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "value"],
+        "properties": {
+          "name": { "type": "string" },
+          "value": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "price": {
+      "type": "object",
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": { "type": "number", "minimum": 0, "multipleOf": 0.01 },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+      },
+      "additionalProperties": false
+    },
+    "inventory": {
+      "type": "object",
+      "required": ["available"],
+      "properties": {
+        "available": { "type": "integer", "minimum": 0 },
+        "policy": { "type": "string", "enum": ["continue", "deny"] }
+      },
+      "additionalProperties": false
+    },
+    "media": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" }
+    },
+    "dimensions": {
+      "type": "object",
+      "required": ["weight"],
+      "properties": {
+        "weight": { "type": "number", "minimum": 0 },
+        "unit": { "type": "string", "enum": ["g", "kg", "lb"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

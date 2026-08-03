@@ -1,0 +1,218 @@
+.schemaform {
+  display: grid;
+  gap: 1rem;
+}
+
+.schemaform-stack,
+.schemaform-tab-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.schemaform-grid {
+  gap: 1rem;
+}
+
+.schemaform-group {
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid color-mix(in oklab, currentColor 16%, transparent);
+  border-radius: 0.9rem;
+}
+
+.schemaform-group > legend {
+  padding-inline: 0.35rem;
+  font-weight: 650;
+}
+
+.schemaform-control {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.schemaform-control > label,
+.schemaform-array > legend {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.schemaform-control > input:not([type="checkbox"]),
+.schemaform-control > select {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid color-mix(in oklab, currentColor 22%, transparent);
+  border-radius: 0.7rem;
+  background: color-mix(in oklab, Canvas 94%, currentColor 6%);
+}
+
+.schemaform-control:has(> input[type="checkbox"]) {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.65rem;
+}
+
+.schemaform-control:has(> input[type="checkbox"]) > :not(input):not(label) {
+  grid-column: 1 / -1;
+}
+
+.schemaform-control:has(> input[type="checkbox"]) > label {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.schemaform-control > input[type="checkbox"] {
+  display: inline-grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  cursor: pointer;
+  appearance: none;
+  place-content: center;
+  border: 1px solid color-mix(in oklab, currentColor 24%, transparent);
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--color-primary-content);
+  box-shadow: 0 1px color-mix(in oklab, currentColor 10%, transparent) inset;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.schemaform-control > input[type="checkbox"]::before {
+  width: 0.4rem;
+  height: 0.7rem;
+  content: "";
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  opacity: 0;
+  transform: translateY(-0.08rem) rotate(45deg) scale(0.6);
+  transition:
+    opacity 100ms ease,
+    transform 150ms ease;
+}
+
+.schemaform-control > input[type="checkbox"]:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.schemaform-control > input[type="checkbox"]:checked {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  box-shadow: 0 1px color-mix(in oklab, white 20%, transparent) inset;
+}
+
+.schemaform-control > input[type="checkbox"]:checked::before {
+  opacity: 1;
+  transform: translateY(-0.08rem) rotate(45deg) scale(1);
+}
+
+.schemaform-control > input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.schemaform-control > input[type="checkbox"][aria-invalid="true"] {
+  border-color: var(--color-error);
+}
+
+.schemaform-control > input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.schemaform-help,
+.schemaform-text {
+  color: color-mix(in oklab, currentColor 65%, transparent);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.schemaform-finding {
+  color: var(--color-error);
+  font-size: 0.82rem;
+}
+
+.schemaform button {
+  width: fit-content;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid color-mix(in oklab, currentColor 22%, transparent);
+  border-radius: 0.65rem;
+  font-weight: 600;
+}
+
+.schemaform > button[type="submit"] {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-primary-content);
+}
+
+.schemaform-presence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.schemaform-array-item {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px dashed color-mix(in oklab, currentColor 24%, transparent);
+  border-radius: 0.75rem;
+}
+
+.schemaform-tabs [role="tablist"] {
+  display: flex;
+  align-items: end;
+  gap: 0;
+  width: 100%;
+  margin-top: 0.25rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid color-mix(in oklab, currentColor 16%, transparent);
+}
+
+.schemaform .schemaform-tab {
+  min-height: 2.5rem;
+  margin-bottom: -1px;
+  padding: 0.6rem 1rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0.65rem 0.65rem 0 0;
+  background: transparent;
+  color: color-mix(in oklab, currentColor 62%, transparent);
+  font-weight: 600;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+
+.schemaform .schemaform-tab:hover {
+  background: color-mix(in oklab, currentColor 6%, transparent);
+  color: inherit;
+}
+
+.schemaform-tab[aria-selected="true"] {
+  background: color-mix(in oklab, var(--color-primary) 8%, transparent);
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.schemaform .schemaform-tab:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.schemaform-grid-cell {
+  min-width: 0;
+}
+
+.schema-editor .dxc-editor {
+  min-height: 28rem;
+}

@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "runner": "schemaform-perf-v1",
+  "browser": "chromium",
+  "runner_manifest_sha256": "8ea01cc5e773985255829a704e7634b687e1231928c7a6b4909735af230f7549",
+  "workload_manifest_sha256": "a0c95633fc51ecf62e62040346704635b8c9d80e566662d4d22fc3af50771c3a",
+  "memory_protocol": {
+    "scenario": "A100x5-authored-64-finding",
+    "operations": 1000,
+    "operation_cycle": [
+      "edit",
+      "findings",
+      "visibility",
+      "arrays",
+      "localization",
+      "submission"
+    ],
+    "operation_phases": {
+      "arrays": 6,
+      "edit": 2,
+      "findings": 2,
+      "localization": 2,
+      "submission": 2,
+      "visibility": 2
+    },
+    "wasm_sampling": "WebAssembly.Memory.buffer.byteLength after mount and every committed operation; report the maximum",
+    "browser_heap_measurement": "Chromium CDP HeapProfiler.collectGarbage followed by Performance.getMetrics JSHeapUsedSize after mount and after the settled workload",
+    "settle_condition": "Each operation observes the Dioxus commit token before memory is sampled"
+  },
+  "calibration_observation_sha256": null,
+  "metrics": [
+    {
+      "id": "wasm-linear-high-water",
+      "kind": "memory",
+      "safety_cap_bytes": 134217728,
+      "calibration_rounding_bytes": 1048576,
+      "ceiling_bytes": null
+    },
+    {
+      "id": "browser-heap-post-gc-delta",
+      "kind": "memory",
+      "safety_cap_bytes": 67108864,
+      "calibration_rounding_bytes": 1048576,
+      "ceiling_bytes": null
+    },
+    {
+      "id": "brotli-wasm-total",
+      "kind": "compressed-size",
+      "safety_cap_bytes": 1572864,
+      "calibration_rounding_bytes": 1024,
+      "ceiling_bytes": null
+    },
+    {
+      "id": "brotli-wasm-incremental",
+      "kind": "compressed-size",
+      "safety_cap_bytes": 524288,
+      "calibration_rounding_bytes": 1024,
+      "ceiling_bytes": null
+    },
+    {
+      "id": "brotli-runtime-javascript-total",
+      "kind": "compressed-size",
+      "safety_cap_bytes": 65536,
+      "calibration_rounding_bytes": 1024,
+      "ceiling_bytes": null
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "production-wasm",
+      "path": "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm"
+    },
+    {
+      "id": "production-javascript",
+      "path": "testing/browser/artifacts/bindgen/browser_workload_runner.js"
+    },
+    {
+      "id": "production-brotli-wasm",
+      "path": "testing/browser/artifacts/bindgen/browser_workload_runner_bg.wasm.br"
+    },
+    {
+      "id": "production-brotli-javascript",
+      "path": "testing/browser/artifacts/bindgen/browser_workload_runner.js.br"
+    },
+    {
+      "id": "empty-shell-wasm",
+      "path": "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm"
+    },
+    {
+      "id": "empty-shell-javascript",
+      "path": "testing/browser/artifacts/empty-shell/browser_workload_empty_shell.js"
+    },
+    {
+      "id": "empty-shell-brotli-wasm",
+      "path": "testing/browser/artifacts/empty-shell/browser_workload_empty_shell_bg.wasm.br"
+    }
+  ]
+}

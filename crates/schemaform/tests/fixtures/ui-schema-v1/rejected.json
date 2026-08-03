@@ -1,0 +1,302 @@
+{
+  "wire_version": 1,
+  "stable_headless_compatibility": true,
+  "cases": [
+    {
+      "name": "obsolete version 0",
+      "phase": "parse",
+      "location": "/version",
+      "meta_schema_rejects": true,
+      "document": {
+        "version": 0,
+        "root": {
+          "type": "text",
+          "value": { "content": { "fallback": "Text" } }
+        }
+      }
+    },
+    {
+      "name": "future version 2",
+      "phase": "parse",
+      "location": "/version",
+      "meta_schema_rejects": true,
+      "document": {
+        "version": 2,
+        "root": {
+          "type": "text",
+          "value": { "content": { "fallback": "Text" } }
+        }
+      }
+    },
+    {
+      "name": "non-integer version 1.5",
+      "phase": "parse",
+      "location": "/version",
+      "meta_schema_rejects": true,
+      "document": {
+        "version": 1.5,
+        "root": {
+          "type": "text",
+          "value": { "content": { "fallback": "Text" } }
+        }
+      }
+    },
+    {
+      "name": "unknown element",
+      "phase": "parse",
+      "location": "/root/type",
+      "meta_schema_rejects": true,
+      "document": {
+        "version": 1,
+        "root": { "type": "card", "value": {} }
+      }
+    },
+    {
+      "name": "unknown grid-cell field",
+      "phase": "parse",
+      "location": "/root/value/cells/0/unexpected",
+      "meta_schema_rejects": true,
+      "document": {
+        "version": 1,
+        "root": {
+          "type": "grid",
+          "value": {
+            "cells": [
+              {
+                "compact_span": 12,
+                "unexpected": true,
+                "child": {
+                  "type": "text",
+                  "value": { "content": { "fallback": "Cell" } }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "binding pointer is not RFC 6901",
+      "phase": "parse",
+      "location": "/root/value/binding/pointer",
+      "meta_schema_rejects": true,
+      "document": {
+        "version": 1,
+        "root": {
+          "type": "control",
+          "value": {
+            "binding": { "origin": "root", "pointer": "name" }
+          }
+        }
+      }
+    },
+    {
+      "name": "empty widget symbol",
+      "phase": "parse",
+      "location": "/root/value/widget",
+      "meta_schema_rejects": true,
+      "document": {
+        "version": 1,
+        "root": {
+          "type": "control",
+          "value": {
+            "binding": { "origin": "root", "pointer": "/name" },
+            "widget": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "relative extension namespace",
+      "phase": "parse",
+      "location": "/root/value/extensions/relative",
+      "meta_schema_rejects": true,
+      "document": {
+        "version": 1,
+        "root": {
+          "type": "text",
+          "value": {
+            "content": { "fallback": "Text" },
+            "extensions": { "relative": true }
+          }
+        }
+      }
+    },
+    {
+      "name": "malformed absolute extension namespace",
+      "phase": "parse",
+      "location": "/root/value/extensions/x:%ZZ",
+      "meta_schema_rejects": true,
+      "document": {
+        "version": 1,
+        "root": {
+          "type": "text",
+          "value": {
+            "content": { "fallback": "Text" },
+            "extensions": { "x:%ZZ": true }
+          }
+        }
+      }
+    },
+    {
+      "name": "text reference without a fallback",
+      "phase": "parse",
+      "location": "/root/value/content",
+      "meta_schema_rejects": true,
+      "document": {
+        "version": 1,
+        "root": {
+          "type": "text",
+          "value": { "content": { "key": "missing.fallback" } }
+        }
+      }
+    },
+    {
+      "name": "text reference with an invalid key type",
+      "phase": "parse",
+      "location": "/root/value/content/key",
+      "meta_schema_rejects": true,
+      "document": {
+        "version": 1,
+        "root": {
+          "type": "text",
+          "value": { "content": { "fallback": "Text", "key": 7 } }
+        }
+      }
+    },
+    {
+      "name": "text reference with an unknown field",
+      "phase": "parse",
+      "location": "/root/value/content/unexpected",
+      "meta_schema_rejects": true,
+      "document": {
+        "version": 1,
+        "root": {
+          "type": "text",
+          "value": {
+            "content": { "fallback": "Text", "unexpected": true }
+          }
+        }
+      }
+    },
+    {
+      "name": "required extension is absent",
+      "phase": "parse",
+      "location": "/required_extensions/0",
+      "meta_schema_rejects": false,
+      "document": {
+        "version": 1,
+        "required_extensions": ["https://example.com/missing"],
+        "root": {
+          "type": "text",
+          "value": { "content": { "fallback": "Text" } }
+        }
+      }
+    },
+    {
+      "name": "template binding outside an item template",
+      "phase": "compile",
+      "location": "/root/value/binding/origin",
+      "kind": "InvalidBindingOrigin",
+      "meta_schema_rejects": false,
+      "document": {
+        "version": 1,
+        "root": {
+          "type": "control",
+          "value": {
+            "binding": { "origin": "item_template", "pointer": "/name" }
+          }
+        }
+      }
+    },
+    {
+      "name": "item template on a scalar control",
+      "phase": "compile",
+      "location": "/root/value/item_template",
+      "kind": "UnsupportedField",
+      "meta_schema_rejects": false,
+      "document": {
+        "version": 1,
+        "root": {
+          "type": "control",
+          "value": {
+            "binding": { "origin": "root", "pointer": "/name" },
+            "item_template": {
+              "type": "control",
+              "value": {
+                "binding": { "origin": "item_template", "pointer": "" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "duplicate element ID",
+      "phase": "compile",
+      "location": "/root/value/children/1/value/id",
+      "kind": "DuplicateElementId",
+      "meta_schema_rejects": false,
+      "document": {
+        "version": 1,
+        "root": {
+          "type": "stack",
+          "value": {
+            "children": [
+              {
+                "type": "text",
+                "value": { "id": "same", "content": { "fallback": "One" } }
+              },
+              {
+                "type": "text",
+                "value": { "id": "same", "content": { "fallback": "Two" } }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "duplicate editor binding",
+      "phase": "compile",
+      "location": "/root/value/children/1/value/binding/pointer",
+      "kind": "DuplicateBinding",
+      "meta_schema_rejects": false,
+      "document": {
+        "version": 1,
+        "root": {
+          "type": "stack",
+          "value": {
+            "children": [
+              {
+                "type": "control",
+                "value": { "binding": { "origin": "root", "pointer": "/name" } }
+              },
+              {
+                "type": "control",
+                "value": { "binding": { "origin": "root", "pointer": "/name" } }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Auto selects an unknown property",
+      "phase": "compile",
+      "location": "/root/value/properties/include/0",
+      "kind": "UnknownBinding",
+      "meta_schema_rejects": false,
+      "document": {
+        "version": 1,
+        "root": {
+          "type": "auto",
+          "value": {
+            "binding": { "origin": "root", "pointer": "" },
+            "properties": { "include": ["missing"] }
+          }
+        }
+      }
+    }
+  ]
+}

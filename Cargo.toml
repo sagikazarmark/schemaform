@@ -1,0 +1,42 @@
+[workspace]
+members = [
+    "crates/*",
+    "testing/browser/pack",
+    "testing/browser/empty-shell",
+    "testing/browser/runner",
+]
+exclude = ["fuzz"]
+resolver = "3"
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sagikazarmark/schemaform"
+homepage = "https://github.com/sagikazarmark/schemaform"
+
+[workspace.dependencies]
+browser-workload-pack = { path = "testing/browser/pack", version = "0.0.0" }
+schemaform = { path = "crates/schemaform", version = "0.0.0" }
+schemaform-dioxus = { path = "crates/schemaform-dioxus", version = "0.0.0" }
+
+dioxus = { version = "=0.7.9", default-features = false, features = ["hooks", "html", "macro", "signals"] }
+dioxus-core = "=0.7.9"
+dioxus-elements = { package = "dioxus-html", version = "=0.7.9" }
+dioxus-signals = "=0.7.9"
+dioxus-web = { version = "=0.7.9", default-features = false }
+js-sys = "=0.3.103"
+jsonptr = "0.7.1"
+jsonschema = { version = "=0.47.0", default-features = false, features = ["arbitrary-precision"] }
+num-bigint = "0.4.6"
+proptest = "1.7.0"
+referencing = "=0.47.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "=1.0.150", features = ["arbitrary_precision"] }
+serde_path_to_error = "0.1.20"
+sha2 = "0.10.9"
+wasm-bindgen = "=0.2.126"
+wasm-bindgen-futures = "=0.4.76"
+wasm-bindgen-test = "=0.3.76"
+web-sys = "=0.3.103"

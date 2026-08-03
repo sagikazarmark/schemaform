@@ -1,0 +1,830 @@
+{
+  "version": 1,
+  "id": "A100x5-generated-invalid",
+  "profile": "A100x5",
+  "variant": "generated",
+  "state": "invalid",
+  "data_schema": {
+    "$id": "urn:schemaform:browser-workload:array",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "rows": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "field_000": {
+              "minimum": 0,
+              "title": "Field 000",
+              "type": "integer"
+            },
+            "field_001": {
+              "minLength": 1,
+              "title": "Field 001",
+              "type": "string"
+            },
+            "field_002": {
+              "minimum": 0,
+              "title": "Field 002",
+              "type": "number"
+            },
+            "field_003": {
+              "title": "Field 003",
+              "type": "boolean"
+            },
+            "field_004": {
+              "enum": [
+                "alpha",
+                "beta",
+                "gamma"
+              ],
+              "title": "Field 004"
+            }
+          },
+          "required": [
+            "field_000",
+            "field_001",
+            "field_002",
+            "field_003",
+            "field_004"
+          ],
+          "type": "object"
+        },
+        "minItems": 1,
+        "title": "Rows",
+        "type": "array"
+      }
+    },
+    "required": [
+      "rows"
+    ],
+    "title": "Representative array workload",
+    "type": "object"
+  },
+  "ui_schema": null,
+  "initial_form_data": {
+    "rows": [
+      {
+        "field_000": -1,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      },
+      {
+        "field_000": 0,
+        "field_001": "value-001",
+        "field_002": 3.25,
+        "field_003": false,
+        "field_004": "alpha"
+      }
+    ]
+  },
+  "setup": [],
+  "workloads": [
+    {
+      "workload": "compilation",
+      "cold": true,
+      "fresh_browser_context": true
+    },
+    {
+      "workload": "mount",
+      "cold": true,
+      "fresh_browser_context": true
+    },
+    {
+      "workload": "edit",
+      "binding": "/rows/0/field_000",
+      "alternating_values": [
+        "1",
+        "2"
+      ]
+    },
+    {
+      "workload": "findings",
+      "binding": "/rows/0/field_000",
+      "count": 64,
+      "alternating_actions": [
+        "install",
+        "clear"
+      ]
+    },
+    {
+      "workload": "visibility",
+      "policies": [
+        "immediate",
+        "submission-only"
+      ]
+    },
+    {
+      "workload": "localization",
+      "locales": [
+        "en",
+        "hu"
+      ],
+      "message_source": "generated-fallback"
+    },
+    {
+      "workload": "submission",
+      "expected": "blocked"
+    },
+    {
+      "workload": "arrays",
+      "binding": "/rows",
+      "operations": [
+        "append",
+        "remove-last",
+        "insert-before-last",
+        "remove-before-last",
+        "move-last-up",
+        "move-before-last-down"
+      ]
+    }
+  ]
+}
