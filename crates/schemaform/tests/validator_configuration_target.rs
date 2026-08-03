@@ -139,10 +139,10 @@ fn public_packages_do_not_expose_validation_fault_features() {
     // version. Matching both lines exactly keeps either side from quietly enabling
     // features on the dependency.
     assert!(DIOXUS_MANIFEST.contains("schemaform = { workspace = true }"));
-    assert!(
-        WORKSPACE_MANIFEST
-            .contains("schemaform = { path = \"crates/schemaform\", version = \"0.0.0\" }")
-    );
+    assert!(WORKSPACE_MANIFEST.contains(&format!(
+        "schemaform = {{ path = \"crates/schemaform\", version = \"{}\" }}",
+        env!("CARGO_PKG_VERSION")
+    )));
 }
 
 #[cfg(not(schemaform_test_validation_faults))]
