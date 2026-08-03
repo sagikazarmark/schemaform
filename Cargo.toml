@@ -9,7 +9,7 @@ exclude = ["fuzz"]
 resolver = "3"
 
 [workspace.package]
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
@@ -18,8 +18,8 @@ homepage = "https://github.com/sagikazarmark/schemaform"
 
 [workspace.dependencies]
 browser-workload-pack = { path = "testing/browser/pack" }
-schemaform = { path = "crates/schemaform", version = "0.0.0" }
-schemaform-dioxus = { path = "crates/schemaform-dioxus", version = "0.0.0" }
+schemaform = { path = "crates/schemaform", version = "0.1.0" }
+schemaform-dioxus = { path = "crates/schemaform-dioxus", version = "0.1.0" }
 
 dioxus = { version = "=0.7.9", default-features = false, features = ["hooks", "html", "macro", "signals"] }
 dioxus-core = "=0.7.10"
