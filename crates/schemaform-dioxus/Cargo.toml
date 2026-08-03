@@ -57,5 +57,8 @@ web-sys = { workspace = true, features = [
     "Window",
 ] }
 
+[package.metadata.release]
+release = true
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(schemaform_test_validation_faults)"] }

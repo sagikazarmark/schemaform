@@ -1,6 +1,6 @@
 [package]
 name = "browser-workload-pack"
-version.workspace = true
+version = "0.0.0"
 description = "Shared schema and workload fixtures for the browser test workloads"
 edition.workspace = true
 rust-version.workspace = true
