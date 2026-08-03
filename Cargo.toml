@@ -40,3 +40,10 @@ wasm-bindgen = "=0.2.126"
 wasm-bindgen-futures = "=0.4.76"
 wasm-bindgen-test = "=0.3.76"
 web-sys = "=0.3.103"
+
+[workspace.metadata.release]
+sign-commit = true
+sign-tag = true
+shared-version = true
+tag-message = "Release {{version}}"
+tag-name = "v{{version}}"
