@@ -17,7 +17,7 @@ repository = "https://github.com/sagikazarmark/schemaform"
 homepage = "https://github.com/sagikazarmark/schemaform"
 
 [workspace.dependencies]
-browser-workload-pack = { path = "testing/browser/pack", version = "0.0.0" }
+browser-workload-pack = { path = "testing/browser/pack" }
 schemaform = { path = "crates/schemaform", version = "0.0.0" }
 schemaform-dioxus = { path = "crates/schemaform-dioxus", version = "0.0.0" }
 
@@ -42,6 +42,7 @@ wasm-bindgen-test = "=0.3.76"
 web-sys = "=0.3.103"
 
 [workspace.metadata.release]
+release = false
 sign-commit = true
 sign-tag = true
 shared-version = true

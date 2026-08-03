@@ -1,6 +1,6 @@
 [package]
 name = "browser-workload-empty-shell"
-version.workspace = true
+version = "0.0.0"
 description = "Baseline browser workload rendering no form, for measurement subtraction"
 edition.workspace = true
 rust-version.workspace = true
