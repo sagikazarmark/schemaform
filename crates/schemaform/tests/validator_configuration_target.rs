@@ -97,14 +97,14 @@ fn dependency_and_validator_configuration_match_the_qualified_release() {
     assert!(WORKSPACE_MANIFEST.contains("referencing = \"=0.47.0\""));
     assert!(
         WORKSPACE_MANIFEST.contains(
-            "serde_json = { version = \"=1.0.150\", features = [\"arbitrary_precision\"] }"
+            "serde_json = { version = \"=1.0.151\", features = [\"arbitrary_precision\"] }"
         )
     );
     for (package, version) in [
         ("jsonschema", "0.47.0"),
         ("jsonschema-regex", "0.47.0"),
         ("referencing", "0.47.0"),
-        ("serde_json", "1.0.150"),
+        ("serde_json", "1.0.151"),
         ("fancy-regex", "0.18.0"),
         ("regex", "1.13.1"),
     ] {

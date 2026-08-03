@@ -3807,7 +3807,10 @@ fn sidecar(name: &str, contents: &[u8]) -> Vec<u8> {
 }
 
 fn sha256(contents: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(contents))
+    Sha256::digest(contents)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn files_below(root: &Path) -> Result<BTreeSet<PathBuf>, String> {

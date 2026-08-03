@@ -28,10 +28,10 @@ dioxus-signals = "=0.7.10"
 dioxus-web = { version = "=0.7.9", default-features = false }
 js-sys = "=0.3.103"
 jsonptr = "0.8.1"
-jsonschema = { version = "=0.49.2", default-features = false, features = ["arbitrary-precision"] }
+jsonschema = { version = "=0.47.0", default-features = false, features = ["arbitrary-precision"] }
 num-bigint = "0.5.1"
 proptest = "1.7.0"
-referencing = "=0.49.2"
+referencing = "=0.47.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "=1.0.151", features = ["arbitrary_precision"] }
 serde_path_to_error = "0.1.20"

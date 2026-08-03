@@ -233,7 +233,7 @@ fn machine_readable_contract_matches_the_settled_fuzz_evidence() {
                 .expect("every contracted seed is embedded for replay");
             assert_eq!(retained.source, seed.source);
             assert_eq!(retained.expected_outcome, seed.expected_outcome);
-            assert_eq!(format!("{:x}", Sha256::digest(retained.input)), seed.sha256);
+            assert_eq!(hex_digest(retained.input), seed.sha256);
             let outcome = schemaform_fuzz_harness::run(retained.target, retained.input);
             assert_eq!(retained.expected_digest, seed.outcome_sha256);
             assert_eq!(
@@ -258,7 +258,7 @@ fn machine_readable_contract_matches_the_settled_fuzz_evidence() {
                         .join(artifact_path),
                 )
                 .expect("the contracted retained artifact exists");
-                assert_eq!(format!("{:x}", Sha256::digest(&artifact)), seed.sha256);
+                assert_eq!(hex_digest(&artifact), seed.sha256);
                 assert_eq!(seed.artifact_sha256.as_deref(), Some(seed.sha256.as_str()));
                 assert_eq!(
                     artifact, retained.input,
@@ -301,4 +301,11 @@ fn target_name(target: Target) -> &'static str {
         Target::HostTransactions => "host_transactions",
         Target::ExternalFindings => "external_findings",
     }
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }

@@ -110,7 +110,7 @@ impl Outcome {
         };
         let encoded = serde_json::to_vec(&normalized)
             .expect("normalized fuzz outcomes always have a canonical JSON encoding");
-        format!("{:x}", Sha256::digest(encoded))
+        hex_digest(&encoded)
     }
 }
 
@@ -119,6 +119,13 @@ fn fingerprint_result(result: &Result<DefinitionFingerprint, String>) -> Value {
         Ok(_) => json!({ "ok": true }),
         Err(error) => json!({ "error": error }),
     }
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
