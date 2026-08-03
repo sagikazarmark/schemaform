@@ -715,7 +715,7 @@ fn evidence_objects_are_content_addressed_and_reject_waivers() {
         std::thread::current().name().unwrap_or("pack")
     ));
     let bytes = b"raw browser evidence\n";
-    let digest = format!("{:x}", Sha256::digest(bytes));
+    let digest = hex_digest(bytes);
     let object = root.join("objects/sha256").join(&digest);
     fs::create_dir_all(object.parent().unwrap()).unwrap();
     fs::write(&object, bytes).unwrap();
@@ -807,7 +807,7 @@ fn first_release_archive_excludes_deferred_numeric_evidence() {
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::write(&path, &bytes).unwrap();
             artifact.bytes = bytes.len() as u64;
-            artifact.sha256 = format!("{:x}", Sha256::digest(&bytes));
+            artifact.sha256 = hex_digest(&bytes);
         }
     }
     let observation_path = workspace.join("testing/browser/artifacts/interaction-observation.json");
@@ -1419,7 +1419,7 @@ fn assert_sidecar(root: &std::path::Path, name: &str) {
     let contents = fs::read(root.join(name)).unwrap();
     let sidecar_name = name.strip_suffix(".json").unwrap();
     let sidecar = fs::read_to_string(root.join(format!("{sidecar_name}.sha256"))).unwrap();
-    assert_eq!(sidecar, format!("{:x}  {name}\n", Sha256::digest(contents)));
+    assert_eq!(sidecar, format!("{}  {name}\n", hex_digest(&contents)));
 }
 
 fn assert_exact_workload_recipes(
@@ -1506,4 +1506,11 @@ fn assert_exact_workload_recipes(
             ),
         }
     }
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }

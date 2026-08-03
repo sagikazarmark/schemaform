@@ -64,10 +64,7 @@ fn complete_stable_ui_schema_v1_fixture_round_trips_and_compiles() {
         .expect("the accepted UI schema should be an object")
         .remove("version");
     assert_eq!(
-        format!(
-            "{:x}",
-            Sha256::digest(serde_json::to_vec(&stable_wire).unwrap())
-        ),
+        hex_digest(&serde_json::to_vec(&stable_wire).unwrap()),
         QUALIFIED_UI_SCHEMA_V0_SHAPE_SHA256,
         "the stable fixture must preserve the qualified v0 shape apart from its discriminator"
     );
@@ -2517,4 +2514,11 @@ fn descendant_with_binding(
         pending.extend(node.children());
     }
     panic!("missing form node for {binding}")
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
