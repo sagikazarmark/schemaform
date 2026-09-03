@@ -8,9 +8,6 @@ name = "dioxus"
 source = "github.com/sagikazarmark/daggerverse-beta/dioxus"
 
 [[dependencies]]
-name = "node-environment"
-source = "github.com/sagikazarmark/daggerverse-beta/node-environment"
+name = "worker-build"
+source = "github.com/sagikazarmark/daggerverse-beta/worker-build"
 
-[[dependencies]]
-name = "wrangler"
-source = "github.com/sagikazarmark/daggerverse-beta/wrangler"

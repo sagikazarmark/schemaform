@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use crate::components::{DemoFooter, DemoHeader, Sidebar, SidebarNavLink, SidebarNavSection};
 use crate::pages::*;
 
-const STYLE: Asset = asset!("/build/style.css");
+const STYLE: Asset = asset!("assets/style.css");
 const FORM_STYLE: Asset = asset!("/src/forms.css");
 
 #[derive(Routable, Clone, PartialEq, Debug)]

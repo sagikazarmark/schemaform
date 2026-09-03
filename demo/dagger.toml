@@ -1,10 +1,14 @@
 [modules.demo]
 source = "."
-entrypoint = true
 
-settings.rustVersion = "1.97-trixie"
+settings.rustVersion = "1.98-trixie"
+
+[modules.worker]
+source = "github.com/sagikazarmark/daggerverse-beta/worker"
+
+[modules.worker.settings]
+bundleAsContainer = "demo:worker-bundle-as-container"
+config = "wrangler.toml"
 
 [modules.dagger-gha]
 source = "github.com/sagikazarmark/daggerverse-beta/dagger-gha"
-
-settings.lock = '"PINNED"'

@@ -219,7 +219,7 @@ impl Validator {
                         let (resource, encoded_pointer) = absolute
                             .as_str()
                             .split_once('#')
-                            .map_or((absolute.as_str(), ""), |parts| parts);
+                            .unwrap_or((absolute.as_str(), ""));
                         (
                             Some(resource),
                             crate::resources::decode_uri_fragment(encoded_pointer)

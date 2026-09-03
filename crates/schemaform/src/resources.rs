@@ -595,7 +595,7 @@ impl ResourceGraph {
         let resolved_text = resolved.as_str();
         let (resource_uri, encoded_fragment) = resolved_text
             .split_once('#')
-            .map_or((resolved_text, ""), |parts| parts);
+            .unwrap_or((resolved_text, ""));
         let normalized_resource = normalize_uri(resource_uri)?;
         let root = self
             .aliases
