@@ -653,14 +653,13 @@ impl Runtime {
 
     fn select_identity(&self, selector: u8, prefer_array: bool) -> InstanceIdentity {
         let current = self.current_identities();
-        if selector % 5 == 3 {
-            if let Some(identity) = self
+        if selector % 5 == 3
+            && let Some(identity) = self
                 .retired
                 .iter()
                 .min_by_key(|identity| self.identities.get(identity).copied().unwrap_or(usize::MAX))
-            {
-                return *identity;
-            }
+        {
+            return *identity;
         }
         if selector % 5 == 4 {
             return self.foreign_form.view().root();
@@ -685,14 +684,13 @@ impl Runtime {
     }
 
     fn select_item(&self, selector: u8) -> ItemIdentity {
-        if selector % 5 == 3 {
-            if let Some(item) = self
+        if selector % 5 == 3
+            && let Some(item) = self
                 .retired_items
                 .iter()
                 .min_by_key(|item| self.items.get(item).copied().unwrap_or(usize::MAX))
-            {
-                return *item;
-            }
+        {
+            return *item;
         }
         let current = self.item_identities(&self.form);
         current

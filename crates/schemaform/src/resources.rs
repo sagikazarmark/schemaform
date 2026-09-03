@@ -593,9 +593,8 @@ impl ResourceGraph {
         let resolved = referencing::uri::resolve_against(&base.borrow(), reference)
             .map_err(|_| PrepareError::InvalidGraph)?;
         let resolved_text = resolved.as_str();
-        let (resource_uri, encoded_fragment) = resolved_text
-            .split_once('#')
-            .unwrap_or((resolved_text, ""));
+        let (resource_uri, encoded_fragment) =
+            resolved_text.split_once('#').unwrap_or((resolved_text, ""));
         let normalized_resource = normalize_uri(resource_uri)?;
         let root = self
             .aliases
@@ -700,33 +699,32 @@ impl ResourceGraph {
             )
         };
 
-        if document_pointer != resource_root.document_pointer {
-            if let Some(id) = id {
-                let canonical =
-                    resolve_resource_uri(&resource_root.resource, &id).map_err(|_| {
-                        PrepareError::Qualification(QualificationError::InvalidCanonicalIdentity {
-                            location: qualification_location(
-                                &self.documents[document_index],
-                                append_pointer(&document_pointer, ["$id"]).as_str(),
-                            ),
-                            identity: id.clone(),
-                        })
-                    })?;
-                resource_root = ResourceRoot {
-                    document_index,
-                    resource: canonical,
-                    document_pointer: document_pointer.clone(),
-                };
-                let location = qualification_location(
-                    &self.documents[document_index],
-                    append_pointer(&document_pointer, ["$id"]).as_str(),
-                );
-                self.insert_alias(
-                    resource_root.resource.clone(),
-                    resource_root.clone(),
-                    location,
-                )?;
-            }
+        if document_pointer != resource_root.document_pointer
+            && let Some(id) = id
+        {
+            let canonical = resolve_resource_uri(&resource_root.resource, &id).map_err(|_| {
+                PrepareError::Qualification(QualificationError::InvalidCanonicalIdentity {
+                    location: qualification_location(
+                        &self.documents[document_index],
+                        append_pointer(&document_pointer, ["$id"]).as_str(),
+                    ),
+                    identity: id.clone(),
+                })
+            })?;
+            resource_root = ResourceRoot {
+                document_index,
+                resource: canonical,
+                document_pointer: document_pointer.clone(),
+            };
+            let location = qualification_location(
+                &self.documents[document_index],
+                append_pointer(&document_pointer, ["$id"]).as_str(),
+            );
+            self.insert_alias(
+                resource_root.resource.clone(),
+                resource_root.clone(),
+                location,
+            )?;
         }
 
         for (keyword, anchor) in anchors {

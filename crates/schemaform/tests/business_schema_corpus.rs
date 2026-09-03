@@ -858,15 +858,15 @@ fn fixtures_record_reproducible_shape_and_expected_form_behavior() {
                     .is_none(),
                 "fixture {id} should not repeat resource name lookup {retrieval_uri}"
             );
-            if let Some(canonical_id) = schema.get("$id").and_then(Value::as_str) {
-                if canonical_id != retrieval_uri {
-                    assert!(
-                        resource_aliases
-                            .insert(canonical_id.to_owned(), retrieval_uri.to_owned())
-                            .is_none(),
-                        "fixture {id} should not repeat resource alias {canonical_id}"
-                    );
-                }
+            if let Some(canonical_id) = schema.get("$id").and_then(Value::as_str)
+                && canonical_id != retrieval_uri
+            {
+                assert!(
+                    resource_aliases
+                        .insert(canonical_id.to_owned(), retrieval_uri.to_owned())
+                        .is_none(),
+                    "fixture {id} should not repeat resource alias {canonical_id}"
+                );
             }
             if resource["role"] == "root" {
                 root_schema = Some(schema);

@@ -524,15 +524,15 @@ impl Model {
             }
             _ => {}
         }
-        if let Some(number) = self.data.get("quantity").and_then(Value::as_number) {
-            if parse_integer(&number.to_string()).is_ok_and(|value| value < 1.into()) {
-                findings.push(validation_key(
-                    "/quantity",
-                    "/properties/quantity/minimum",
-                    "minimum",
-                    json!({ "limit": 1 }),
-                ));
-            }
+        if let Some(number) = self.data.get("quantity").and_then(Value::as_number)
+            && parse_integer(&number.to_string()).is_ok_and(|value| value < 1.into())
+        {
+            findings.push(validation_key(
+                "/quantity",
+                "/properties/quantity/minimum",
+                "minimum",
+                json!({ "limit": 1 }),
+            ));
         }
         if self
             .data
@@ -546,15 +546,15 @@ impl Model {
                 json!({}),
             ));
         }
-        if let Some(label) = self.data.pointer("/details/label").and_then(Value::as_str) {
-            if label.chars().count() < 2 {
-                findings.push(validation_key(
-                    "/details/label",
-                    "/properties/details/properties/label/minLength",
-                    "minLength",
-                    json!({ "limit": 2 }),
-                ));
-            }
+        if let Some(label) = self.data.pointer("/details/label").and_then(Value::as_str)
+            && label.chars().count() < 2
+        {
+            findings.push(validation_key(
+                "/details/label",
+                "/properties/details/properties/label/minLength",
+                "minLength",
+                json!({ "limit": 2 }),
+            ));
         }
         findings.sort_by(|left, right| match (left, right) {
             (
@@ -866,14 +866,14 @@ fn run_trace_with_definition(definition: &FormDefinition, trace: &[Command]) -> 
         }
         assert_fixed_identities(&form, root_identity, &expected_identities)
             .map_err(|error| format!("command {index} {command:?}: {error}"))?;
-        if let Some(expected_blockers) = expected.submission {
-            if actual.submission != Some(expected_blockers) {
-                return Err(format!(
-                    "command {index} {command:?}: submission mismatch; expected {:?}, got {:?}",
-                    model.submission_blockers(),
-                    actual.submission
-                ));
-            }
+        if let Some(expected_blockers) = expected.submission
+            && actual.submission != Some(expected_blockers)
+        {
+            return Err(format!(
+                "command {index} {command:?}: submission mismatch; expected {:?}, got {:?}",
+                model.submission_blockers(),
+                actual.submission
+            ));
         }
         assert_observation(&form, &model)
             .map_err(|error| format!("command {index} {command:?}: {error}"))?;
@@ -1408,10 +1408,10 @@ fn optional_semantic_equal(left: Option<&Value>, right: Option<&Value>) -> bool 
 fn preserve_semantically_equal(before: &Value, after: &mut Value) {
     if let (Some(before), Some(after)) = (before.as_object(), after.as_object_mut()) {
         for (key, candidate) in after.iter_mut() {
-            if let Some(existing) = before.get(key) {
-                if semantic_equal(existing, candidate) {
-                    *candidate = existing.clone();
-                }
+            if let Some(existing) = before.get(key)
+                && semantic_equal(existing, candidate)
+            {
+                *candidate = existing.clone();
             }
         }
     }

@@ -886,10 +886,10 @@ fn run_trace_with_definition(definition: &FormDefinition, trace: &[Command]) -> 
         identities
             .sync(&form, array, &model)
             .map_err(|error| format!("{}: {error}", context()))?;
-        if let Some(expected_submission) = expected.submission {
-            if actual.submission != Some(expected_submission) {
-                return Err(format!("{}: submission outcome mismatch", context()));
-            }
+        if let Some(expected_submission) = expected.submission
+            && actual.submission != Some(expected_submission)
+        {
+            return Err(format!("{}: submission outcome mismatch", context()));
         }
         assert_observation(&form, array, &model, &identities)
             .map_err(|error| format!("{}: {error}", context()))?;

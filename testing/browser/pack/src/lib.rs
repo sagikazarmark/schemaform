@@ -1360,7 +1360,7 @@ fn validate_resource_operations(
 ) -> Result<(), String> {
     if observation.operations.len() != manifest.memory_protocol.operations
         || observation.wasm_memory_before_bytes == 0
-        || observation.wasm_memory_before_bytes % 65_536 != 0
+        || !observation.wasm_memory_before_bytes.is_multiple_of(65_536)
     {
         return Err("resource observation does not contain the exact WASM sample set".to_owned());
     }
@@ -3531,7 +3531,7 @@ fn field_value(index: usize) -> Value {
                 .parse::<f64>()
                 .expect("finite number")
         ),
-        3 => json!(index % 2 == 0),
+        3 => json!(index.is_multiple_of(2)),
         _ => json!("alpha"),
     }
 }

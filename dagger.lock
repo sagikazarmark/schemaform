@@ -9,4 +9,5 @@
 ["","git-sha",["https://github.com/rustsec/advisory-db.git","HEAD"],"5a0ebedfe8bdd2e295b171f4162f8c977bcad9a5"]
 ["","git-sha",["https://github.com/sagikazarmark/daggerverse-beta","refs/heads/main"],"ce82b8575ccc2273a7e3b332424962ff1e744f82"]
 ["","oci-sha",["docker.io/library/node:latest"],"sha256:f5d1cc40abc10c2843339a2134d07817cf33c405cb16bfd052b0ed790254c3a3"]
+["","oci-sha",["docker.io/library/rust:1.92-trixie"],"sha256:f58923369ba295ae1f60bc49d03f2c955a5c93a0b7d49acfb2b2a65bebaf350d"]
 ["","oci-sha",["docker.io/library/rust:1.98-trixie"],"sha256:620dbcd124499c59e2406d3741574b5c5838cf9eb9656f0c3a03948f79b02959"]

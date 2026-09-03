@@ -10,7 +10,7 @@ workspace, then run the web app from this directory:
 ```console
 npm ci
 npm run build
-cargo install dioxus-cli --version 0.7.9 --locked
+cargo install dioxus-cli --version 0.7.10 --locked
 dx serve
 ```
 
