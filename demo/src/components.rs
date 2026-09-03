@@ -2,6 +2,8 @@
 
 mod code;
 mod common;
+/// PROTOTYPE — throwaway spike for schemaform#16.
+pub mod daisyui_collection_prototype;
 mod examples;
 mod layout;
 mod nav;

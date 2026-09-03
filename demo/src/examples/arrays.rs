@@ -1,9 +1,9 @@
 use dioxus::prelude::*;
 use schemaform::FormDefinition;
-use schemaform_dioxus::{SchemaForm, RenderConfiguration, use_form};
+use schemaform_dioxus::{RenderConfiguration, SchemaForm, StructureRenderers, use_form};
 use serde_json::json;
 
-use crate::components::StatusLine;
+use crate::components::{StatusLine, daisyui_collection_prototype::DaisyCollection};
 
 /// Both arrays are homogeneous. The adapter exposes identity-based append,
 /// insert, remove, and move actions while the core preserves item state as rows
@@ -24,7 +24,10 @@ pub fn ArraysExample() -> Element {
     .expect("the array example form should be created");
     let bound_form = form.clone();
     let bound = use_hook(move || {
-        RenderConfiguration::default()
+        // PROTOTYPE(#16): daisyUI collection chrome through the draft structure seam.
+        RenderConfiguration::builder()
+            .structure(StructureRenderers::default().with_collection(DaisyCollection))
+            .build()
             .bind(&bound_form)
             .expect("array controls should bind")
     });
