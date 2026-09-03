@@ -52,6 +52,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `use_text_edit(&ControlRenderContext) -> TextEdit`, the first headless edit
+  hook. Called inside a custom renderer's own child component, it returns the
+  built-in text-editing behaviour: `value` (a `ReadSignal<String>` that is the
+  IME composition buffer while composing, else the edit buffer, else the
+  canonical text, and empty for a write-only control without an edit buffer),
+  `input`, `composition_start`, `composition_end`, `blur`, and `read_only`.
+  Input while composing is buffered locally without a core operation; a form
+  reset or reinitialization discards an in-flight composition; a rejected write
+  is reported to `SchemaForm::on_error` and the widget's DOM value is restored
+  to the canonical text. `value` is derived through a memo that subscribes to
+  the node, and the callbacks are hook-stable, so a widget that takes them as
+  props does not re-render per keystroke. The built-in string, number, and
+  integer controls, including the write-only password and read-only output
+  paths, now render through a child component built on this hook and the public
+  render context, with unchanged DOM output.
 - `NodePresentation::presence` lists the presence affordances the core allows
   for a scalar control right now, and `Affordance` (`kind`, localized `label`,
   the DOM `id` the triggering element must carry, `invoke`) performs the

@@ -144,7 +144,11 @@ An exact-widget renderer renders its whole region from the node-scoped context,
 places the presence affordances the adapter computed, and reports operation
 failures. Render-time reads are the one place a renderer legitimately falls back
 instead of reporting: a node that cannot be read is about to be unmounted, so
-the renderer renders nothing rather than raising an error on every frame.
+the renderer renders nothing rather than raising an error on every frame. The
+example below wires `oninput` directly to `actions().input_text`; a text
+control that should behave exactly like the built-in, including IME
+composition, uses `use_text_edit` from the [Headless edit hooks](#headless-edit-hooks)
+section instead.
 
 ```rust
 use std::sync::Arc;
@@ -209,6 +213,81 @@ let controls = ControlRegistry::with_builtins().widget(
 A `render::BoundForm` is a single-mount render plan. Its clones share DOM
 identity and must not be mounted concurrently. Bind the `FormHandle` separately
 for each concurrent view.
+
+### Headless edit hooks
+
+The hard parts of a text control are not in the widget: buffering an IME
+composition until it ends, discarding a half-typed composition when the form is
+reset or reinitialized, and putting the canonical text back into the DOM after
+the core rejects a keystroke. `use_text_edit` owns all of that so a custom
+renderer only places a widget. Call it inside the renderer's own child
+component with the `ControlRenderContext` it received; `ControlRenderer::render`
+itself is not a hook-safe call site. The built-in string, number, and integer
+controls render through the same hook and the same public context.
+
+`use_text_edit(&context)` returns a `TextEdit`:
+
+- `value: ReadSignal<String>` is the text the widget should show right now: the
+  composition buffer while composing, else the edit buffer, else the canonical
+  text, and empty for a write-only control without an edit buffer. It is
+  derived through a memo that subscribes to the node, so the first render after
+  a transition already shows the new text without the component itself reading
+  the node.
+- `input: Callback<String>` applies the widget's text. While composing it
+  buffers locally and runs no core operation; otherwise it calls
+  `ControlActions::input_text`, reports a failure to `on_error`, and
+  resynchronises the widget's DOM value to the canonical text.
+- `composition_start` and `composition_end` bracket an IME composition; a
+  composition that began before a reset or reinitialization is discarded.
+- `blur` finishes any composition and marks the control touched.
+- `read_only` is true while the node is read-only or the core does not accept
+  text input right now, matching `control().read_only` for text controls.
+
+The callbacks keep their identity across renders and `value` is a signal, so a
+widget that takes them as props does not re-render per keystroke.
+
+```rust
+use dioxus::prelude::*;
+use schemaform_dioxus::{ControlRenderContext, ControlRenderer, use_text_edit};
+
+struct PlainTextRenderer;
+
+impl ControlRenderer for PlainTextRenderer {
+    fn render(&self, context: ControlRenderContext) -> Element {
+        // Hooks belong in the renderer's own component, not in `render` itself.
+        rsx! { PlainTextControl { context } }
+    }
+}
+
+#[component]
+fn PlainTextControl(context: ControlRenderContext) -> Element {
+    let edit = use_text_edit(&context);
+    let presentation = context.presentation();
+    let control = context.control();
+    rsx! {
+        label { r#for: presentation.element_id.clone(), "{presentation.label}" }
+        input {
+            id: presentation.element_id.clone(),
+            name: control.name.clone(),
+            value: edit.value,
+            readonly: edit.read_only,
+            required: control.required,
+            "aria-invalid": presentation.invalid,
+            "aria-describedby": presentation.described_by(),
+            oninput: move |event| edit.input.call(event.value()),
+            oncompositionstart: move |_| edit.composition_start.call(()),
+            oncompositionend: move |_| edit.composition_end.call(()),
+            onblur: move |_| edit.blur.call(()),
+        }
+        {presentation.present_help()}
+        {presentation.present_findings()}
+    }
+}
+```
+
+Boolean, choice, and constant controls do not have a hook yet; render them from
+`node().read()`, `actions()`, and the facets as the example above the hook
+section does.
 
 `Localizer` receives a `render::MessageDescriptor` with an optional stable key,
 an English fallback, and structured parameters. Authored UI-schema text, schema

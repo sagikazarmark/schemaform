@@ -1,8 +1,9 @@
 //! Accessible Dioxus browser rendering for [`schemaform::FormDefinition`].
 //!
 //! The crate keeps Dioxus state out of the core engine and provides explicit
-//! renderer, finding presenter, localization, and extension seams. [`SchemaForm`]
-//! renders unstyled semantic HTML and submits immutable
+//! renderer, finding presenter, localization, and extension seams, plus headless
+//! [`edit`] hooks that give custom renderers the built-in editing behaviour.
+//! [`SchemaForm`] renders unstyled semantic HTML and submits immutable
 //! [`schemaform::SubmissionSnapshot`] values.
 #![deny(rustdoc::broken_intra_doc_links)]
 #![forbid(unsafe_code)]
@@ -428,9 +429,19 @@ pub mod handle {
             *lifecycle_version.write() += 1;
         }
 
+        /// Reads the adapter lifecycle version and subscribes the current reactive context to it.
+        ///
+        /// The version advances on [`FormHandle::reset`] and [`FormHandle::reinitialize`] so
+        /// browser-local edit state started under an earlier lifecycle can be discarded.
         pub(crate) fn observe_lifecycle(&self) -> u64 {
             let lifecycle_version = self.inner.lifecycle_version;
             *lifecycle_version.read()
+        }
+
+        /// Reads the adapter lifecycle version without subscribing, for event handlers.
+        pub(crate) fn peek_lifecycle(&self) -> u64 {
+            let lifecycle_version = self.inner.lifecycle_version;
+            *lifecycle_version.peek()
         }
 
         pub(crate) fn observe_form(&self) {
@@ -549,6 +560,10 @@ pub mod handle {
         /// Returns the stable form-tree identity scoped by this reader.
         pub fn identity(&self) -> InstanceIdentity {
             self.identity
+        }
+
+        pub(crate) fn handle(&self) -> &FormHandle {
+            &self.handle
         }
 
         /// Reads an owned projection of this node and registers a node-level subscription.
@@ -1703,6 +1718,10 @@ pub mod render {
         /// handler. Affordances in [`NodePresentation::presence`] already report internally.
         pub fn report<T>(&self, result: Result<T, HandleError>) -> Option<T> {
             crate::route_operation(&self.error_route, result)
+        }
+
+        pub(crate) fn error_route(&self) -> &Option<crate::OperationErrorHandler> {
+            &self.error_route
         }
     }
 
@@ -3371,6 +3390,11 @@ pub mod render {
             }
         }
 
+        /// Whether the control edits free text, the kinds [`crate::edit::use_text_edit`] serves.
+        pub(crate) fn is_text(self) -> bool {
+            matches!(self, Self::String | Self::Number | Self::Integer)
+        }
+
         pub(crate) fn input_mode(self) -> &'static str {
             match self {
                 Self::String => "text",
@@ -3481,6 +3505,326 @@ pub mod render {
     }
 
     impl Error for ExtensionPrepareError {}
+}
+
+/// Headless edit hooks that give a custom control renderer the built-in editing behaviour.
+///
+/// Each hook is called inside the renderer's own child component with the
+/// [`render::ControlRenderContext`] it received, and returns hook-stable callbacks plus a derived
+/// read signal the component wires to its widget. The hooks own the correctness-critical parts of
+/// editing so renderers place widgets rather than reimplementing IME composition, lifecycle
+/// discard, or DOM resynchronisation after the core rejects input.
+pub mod edit {
+    use std::{fmt, rc::Rc};
+
+    use dioxus::prelude::{
+        Callback, Memo, ReadSignal, ReadableExt, Signal, WritableExt, use_callback, use_effect,
+        use_hook, use_memo, use_signal,
+    };
+    use serde_json::Value;
+
+    use crate::{
+        handle::{ControlActions, FormHandle, HandleError, NodeProjection, NodeReader},
+        render::ControlRenderContext,
+    };
+
+    /// Headless text-editing behaviour for one string, number, or integer control.
+    ///
+    /// Obtained from [`use_text_edit`]. The callbacks keep their identity across renders and
+    /// `value` is a read signal, so a widget that receives this value as a prop does not
+    /// re-render per keystroke and stays wired to the live control.
+    ///
+    /// Two values compare equal when they come from the same hook call site, that is when their
+    /// `value` signal and callbacks are the same handles, and `read_only` agrees; `value`'s
+    /// current text is not compared. The struct is non-exhaustive so later releases can add
+    /// fields without breaking renderers; it is only ever constructed by the hook.
+    #[derive(Clone, Copy, PartialEq)]
+    #[non_exhaustive]
+    pub struct TextEdit {
+        /// Text the widget should display right now.
+        ///
+        /// While an IME composition is in progress this is the composition buffer; otherwise it
+        /// is the node's edit buffer, then its canonical text, and empty for a write-only control
+        /// without an edit buffer. It is derived through a memo that subscribes to the node, so
+        /// the first render after a transition already sees the new text.
+        pub value: ReadSignal<String>,
+        /// Applies the widget's current text.
+        ///
+        /// While composing, the text is buffered locally and no core operation runs. Otherwise
+        /// it is applied through [`ControlActions::input_text`]; a failure is reported to
+        /// `SchemaForm::on_error` and the widget's DOM value is resynchronised to the canonical
+        /// text.
+        pub input: Callback<String>,
+        /// Starts an IME composition: subsequent `input` calls buffer until `composition_end`.
+        pub composition_start: Callback<()>,
+        /// Ends an IME composition and applies the buffered text.
+        ///
+        /// A composition started before the form was reset or reinitialized is discarded.
+        pub composition_end: Callback<()>,
+        /// Finishes any composition, then marks the control touched through
+        /// [`ControlActions::blur`].
+        pub blur: Callback<()>,
+        /// Whether the widget should reject text input right now.
+        ///
+        /// True while the node is read-only or the core does not currently accept text input,
+        /// matching [`render::ControlFacets::read_only`](crate::render::ControlFacets::read_only)
+        /// for text controls.
+        pub read_only: bool,
+    }
+
+    /// One in-flight IME composition: the lifecycle it started under and its current text.
+    #[derive(Clone, PartialEq)]
+    struct Composition {
+        lifecycle: u64,
+        text: String,
+    }
+
+    impl fmt::Debug for TextEdit {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            // The value signal is owned by the component that called the hook; a handle that
+            // outlives it must still be printable.
+            let value = self.value.try_peek().ok().map(|value| value.clone());
+            formatter
+                .debug_struct("TextEdit")
+                .field("value", &value)
+                .field("read_only", &self.read_only)
+                .finish_non_exhaustive()
+        }
+    }
+
+    /// Owns the built-in text-editing behaviour for the control behind `context`.
+    ///
+    /// This is a Dioxus hook: call it unconditionally, in a stable order, inside the renderer's
+    /// own child component. [`render::ControlRenderer::render`](crate::render::ControlRenderer)
+    /// itself is not a hook-safe call site.
+    ///
+    /// The returned [`TextEdit`] reproduces the built-in string, number, and integer control
+    /// exactly: input while composing is buffered locally and committed when the composition
+    /// ends; a form reset or reinitialization discards an in-flight composition and
+    /// resynchronises the widget; a rejected write is reported to `SchemaForm::on_error` and the
+    /// widget's DOM value is restored to the canonical text.
+    ///
+    /// ```rust,no_run
+    /// use dioxus::prelude::*;
+    /// use schemaform_dioxus::{ControlRenderContext, ControlRenderer, use_text_edit};
+    ///
+    /// struct PlainTextRenderer;
+    ///
+    /// impl ControlRenderer for PlainTextRenderer {
+    ///     fn render(&self, context: ControlRenderContext) -> Element {
+    ///         // Hooks belong in the renderer's own component, not in `render` itself.
+    ///         rsx! { PlainTextControl { context } }
+    ///     }
+    /// }
+    ///
+    /// #[component]
+    /// fn PlainTextControl(context: ControlRenderContext) -> Element {
+    ///     let edit = use_text_edit(&context);
+    ///     let presentation = context.presentation();
+    ///     let control = context.control();
+    ///     rsx! {
+    ///         label { r#for: presentation.element_id.clone(), "{presentation.label}" }
+    ///         input {
+    ///             id: presentation.element_id.clone(),
+    ///             name: control.name.clone(),
+    ///             value: edit.value,
+    ///             readonly: edit.read_only,
+    ///             required: control.required,
+    ///             "aria-invalid": presentation.invalid,
+    ///             "aria-describedby": presentation.described_by(),
+    ///             oninput: move |event| edit.input.call(event.value()),
+    ///             oncompositionstart: move |_| edit.composition_start.call(()),
+    ///             oncompositionend: move |_| edit.composition_end.call(()),
+    ///             onblur: move |_| edit.blur.call(()),
+    ///         }
+    ///         {presentation.present_help()}
+    ///         {presentation.present_findings()}
+    ///     }
+    /// }
+    /// ```
+    pub fn use_text_edit(context: &ControlRenderContext) -> TextEdit {
+        let reader = context.node().clone();
+        let composition = use_signal(|| None::<Composition>);
+        // The canonical text tracks the node through this memo, so the memo rather than the
+        // calling component subscribes to it. `None` means the node cannot be read right now.
+        let canonical = {
+            let reader = reader.clone();
+            use_memo(move || canonical_text_of(reader.read()))
+        };
+        let target = Rc::new(TextEditTarget {
+            reader,
+            actions: context.actions().clone(),
+            error_route: context.error_route().clone(),
+            element_id: context.presentation().element_id.clone(),
+            composition,
+            canonical,
+        });
+
+        let value_memo = {
+            let target = target.clone();
+            use_memo(move || {
+                let lifecycle = target.handle().observe_lifecycle();
+                let canonical = target.canonical.read().clone().unwrap_or_default();
+                match &*target.composition.read() {
+                    Some(current) if current.lifecycle == lifecycle => current.text.clone(),
+                    _ => canonical,
+                }
+            })
+        };
+        let value = use_hook(|| ReadSignal::new(value_memo));
+
+        // Discard a composition that began under an earlier lifecycle once the new lifecycle has
+        // rendered, and put the canonical text back into the widget the composition had filled.
+        {
+            let target = target.clone();
+            use_effect(move || {
+                let lifecycle = target.handle().observe_lifecycle();
+                if target.composition_is_stale(lifecycle) {
+                    target.discard_composition();
+                    target.resynchronize();
+                }
+            });
+        }
+
+        let input = {
+            let target = target.clone();
+            use_callback(move |text: String| target.input(text))
+        };
+        let composition_start = {
+            let target = target.clone();
+            use_callback(move |()| target.start_composition())
+        };
+        let composition_end = {
+            let target = target.clone();
+            use_callback(move |()| target.finish_composition())
+        };
+        let blur = use_callback(move |()| {
+            target.finish_composition();
+            crate::report_operation(&target.error_route, target.actions.blur());
+        });
+
+        TextEdit {
+            value,
+            input,
+            composition_start,
+            composition_end,
+            blur,
+            read_only: context.control().read_only,
+        }
+    }
+
+    /// The node one [`use_text_edit`] call edits, with the state its callbacks share.
+    struct TextEditTarget {
+        reader: NodeReader,
+        actions: ControlActions,
+        error_route: Option<crate::OperationErrorHandler>,
+        element_id: String,
+        composition: Signal<Option<Composition>>,
+        /// Canonical display text tracked through the node; `None` while the node is unreadable.
+        canonical: Memo<Option<String>>,
+    }
+
+    impl TextEditTarget {
+        fn handle(&self) -> &FormHandle {
+            self.reader.handle()
+        }
+
+        /// The current lifecycle, read without subscribing, for event handlers.
+        fn lifecycle(&self) -> u64 {
+            self.handle().peek_lifecycle()
+        }
+
+        fn composition_is_stale(&self, lifecycle: u64) -> bool {
+            self.composition
+                .peek()
+                .as_ref()
+                .is_some_and(|current| current.lifecycle != lifecycle)
+        }
+
+        fn discard_composition(&self) {
+            let mut composition = self.composition;
+            composition.set(None);
+        }
+
+        /// The canonical text to put back into the widget: a fresh read, or the last rendered
+        /// text when the form cannot be read right now, for example while a host transaction
+        /// holds the borrow that also rejected the write.
+        fn canonical_text(&self) -> String {
+            canonical_text_of(self.reader.read_untracked())
+                .or_else(|| self.canonical.peek().clone())
+                .unwrap_or_default()
+        }
+
+        fn resynchronize(&self) {
+            crate::resynchronize_control_value(&self.element_id, &self.canonical_text());
+        }
+
+        /// Buffers `text` while composing; otherwise applies it through the core and restores
+        /// the widget when the core rejects it.
+        fn input(&self, text: String) {
+            let lifecycle = self.lifecycle();
+            let composing = self
+                .composition
+                .peek()
+                .as_ref()
+                .is_some_and(|current| current.lifecycle == lifecycle);
+            if composing {
+                let mut composition = self.composition;
+                composition.set(Some(Composition { lifecycle, text }));
+            } else {
+                self.apply_text(&text);
+            }
+        }
+
+        fn apply_text(&self, text: &str) {
+            if !crate::report_operation(&self.error_route, self.actions.input_text(text)) {
+                self.resynchronize();
+            }
+        }
+
+        /// Starts a composition seeded with the canonical text, so `value` is unchanged until
+        /// the first composed input arrives.
+        fn start_composition(&self) {
+            let mut composition = self.composition;
+            composition.set(Some(Composition {
+                lifecycle: self.lifecycle(),
+                text: self.canonical_text(),
+            }));
+        }
+
+        /// Takes the in-flight composition and applies its text if it belongs to the current
+        /// lifecycle.
+        fn finish_composition(&self) {
+            let Some(current) = self.composition.peek().clone() else {
+                return;
+            };
+            self.discard_composition();
+            if current.lifecycle == self.lifecycle() {
+                self.apply_text(&current.text);
+            }
+        }
+    }
+
+    /// The display text of a node read, or `None` when the node could not be read.
+    fn canonical_text_of(read: Result<Option<NodeProjection>, HandleError>) -> Option<String> {
+        read.ok()
+            .flatten()
+            .map(|projection| display_text(&projection))
+    }
+
+    /// Display text for a projected text control, as the built-in control shows it.
+    pub(crate) fn display_text(projection: &NodeProjection) -> String {
+        if projection.write_only && projection.edit_buffer.is_none() {
+            return String::new();
+        }
+        projection.value.clone().unwrap_or_else(|| {
+            projection
+                .current_data
+                .as_ref()
+                .map(Value::to_string)
+                .unwrap_or_default()
+        })
+    }
 }
 
 /// Route from adapter operations to the host's `SchemaForm::on_error`.
@@ -6180,8 +6524,6 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
         .and_then(|reader| reader.read().ok().flatten());
     // Hooks run before the availability guards below so the hook order is identical on every
     // render, including renders where the node has already been removed or disposed.
-    let lifecycle_version = props.form.handle().observe_lifecycle();
-    let mut composition_value = use_signal(|| (lifecycle_version, None::<String>));
     let operation_errors = dioxus_core::try_consume_context::<OperationErrorHandler>();
     let actions = reader.as_ref().map(handle::NodeReader::actions);
     let presence_callbacks = use_scalar_presence_callbacks(
@@ -6204,17 +6546,27 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
     let presentation =
         node_presentation(&props.form, &projection, &props.control.input_id, presence);
     let facets = control_facets(&props.form, &props.control, &projection);
+    let context = render::ControlRenderContext::new(
+        reader,
+        actions,
+        presentation,
+        facets,
+        props.control.extensions.clone(),
+        operation_errors.clone(),
+    );
     if let Some(renderer) = &props.control.renderer {
-        return renderer.render(render::ControlRenderContext::new(
-            reader,
-            actions,
-            presentation,
-            facets,
-            props.control.extensions.clone(),
-            operation_errors,
-        ));
+        return renderer.render(context);
+    }
+    if props.control.kind.is_text() {
+        return rsx! {
+            BuiltinTextControl { context }
+        };
     }
 
+    let reader = context.node().clone();
+    let actions = context.actions().clone();
+    let presentation = context.presentation();
+    let facets = context.control();
     let invalid = presentation.invalid;
     let described_by = presentation.described_by();
     let supplements = presentation.present_help();
@@ -6224,50 +6576,8 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
     let value_state = projection.value_state;
     let value_state_attribute = value_state_attribute(value_state);
     let presence_actions = scalar_presence_actions(&presentation.presence);
-    let incompatible_value = (matches!(
-        value_state,
-        Some(schemaform::form::ScalarValueState::Incompatible)
-            | Some(schemaform::form::ScalarValueState::Null)
-                if !projection.allowed_operations.can_input_text()
-                    && projection.allowed_operations.can_replace_value()
-    ) && !projection.write_only)
-        .then(|| {
-            projection
-                .current_data
-                .as_ref()
-                .map(Value::to_string)
-                .unwrap_or_default()
-        });
-    let canonical_display_value = if projection.write_only && projection.edit_buffer.is_none() {
-        String::new()
-    } else {
-        projection.value.clone().unwrap_or_else(|| {
-            projection
-                .current_data
-                .as_ref()
-                .map(Value::to_string)
-                .unwrap_or_default()
-        })
-    };
-    let mut lifecycle_composition_value = composition_value;
-    let lifecycle_control_id = props.control.input_id.clone();
-    let lifecycle_canonical_value = canonical_display_value.clone();
-    use_effect(move || {
-        let stale_composition = {
-            let state = lifecycle_composition_value.peek();
-            state.0 != lifecycle_version && state.1.is_some()
-        };
-        if lifecycle_composition_value.peek().0 != lifecycle_version {
-            lifecycle_composition_value.set((lifecycle_version, None));
-        }
-        if stale_composition {
-            resynchronize_control_value(&lifecycle_control_id, &lifecycle_canonical_value);
-        }
-    });
-    let display_value = match composition_value.read().clone() {
-        (version, Some(value)) if version == lifecycle_version => value,
-        _ => canonical_display_value.clone(),
-    };
+    let incompatible_value = incompatible_value(&projection);
+    let display_value = edit::display_text(&projection);
     let replacement_label = facets
         .write_only_replacement
         .as_ref()
@@ -6372,110 +6682,12 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
         };
     }
     match props.control.kind {
+        // Text kinds returned above; keep the arm total without a panic in a render path.
         render::ControlKind::String
         | render::ControlKind::Number
-        | render::ControlKind::Integer => {
-            let input_actions = actions.clone();
-            let composition_actions = actions.clone();
-            let blur_actions = actions.clone();
-            let composition_start_value = canonical_display_value.clone();
-            let mut input_composition_value = composition_value;
-            let end_composition_value = composition_value;
-            let blur_composition_value = composition_value;
-            let input_errors = operation_errors.clone();
-            let composition_errors = operation_errors.clone();
-            let blur_composition_errors = operation_errors.clone();
-            let blur_errors = operation_errors.clone();
-            let input_control_id = props.control.input_id.clone();
-            let end_control_id = props.control.input_id.clone();
-            let blur_control_id = props.control.input_id.clone();
-            let input_canonical_value = canonical_display_value.clone();
-            let end_canonical_value = canonical_display_value.clone();
-            let blur_canonical_value = canonical_display_value.clone();
-            rsx! {
-                div {
-                    class: "schemaform-control",
-                    "data-schemaform-control": props.control.kind.data_attribute(),
-                    if projection.label_visible {
-                        label {
-                            r#for: props.control.input_id.clone(),
-                            if projection.write_only {
-                                "{replacement_label.clone().unwrap_or_default()}"
-                            } else {
-                                "{projection.label}"
-                            }
-                        }
-                    }
-                    input {
-                        id: props.control.input_id,
-                        name: props.control.name,
-                        r#type: if projection.write_only { "password" } else { "text" },
-                        inputmode: props.control.kind.input_mode(),
-                        value: display_value,
-                        "data-write-only-replacement": projection.write_only.then_some(""),
-                        required,
-                        "aria-invalid": invalid,
-                        "aria-label": accessible_label.clone(),
-                        "aria-describedby": described_by,
-                        readonly: !projection.allowed_operations.can_input_text(),
-                        "data-value-state": value_state_attribute,
-                        oninput: move |event| {
-                            let value = event.value();
-                            let composing = {
-                                let state = input_composition_value.peek();
-                                state.0 == lifecycle_version && state.1.is_some()
-                            };
-                            if composing {
-                                input_composition_value.set((lifecycle_version, Some(value)));
-                            } else {
-                                if !report_operation(
-                                    &input_errors,
-                                    input_actions.input_text(value),
-                                ) {
-                                    resynchronize_control_value(
-                                        &input_control_id,
-                                        &input_canonical_value,
-                                    );
-                                }
-                            }
-                        },
-                        oncompositionstart: move |_| {
-                            composition_value.set((
-                                lifecycle_version,
-                                Some(composition_start_value.clone()),
-                            ));
-                        },
-                        oncompositionend: move |_| {
-                            finish_composition(
-                                &composition_actions,
-                                end_composition_value,
-                                lifecycle_version,
-                                &composition_errors,
-                                &end_control_id,
-                                &end_canonical_value,
-                            );
-                        },
-                        onblur: move |_| {
-                            finish_composition(
-                                &blur_actions,
-                                blur_composition_value,
-                                lifecycle_version,
-                                &blur_composition_errors,
-                                &blur_control_id,
-                                &blur_canonical_value,
-                            );
-                            report_operation(&blur_errors, actions.blur());
-                        },
-                    }
-                    {supplements}
-                    if let Some(incompatible_value) = incompatible_value {
-                        output { "data-incompatible-value": "", "{incompatible_value}" }
-                    }
-                    {presence_actions}
-                    {presented_findings}
-                }
-            }
-        }
+        | render::ControlKind::Integer => rsx! {
+            BuiltinTextControl { context: context.clone() }
+        },
         render::ControlKind::Boolean => {
             let input_actions = actions.clone();
             let checkbox_operations = projection.allowed_operations;
@@ -6694,21 +6906,140 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
     }
 }
 
-fn finish_composition(
-    actions: &handle::ControlActions,
-    mut composition_value: Signal<(u64, Option<String>)>,
-    lifecycle_version: u64,
-    operation_errors: &Option<OperationErrorHandler>,
-    control_id: &str,
-    canonical_value: &str,
-) {
-    let (composition_lifecycle, value) = composition_value.peek().clone();
-    composition_value.set((lifecycle_version, None));
-    if composition_lifecycle == lifecycle_version
-        && let Some(value) = value
-        && !report_operation(operation_errors, actions.input_text(value))
-    {
-        resynchronize_control_value(control_id, canonical_value);
+/// The value shown beside a control that cannot edit its current data, as the built-in shows it.
+///
+/// Present while the value is incompatible, or null where null is not accepted, the core rejects
+/// text input but allows replacement, and the control is not write-only.
+fn incompatible_value(projection: &handle::NodeProjection) -> Option<String> {
+    use schemaform::form::ScalarValueState;
+
+    let operations = projection.allowed_operations;
+    (matches!(
+        projection.value_state,
+        Some(ScalarValueState::Incompatible | ScalarValueState::Null)
+            if !operations.can_input_text() && operations.can_replace_value()
+    ) && !projection.write_only)
+        .then(|| {
+            projection
+                .current_data
+                .as_ref()
+                .map(Value::to_string)
+                .unwrap_or_default()
+        })
+}
+
+#[derive(Props, Clone, PartialEq)]
+struct BuiltinTextControlProps {
+    context: render::ControlRenderContext,
+}
+
+/// The built-in string, number, and integer control.
+///
+/// It is rendered from the public [`render::ControlRenderContext`] and [`edit::use_text_edit`]
+/// exactly as a custom renderer would be, so the hook is proven complete by the built-in running
+/// on it. The host [`BuiltinControl`] computes the context and records renderer entry; this child
+/// owns the widget.
+#[allow(non_snake_case)]
+fn BuiltinTextControl(props: BuiltinTextControlProps) -> Element {
+    let context = &props.context;
+    let edit = use_text_edit(context);
+    // Whether the node is read-only (rendered as output) rather than merely rejecting text right
+    // now (rendered as a read-only input), and the incompatible value to show beside the input,
+    // are node state the facets fold together, so read the node like any renderer would. This
+    // component displays `value` and therefore re-renders per keystroke anyway; the hook's
+    // stable handles matter to widgets that receive them as props.
+    let Some(projection) = context.node().read().ok().flatten() else {
+        return rsx! {};
+    };
+    let presentation = context.presentation();
+    let facets = context.control();
+    let element_id = presentation.element_id.clone();
+    let name = facets.name.clone();
+    let kind = facets.kind;
+    let label = presentation.label.clone();
+    let label_visible = presentation.label_visible;
+    let invalid = presentation.invalid;
+    let described_by = presentation.described_by();
+    let supplements = presentation.present_help();
+    let presented_findings = presentation.present_findings();
+    let value_state_attribute = value_state_attribute(projection.value_state);
+    let display_value = edit.value.cloned();
+    let replacement_label = facets
+        .write_only_replacement
+        .as_ref()
+        .map(|replacement| replacement.label.clone());
+    let accessible_label =
+        (!label_visible).then(|| replacement_label.clone().unwrap_or_else(|| label.clone()));
+    if projection.read_only {
+        return rsx! {
+            div {
+                class: "schemaform-control",
+                "data-schemaform-control": kind.data_attribute(),
+                if label_visible {
+                    label {
+                        r#for: element_id.clone(),
+                        "{label}"
+                    }
+                }
+                output {
+                    id: element_id,
+                    name,
+                    tabindex: "-1",
+                    "data-read-only": "",
+                    "aria-invalid": invalid,
+                    "aria-label": accessible_label,
+                    "aria-describedby": described_by,
+                    "data-value-state": value_state_attribute,
+                    "{display_value}"
+                }
+                {supplements}
+                {presented_findings}
+            }
+        };
+    }
+    let write_only = facets.write_only;
+    let required = facets.required;
+    let presence_actions = scalar_presence_actions(&presentation.presence);
+    let incompatible_value = incompatible_value(&projection);
+    rsx! {
+        div {
+            class: "schemaform-control",
+            "data-schemaform-control": kind.data_attribute(),
+            if label_visible {
+                label {
+                    r#for: element_id.clone(),
+                    if write_only {
+                        "{replacement_label.clone().unwrap_or_default()}"
+                    } else {
+                        "{label}"
+                    }
+                }
+            }
+            input {
+                id: element_id,
+                name,
+                r#type: if write_only { "password" } else { "text" },
+                inputmode: kind.input_mode(),
+                value: display_value,
+                "data-write-only-replacement": write_only.then_some(""),
+                required,
+                "aria-invalid": invalid,
+                "aria-label": accessible_label,
+                "aria-describedby": described_by,
+                readonly: edit.read_only,
+                "data-value-state": value_state_attribute,
+                oninput: move |event| edit.input.call(event.value()),
+                oncompositionstart: move |_| edit.composition_start.call(()),
+                oncompositionend: move |_| edit.composition_end.call(()),
+                onblur: move |_| edit.blur.call(()),
+            }
+            {supplements}
+            if let Some(incompatible_value) = incompatible_value {
+                output { "data-incompatible-value": "", "{incompatible_value}" }
+            }
+            {presence_actions}
+            {presented_findings}
+        }
     }
 }
 
@@ -6764,6 +7095,7 @@ fn validation_finding_fallback(finding: &schemaform::ValidationFinding) -> Strin
     format!("Value does not satisfy {}.", finding.code())
 }
 
+pub use edit::{TextEdit, use_text_edit};
 pub use handle::{
     ChoiceIdentity, ChoiceOptionProjection, CollectionActions, ControlActions, FormHandle,
     FormReader, HandleError, HandleTransactionError, NodeProjection, NodeReader, use_form,
