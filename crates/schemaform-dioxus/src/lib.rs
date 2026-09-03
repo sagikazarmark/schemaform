@@ -1497,10 +1497,11 @@ pub mod handle {
                         .unwrap(),
                 );
                 let matcher_calls = Arc::new(AtomicUsize::new(0));
+                let exact_renderer: Arc<dyn ControlRenderer> = Arc::new(TestRenderer);
                 let bound = RenderConfiguration::builder()
                     .controls(
                         ControlRegistry::with_builtins()
-                            .widget(item_widget, Arc::new(TestRenderer))
+                            .widget(item_widget, exact_renderer.clone())
                             .matcher(
                                 10,
                                 Arc::new(CountingMatcher(matcher_calls.clone())),
@@ -1518,7 +1519,7 @@ pub mod handle {
                 let BoundTemplateNode::Control(control) = &array.template else {
                     panic!("the scalar item template should remain a control");
                 };
-                assert!(control.renderer.is_some());
+                assert!(Arc::ptr_eq(&control.renderer, &exact_renderer));
             });
         }
     }
@@ -1552,7 +1553,8 @@ pub mod render {
 
     static NEXT_BOUND_FORM_ID: AtomicU64 = AtomicU64::new(1);
 
-    /// Matcher priority occupied by the built-in renderer for a supported semantic kind.
+    /// Matcher priority at which [`ControlRegistry::with_builtins`] registers
+    /// [`BuiltinControlRenderer`].
     pub const BUILTIN_CONTROL_PRIORITY: i32 = 0;
 
     /// Renders one preflight-selected control with target-scoped authority.
@@ -1850,6 +1852,11 @@ pub mod render {
                     div { id: help.id, class: "schemaform-help", "{help.text}" }
                 }
             }
+        }
+
+        /// The bound form this presentation localizes and renders findings through.
+        pub(crate) fn form(&self) -> &BoundForm {
+            &self.form
         }
     }
 
@@ -2267,6 +2274,12 @@ pub mod render {
     /// rather than resolved by registration order. Homogeneous arrays are not renderer candidates:
     /// exact requests on them produce [`BindFinding::UnsupportedCollectionWidget`], and matchers
     /// are not called for them.
+    ///
+    /// The built-in renderer is an ordinary registration: [`ControlRegistry::with_builtins`]
+    /// registers [`BuiltinControlRenderer`] for every supported semantic kind at
+    /// [`BUILTIN_CONTROL_PRIORITY`], and [`ControlRegistry::empty`] starts without it. Resolution
+    /// has no built-in special case; a control no registration accepts produces
+    /// [`BindFinding::NoMatchingRenderer`].
     #[derive(Clone)]
     pub struct ControlRegistry {
         exact: Vec<(WidgetSymbol, Arc<dyn ControlRenderer>)>,
@@ -2280,13 +2293,40 @@ pub mod render {
         renderer: Arc<dyn ControlRenderer>,
     }
 
+    /// Accepts every definition node the built-in renderer can present: those with a
+    /// [`ControlKind`].
+    struct BuiltinControlMatcher;
+
+    impl ControlMatcher for BuiltinControlMatcher {
+        fn matches(&self, definition: DefinitionNodeView<'_>) -> bool {
+            ControlKind::from_definition(definition).is_some()
+        }
+    }
+
     impl ControlRegistry {
-        /// Creates a registry backed by the adapter's built-in semantic controls.
-        pub fn with_builtins() -> Self {
+        /// Creates a registry with no renderers.
+        ///
+        /// Every control must then be accepted by a registered exact widget or matcher, or
+        /// binding reports [`BindFinding::NoMatchingRenderer`] for it. Use this when no unstyled
+        /// built-in may appear in a themed form.
+        pub fn empty() -> Self {
             Self {
                 exact: Vec::new(),
                 matchers: Vec::new(),
             }
+        }
+
+        /// Creates a registry backed by the adapter's built-in semantic controls.
+        ///
+        /// Equivalent to [`ControlRegistry::empty`] followed by registering
+        /// [`BuiltinControlRenderer`] at [`BUILTIN_CONTROL_PRIORITY`] with a matcher that accepts
+        /// every supported semantic kind.
+        pub fn with_builtins() -> Self {
+            Self::empty().matcher(
+                BUILTIN_CONTROL_PRIORITY,
+                Arc::new(BuiltinControlMatcher),
+                Arc::new(BuiltinControlRenderer),
+            )
         }
 
         /// Registers a renderer for one exact authored widget symbol.
@@ -2304,9 +2344,10 @@ pub mod render {
         /// Matchers are evaluated for eligible controls, including controls instantiated from an
         /// array item template, but never for the homogeneous array node itself.
         ///
-        /// Built-ins occupy [`BUILTIN_CONTROL_PRIORITY`]. A matching custom priority below that
-        /// cannot replace a built-in. Equality with the built-in is ambiguous, as are multiple
-        /// matching custom renderers tied at a winning priority above it.
+        /// The highest priority among matching registrations wins. In a registry created by
+        /// [`ControlRegistry::with_builtins`] the built-in occupies [`BUILTIN_CONTROL_PRIORITY`],
+        /// so a matching custom priority below that cannot replace it, and equality with it is
+        /// ambiguous, as are multiple matching renderers tied at any winning priority.
         pub fn matcher(
             mut self,
             priority: i32,
@@ -2319,6 +2360,37 @@ pub mod render {
                 renderer,
             });
             self
+        }
+    }
+
+    /// The adapter's built-in scalar control renderer.
+    ///
+    /// It renders string, number, integer, boolean, choice, and constant controls as unstyled
+    /// semantic HTML with `schemaform-*` class hooks, built on the public
+    /// [`ControlRenderContext`] and the headless edit hooks exactly as a custom renderer would
+    /// be. [`ControlRegistry::with_builtins`] registers it at [`BUILTIN_CONTROL_PRIORITY`]; a
+    /// host can also register it for an exact widget symbol or at another priority.
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+    pub struct BuiltinControlRenderer;
+
+    impl ControlRenderer for BuiltinControlRenderer {
+        fn render(&self, context: ControlRenderContext) -> Element {
+            // The kind is definition-stable, so each node always renders the same child
+            // component and every hook inside it is called unconditionally.
+            match context.control().kind {
+                ControlKind::String | ControlKind::Number | ControlKind::Integer => {
+                    dioxus::prelude::rsx! { crate::BuiltinTextControl { context } }
+                }
+                ControlKind::Boolean => {
+                    dioxus::prelude::rsx! { crate::BuiltinBooleanControl { context } }
+                }
+                ControlKind::Choice => {
+                    dioxus::prelude::rsx! { crate::BuiltinChoiceControl { context } }
+                }
+                ControlKind::Constant => {
+                    dioxus::prelude::rsx! { crate::BuiltinConstantControl { context } }
+                }
+            }
         }
     }
 
@@ -2440,7 +2512,7 @@ pub mod render {
             &self,
             definition: DefinitionNodeView<'_>,
             findings: &mut Vec<BindFinding>,
-        ) -> Option<(ControlKind, Option<Arc<dyn ControlRenderer>>)> {
+        ) -> Option<(ControlKind, Arc<dyn ControlRenderer>)> {
             let Some(semantic_kind) = definition.semantic_kind() else {
                 findings.push(BindFinding::UnsupportedDefinitionNode);
                 return None;
@@ -2457,7 +2529,7 @@ pub mod render {
             &self,
             definition: DefinitionNodeView<'_>,
             findings: &mut Vec<BindFinding>,
-        ) -> Option<Option<Arc<dyn ControlRenderer>>> {
+        ) -> Option<Arc<dyn ControlRenderer>> {
             if let Some(widget) = definition.widget() {
                 let mut renderers = self
                     .controls
@@ -2473,35 +2545,41 @@ pub mod render {
                     findings.push(BindFinding::AmbiguousWidget(widget.clone()));
                     return None;
                 }
-                return Some(Some(renderer));
+                return Some(renderer);
             }
 
-            let mut highest_priority = BUILTIN_CONTROL_PRIORITY;
-            let mut builtin_wins = true;
-            let mut matching_renderers = Vec::new();
+            // Every registration, the built-in included, competes on priority alone.
+            let mut highest_priority = None;
+            let mut winners = Vec::new();
             for registration in &self.controls.matchers {
                 if !registration.matcher.matches(definition) {
                     continue;
                 }
-                match registration.priority.cmp(&highest_priority) {
-                    std::cmp::Ordering::Greater => {
-                        highest_priority = registration.priority;
-                        builtin_wins = false;
-                        matching_renderers.clear();
-                        matching_renderers.push(registration.renderer.clone());
+                match highest_priority {
+                    Some(highest) if registration.priority < highest => {}
+                    Some(highest) if registration.priority == highest => {
+                        winners.push(registration.renderer.clone());
                     }
-                    std::cmp::Ordering::Equal => {
-                        matching_renderers.push(registration.renderer.clone());
+                    _ => {
+                        highest_priority = Some(registration.priority);
+                        winners.clear();
+                        winners.push(registration.renderer.clone());
                     }
-                    std::cmp::Ordering::Less => {}
                 }
             }
-            let winner_count = usize::from(builtin_wins) + matching_renderers.len();
-            if winner_count > 1 {
-                findings.push(BindFinding::AmbiguousMatcher);
-                return None;
+            match winners.len() {
+                0 => {
+                    findings.push(BindFinding::NoMatchingRenderer {
+                        definition_node: definition.id(),
+                    });
+                    None
+                }
+                1 => winners.pop(),
+                _ => {
+                    findings.push(BindFinding::AmbiguousMatcher);
+                    None
+                }
             }
-            Some(matching_renderers.pop())
         }
 
         fn prepare_extensions(
@@ -2884,17 +2962,6 @@ pub mod render {
         pub(crate) template: BoundTemplateNode,
     }
 
-    fn same_renderer(
-        left: &Option<Arc<dyn ControlRenderer>>,
-        right: &Option<Arc<dyn ControlRenderer>>,
-    ) -> bool {
-        match (left, right) {
-            (Some(left), Some(right)) => Arc::ptr_eq(left, right),
-            (None, None) => true,
-            _ => false,
-        }
-    }
-
     #[derive(Clone, PartialEq)]
     pub(crate) enum BoundTemplateNode {
         Decorated(BoundTemplateDecorated),
@@ -2974,7 +3041,7 @@ pub mod render {
     pub(crate) struct BoundTemplateControl {
         pub(crate) definition: DefinitionNodeId,
         pub(crate) kind: ControlKind,
-        pub(crate) renderer: Option<Arc<dyn ControlRenderer>>,
+        pub(crate) renderer: Arc<dyn ControlRenderer>,
         pub(crate) extensions: PreparedExtensions,
     }
 
@@ -2982,7 +3049,7 @@ pub mod render {
         fn eq(&self, other: &Self) -> bool {
             self.definition == other.definition
                 && self.kind == other.kind
-                && same_renderer(&self.renderer, &other.renderer)
+                && Arc::ptr_eq(&self.renderer, &other.renderer)
                 && self.extensions == other.extensions
         }
     }
@@ -3329,7 +3396,8 @@ pub mod render {
         pub(crate) input_id: String,
         pub(crate) name: String,
         pub(crate) kind: ControlKind,
-        pub(crate) renderer: Option<Arc<dyn ControlRenderer>>,
+        /// The preflight-selected renderer; the built-in is one possible selection.
+        pub(crate) renderer: Arc<dyn ControlRenderer>,
         pub(crate) extensions: PreparedExtensions,
     }
 
@@ -3339,7 +3407,7 @@ pub mod render {
                 && self.input_id == other.input_id
                 && self.name == other.name
                 && self.kind == other.kind
-                && same_renderer(&self.renderer, &other.renderer)
+                && Arc::ptr_eq(&self.renderer, &other.renderer)
                 && self.extensions == other.extensions
         }
     }
@@ -3388,11 +3456,6 @@ pub mod render {
                 Self::Choice => "choice",
                 Self::Constant => "constant",
             }
-        }
-
-        /// Whether the control edits free text, the kinds [`crate::edit::use_text_edit`] serves.
-        pub(crate) fn is_text(self) -> bool {
-            matches!(self, Self::String | Self::Number | Self::Integer)
         }
 
         pub(crate) fn input_mode(self) -> &'static str {
@@ -3465,6 +3528,14 @@ pub mod render {
         UnsupportedCollectionWidget(WidgetSymbol),
         /// More than one renderer won semantic matching at the highest priority.
         AmbiguousMatcher,
+        /// No registered exact widget applied and no matcher accepted a control definition.
+        ///
+        /// Reachable only through a registry that does not include the built-in renderer, such
+        /// as one created by [`ControlRegistry::empty`].
+        NoMatchingRenderer {
+            /// Definition node of the control no renderer accepted.
+            definition_node: DefinitionNodeId,
+        },
         /// No handler was registered for an authored required extension namespace.
         MissingRequiredExtension(ExtensionNamespace),
         /// More than one handler was registered for an occurring namespace.
@@ -3521,10 +3592,13 @@ pub mod edit {
         Callback, Memo, ReadSignal, ReadableExt, Signal, WritableExt, use_callback, use_effect,
         use_hook, use_memo, use_signal,
     };
+    use schemaform::form::AllowedOperations;
     use serde_json::Value;
 
     use crate::{
-        handle::{ControlActions, FormHandle, HandleError, NodeProjection, NodeReader},
+        handle::{
+            ChoiceIdentity, ControlActions, FormHandle, HandleError, NodeProjection, NodeReader,
+        },
         render::ControlRenderContext,
     };
 
@@ -3652,10 +3726,7 @@ pub mod edit {
             use_memo(move || canonical_text_of(reader.read()))
         };
         let target = Rc::new(TextEditTarget {
-            reader,
-            actions: context.actions().clone(),
-            error_route: context.error_route().clone(),
-            element_id: context.presentation().element_id.clone(),
+            node: EditTarget::new(context),
             composition,
             canonical,
         });
@@ -3700,7 +3771,7 @@ pub mod edit {
         };
         let blur = use_callback(move |()| {
             target.finish_composition();
-            crate::report_operation(&target.error_route, target.actions.blur());
+            target.node.blur();
         });
 
         TextEdit {
@@ -3713,12 +3784,58 @@ pub mod edit {
         }
     }
 
-    /// The node one [`use_text_edit`] call edits, with the state its callbacks share.
-    struct TextEditTarget {
+    /// What every edit hook shares about the control it edits: the node, its approved actions,
+    /// the route to the host's `on_error`, and the widget the hook resynchronises.
+    struct EditTarget {
         reader: NodeReader,
         actions: ControlActions,
         error_route: Option<crate::OperationErrorHandler>,
         element_id: String,
+    }
+
+    impl EditTarget {
+        fn new(context: &ControlRenderContext) -> Self {
+            Self {
+                reader: context.node().clone(),
+                actions: context.actions().clone(),
+                error_route: context.error_route().clone(),
+                element_id: context.presentation().element_id.clone(),
+            }
+        }
+
+        /// Reads the node without subscribing, for event handlers.
+        fn read_untracked(&self) -> Result<Option<NodeProjection>, HandleError> {
+            self.reader.read_untracked()
+        }
+
+        /// Routes a failed operation to the host and reports whether it succeeded.
+        fn report<T>(&self, result: Result<T, HandleError>) -> bool {
+            crate::report_operation(&self.error_route, result)
+        }
+
+        /// Marks the control touched.
+        fn blur(&self) {
+            self.report(self.actions.blur());
+        }
+
+        /// Writes a concrete value the way the built-ins do: replacing when the core allows
+        /// replacement right now (incompatible data, or a write-only control), otherwise setting.
+        fn set_or_replace(
+            &self,
+            value: Value,
+            operations: Option<AllowedOperations>,
+        ) -> Result<schemaform::Transition, HandleError> {
+            if operations.is_some_and(|operations| operations.can_replace_value()) {
+                self.actions.replace_value(value)
+            } else {
+                self.actions.set_value(value)
+            }
+        }
+    }
+
+    /// The node one [`use_text_edit`] call edits, with the state its callbacks share.
+    struct TextEditTarget {
+        node: EditTarget,
         composition: Signal<Option<Composition>>,
         /// Canonical display text tracked through the node; `None` while the node is unreadable.
         canonical: Memo<Option<String>>,
@@ -3726,7 +3843,7 @@ pub mod edit {
 
     impl TextEditTarget {
         fn handle(&self) -> &FormHandle {
-            self.reader.handle()
+            self.node.reader.handle()
         }
 
         /// The current lifecycle, read without subscribing, for event handlers.
@@ -3750,13 +3867,13 @@ pub mod edit {
         /// text when the form cannot be read right now, for example while a host transaction
         /// holds the borrow that also rejected the write.
         fn canonical_text(&self) -> String {
-            canonical_text_of(self.reader.read_untracked())
+            canonical_text_of(self.node.read_untracked())
                 .or_else(|| self.canonical.peek().clone())
                 .unwrap_or_default()
         }
 
         fn resynchronize(&self) {
-            crate::resynchronize_control_value(&self.element_id, &self.canonical_text());
+            crate::resynchronize_control_value(&self.node.element_id, &self.canonical_text());
         }
 
         /// Buffers `text` while composing; otherwise applies it through the core and restores
@@ -3777,7 +3894,7 @@ pub mod edit {
         }
 
         fn apply_text(&self, text: &str) {
-            if !crate::report_operation(&self.error_route, self.actions.input_text(text)) {
+            if !self.node.report(self.node.actions.input_text(text)) {
                 self.resynchronize();
             }
         }
@@ -3810,6 +3927,494 @@ pub mod edit {
         read.ok()
             .flatten()
             .map(|projection| display_text(&projection))
+    }
+
+    /// Headless editing behaviour for one boolean control.
+    ///
+    /// Obtained from [`use_boolean_edit`]. The callbacks keep their identity across renders and
+    /// `checked` is a read signal, so a widget that receives this value as a prop stays wired to
+    /// the live control without re-rendering per edit.
+    ///
+    /// Two values compare equal when they come from the same hook call site; `checked`'s current
+    /// value is not compared. The struct is non-exhaustive so later releases can add fields
+    /// without breaking renderers; it is only ever constructed by the hook.
+    #[derive(Clone, Copy, PartialEq)]
+    #[non_exhaustive]
+    pub struct BooleanEdit {
+        /// The tri-state the widget should display right now.
+        ///
+        /// `Some(true)` or `Some(false)` while the node's current data is a JSON boolean; `None`
+        /// while it is null, missing, or incompatible, and always for a write-only control, whose
+        /// value is never echoed. It is derived through a memo that subscribes to the node, so
+        /// the first render after a transition already sees the new state.
+        pub checked: ReadSignal<Option<bool>>,
+        /// Applies the widget's new state.
+        ///
+        /// `None` sets the value to JSON null through [`ControlActions::set_null`]. `Some` reads
+        /// the operations the core allows at event time and replaces the value through
+        /// [`ControlActions::replace_value`] when replacement is allowed (incompatible data, or a
+        /// write-only control), otherwise sets it through [`ControlActions::set_value`]. A
+        /// failure is reported to `SchemaForm::on_error` and the widget carrying the node's
+        /// element id is resynchronised to `checked`; a write-only control is resynchronised
+        /// after every call so the widget never shows the value it just wrote. Resynchronisation
+        /// sets a checkbox's `checked` property, or a `select`'s `value` to `"true"`, `"false"`,
+        /// or `""` for `None`.
+        pub set: Callback<Option<bool>>,
+        /// Marks the control touched through [`ControlActions::blur`].
+        pub blur: Callback<()>,
+    }
+
+    impl fmt::Debug for BooleanEdit {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            // The signal is owned by the component that called the hook; a handle that outlives
+            // it must still be printable.
+            let checked = self.checked.try_peek().ok().map(|checked| *checked);
+            formatter
+                .debug_struct("BooleanEdit")
+                .field("checked", &checked)
+                .finish_non_exhaustive()
+        }
+    }
+
+    /// What a boolean widget needs from one node read: the tri-state to show and the operations
+    /// the core allows.
+    #[derive(Clone, Copy, PartialEq)]
+    struct BooleanState {
+        checked: Option<bool>,
+        operations: AllowedOperations,
+        write_only: bool,
+    }
+
+    /// Owns the built-in boolean-editing behaviour for the control behind `context`.
+    ///
+    /// This is a Dioxus hook: call it unconditionally, in a stable order, inside the renderer's
+    /// own child component. [`render::ControlRenderer::render`](crate::render::ControlRenderer)
+    /// itself is not a hook-safe call site.
+    ///
+    /// The returned [`BooleanEdit`] reproduces the built-in checkbox and write-only replacement
+    /// select exactly: `set` chooses between set null, set value, and replace value from the
+    /// operations the core allows when the event fires, reports a rejected write to
+    /// `SchemaForm::on_error`, and restores the widget to the node's state.
+    ///
+    /// ```rust,no_run
+    /// use dioxus::prelude::*;
+    /// use schemaform_dioxus::{ControlRenderContext, ControlRenderer, use_boolean_edit};
+    ///
+    /// struct CheckboxRenderer;
+    ///
+    /// impl ControlRenderer for CheckboxRenderer {
+    ///     fn render(&self, context: ControlRenderContext) -> Element {
+    ///         rsx! { Checkbox { context } }
+    ///     }
+    /// }
+    ///
+    /// #[component]
+    /// fn Checkbox(context: ControlRenderContext) -> Element {
+    ///     let edit = use_boolean_edit(&context);
+    ///     let presentation = context.presentation();
+    ///     let control = context.control();
+    ///     rsx! {
+    ///         input {
+    ///             id: presentation.element_id.clone(),
+    ///             name: control.name.clone(),
+    ///             r#type: "checkbox",
+    ///             checked: edit.checked.read().unwrap_or(false),
+    ///             disabled: control.disabled,
+    ///             "aria-required": control.required,
+    ///             "aria-invalid": presentation.invalid,
+    ///             "aria-describedby": presentation.described_by(),
+    ///             oninput: move |event| edit.set.call(Some(event.checked())),
+    ///             onblur: move |_| edit.blur.call(()),
+    ///         }
+    ///         label { r#for: presentation.element_id.clone(), "{presentation.label}" }
+    ///         {presentation.present_help()}
+    ///         {presentation.present_findings()}
+    ///     }
+    /// }
+    /// ```
+    pub fn use_boolean_edit(context: &ControlRenderContext) -> BooleanEdit {
+        // The state tracks the node through this memo, so the memo rather than the calling
+        // component subscribes to it. `None` means the node cannot be read right now.
+        let state = {
+            let reader = context.node().clone();
+            use_memo(move || boolean_state_of(reader.read()))
+        };
+        let checked_memo = use_memo(move || state.read().as_ref().and_then(|state| state.checked));
+        let checked = use_hook(|| ReadSignal::new(checked_memo));
+        let target = Rc::new(BooleanEditTarget {
+            node: EditTarget::new(context),
+            state,
+        });
+
+        let set = {
+            let target = target.clone();
+            use_callback(move |value: Option<bool>| target.set(value))
+        };
+        let blur = use_callback(move |()| target.node.blur());
+
+        BooleanEdit { checked, set, blur }
+    }
+
+    /// The node one [`use_boolean_edit`] call edits, with the state its callbacks share.
+    struct BooleanEditTarget {
+        node: EditTarget,
+        /// State tracked through the node; `None` while the node is unreadable.
+        state: Memo<Option<BooleanState>>,
+    }
+
+    impl BooleanEditTarget {
+        /// The state to decide and resynchronise against: a fresh read, or the last rendered
+        /// state when the form cannot be read right now, for example while a host transaction
+        /// holds the borrow that also rejects the write.
+        fn current_state(&self) -> Option<BooleanState> {
+            boolean_state_of(self.node.read_untracked()).or_else(|| *self.state.peek())
+        }
+
+        fn set(&self, value: Option<bool>) {
+            let state = self.current_state();
+            let result = match value {
+                None => self.node.actions.set_null(),
+                Some(value) => self
+                    .node
+                    .set_or_replace(Value::Bool(value), state.map(|state| state.operations)),
+            };
+            let succeeded = self.node.report(result);
+            if !succeeded || state.is_some_and(|state| state.write_only) {
+                crate::resynchronize_boolean(
+                    &self.node.element_id,
+                    state.and_then(|state| state.checked),
+                );
+            }
+        }
+    }
+
+    /// The boolean state of a node read, or `None` when the node could not be read.
+    fn boolean_state_of(read: Result<Option<NodeProjection>, HandleError>) -> Option<BooleanState> {
+        read.ok().flatten().map(|projection| BooleanState {
+            checked: (!projection.write_only)
+                .then(|| projection.current_data.as_ref().and_then(Value::as_bool))
+                .flatten(),
+            operations: projection.allowed_operations,
+            write_only: projection.write_only,
+        })
+    }
+
+    /// Headless editing behaviour for one choice control.
+    ///
+    /// Obtained from [`use_choice_edit`]. The callbacks keep their identity across renders and
+    /// `selected` is a read signal, so a widget that receives them as props stays wired to the
+    /// live control; `options` is a plain list the widget renders.
+    ///
+    /// Two values compare equal when they come from the same hook call site and their `options`
+    /// are equal; `selected`'s current value is not compared. The struct is non-exhaustive so
+    /// later releases can add fields without breaking renderers; it is only ever constructed by
+    /// the hook.
+    #[derive(Clone, PartialEq)]
+    #[non_exhaustive]
+    pub struct ChoiceEdit {
+        /// The option the widget should show as selected right now.
+        ///
+        /// `None` while the node's current data matches no option (missing or incompatible
+        /// data) and always for a write-only control, whose value is never echoed. It is derived
+        /// through a memo that subscribes to the node, so the first render after a transition
+        /// already sees the new selection.
+        pub selected: ReadSignal<Option<ChoiceIdentity>>,
+        /// The selectable options in the core's compiled order (the null option first), with
+        /// localized labels.
+        pub options: Vec<ChoiceOption>,
+        /// Applies the widget's selection.
+        ///
+        /// Selecting the null option sets the value to JSON null through
+        /// [`ControlActions::set_null`]. Selecting another option reads the operations the core
+        /// allows at event time and replaces the value through [`ControlActions::replace_value`]
+        /// when replacement is allowed (incompatible data, or a write-only control), otherwise
+        /// sets it through [`ControlActions::set_value`]. Reselecting the current option, `None`,
+        /// and an identity that is not among `options` run no core operation. A failure is
+        /// reported to `SchemaForm::on_error`. Whenever no core operation changed the value, and
+        /// after every call for a write-only control, the widget carrying the node's element id
+        /// has its `value` property restored to the selected identity (or `""`), so a native
+        /// `select` stays in step with the node.
+        pub select: Callback<Option<ChoiceIdentity>>,
+        /// Marks the control touched through [`ControlActions::blur`].
+        pub blur: Callback<()>,
+    }
+
+    impl fmt::Debug for ChoiceEdit {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            // The signal is owned by the component that called the hook; a handle that outlives
+            // it must still be printable.
+            let selected = self
+                .selected
+                .try_peek()
+                .ok()
+                .map(|selected| selected.clone());
+            formatter
+                .debug_struct("ChoiceEdit")
+                .field("selected", &selected)
+                .field("options", &self.options)
+                .finish_non_exhaustive()
+        }
+    }
+
+    /// One selectable option of a choice control, as a widget should present it.
+    ///
+    /// Options are compiled from the definition, so their identities and order are fixed for the
+    /// lifetime of the bound form; `label` follows the configured localizer and `disabled`
+    /// follows the operations the core allows right now. The struct is non-exhaustive and only
+    /// ever constructed by [`use_choice_edit`].
+    #[derive(Debug, Clone, PartialEq)]
+    #[non_exhaustive]
+    pub struct ChoiceOption {
+        /// Opaque identity to hand back to [`ChoiceEdit::select`]; its
+        /// [`ChoiceIdentity::as_str`] form is a safe DOM value.
+        pub identity: ChoiceIdentity,
+        /// Localized plain-text label.
+        pub label: String,
+        /// Whether this option selects JSON null.
+        pub is_null: bool,
+        /// Whether selecting this option right now would be rejected by the core: the null
+        /// option while the core does not allow set null, another option while it allows neither
+        /// set value nor replace value. The currently selected option is never disabled.
+        pub disabled: bool,
+    }
+
+    /// What a choice widget needs from one node read.
+    #[derive(Clone, PartialEq)]
+    struct ChoiceState {
+        selected: Option<ChoiceIdentity>,
+        entries: Vec<ChoiceEntry>,
+        operations: AllowedOperations,
+        write_only: bool,
+    }
+
+    /// One option as the widget presents it, with the canonical value selecting it writes.
+    #[derive(Clone, PartialEq)]
+    struct ChoiceEntry {
+        option: ChoiceOption,
+        value: Value,
+    }
+
+    impl ChoiceState {
+        fn options(&self) -> Vec<ChoiceOption> {
+            self.entries
+                .iter()
+                .map(|entry| entry.option.clone())
+                .collect()
+        }
+    }
+
+    /// Owns the built-in choice-editing behaviour for the control behind `context`.
+    ///
+    /// This is a Dioxus hook: call it unconditionally, in a stable order, inside the renderer's
+    /// own child component. [`render::ControlRenderer::render`](crate::render::ControlRenderer)
+    /// itself is not a hook-safe call site.
+    ///
+    /// The returned [`ChoiceEdit`] reproduces the built-in select and its write-only replacement
+    /// variant exactly: `select` maps an opaque option identity to set null, set value, or replace
+    /// value from the operations the core allows when the event fires, treats reselection as a
+    /// no-op, reports a rejected write to `SchemaForm::on_error`, and restores the widget to the
+    /// node's selection. The same handles drive a radio group or a combobox.
+    ///
+    /// ```rust,no_run
+    /// use dioxus::prelude::*;
+    /// use schemaform_dioxus::{ControlRenderContext, ControlRenderer, use_choice_edit};
+    ///
+    /// struct SelectRenderer;
+    ///
+    /// impl ControlRenderer for SelectRenderer {
+    ///     fn render(&self, context: ControlRenderContext) -> Element {
+    ///         rsx! { Select { context } }
+    ///     }
+    /// }
+    ///
+    /// #[component]
+    /// fn Select(context: ControlRenderContext) -> Element {
+    ///     let edit = use_choice_edit(&context);
+    ///     let presentation = context.presentation();
+    ///     let control = context.control();
+    ///     let selected = edit.selected.read().clone();
+    ///     let options = edit.options.clone();
+    ///     let lookup = edit.options.clone();
+    ///     rsx! {
+    ///         label { r#for: presentation.element_id.clone(), "{presentation.label}" }
+    ///         select {
+    ///             id: presentation.element_id.clone(),
+    ///             name: control.name.clone(),
+    ///             value: selected.as_ref().map(|identity| identity.as_str().to_owned()),
+    ///             disabled: control.disabled,
+    ///             required: control.required,
+    ///             "aria-invalid": presentation.invalid,
+    ///             "aria-describedby": presentation.described_by(),
+    ///             onchange: move |event| {
+    ///                 let identity = lookup
+    ///                     .iter()
+    ///                     .find(|option| option.identity.as_str() == event.value())
+    ///                     .map(|option| option.identity.clone());
+    ///                 edit.select.call(identity);
+    ///             },
+    ///             onblur: move |_| edit.blur.call(()),
+    ///             for option in options {
+    ///                 option {
+    ///                     value: option.identity.as_str().to_owned(),
+    ///                     selected: Some(&option.identity) == selected.as_ref(),
+    ///                     disabled: option.disabled,
+    ///                     "{option.label}"
+    ///                 }
+    ///             }
+    ///         }
+    ///         {presentation.present_help()}
+    ///         {presentation.present_findings()}
+    ///     }
+    /// }
+    /// ```
+    pub fn use_choice_edit(context: &ControlRenderContext) -> ChoiceEdit {
+        // The state tracks the node and the localizer through this memo, so the memo rather
+        // than the calling component subscribes to them. `None` means the node cannot be read
+        // right now.
+        let state = {
+            let reader = context.node().clone();
+            let form = context.presentation().form().clone();
+            use_memo(move || {
+                choice_state_of(reader.read(), |label| {
+                    crate::localize_text(&form, None, label)
+                })
+            })
+        };
+        let selected_memo = use_memo(move || {
+            state
+                .read()
+                .as_ref()
+                .and_then(|state| state.selected.clone())
+        });
+        let selected = use_hook(|| ReadSignal::new(selected_memo));
+        // The calling component subscribes to the options alone, so it re-renders when a label
+        // or an option's availability changes, not on every node change.
+        let options = use_memo(move || {
+            state
+                .read()
+                .as_ref()
+                .map(ChoiceState::options)
+                .unwrap_or_default()
+        })
+        .read()
+        .clone();
+        let target = Rc::new(ChoiceEditTarget {
+            node: EditTarget::new(context),
+            state,
+        });
+
+        let select = {
+            let target = target.clone();
+            use_callback(move |identity: Option<ChoiceIdentity>| target.select(identity))
+        };
+        let blur = use_callback(move |()| target.node.blur());
+
+        ChoiceEdit {
+            selected,
+            options,
+            select,
+            blur,
+        }
+    }
+
+    /// The node one [`use_choice_edit`] call edits, with the state its callbacks share.
+    struct ChoiceEditTarget {
+        node: EditTarget,
+        /// State tracked through the node; `None` while the node is unreadable.
+        state: Memo<Option<ChoiceState>>,
+    }
+
+    impl ChoiceEditTarget {
+        /// The state to decide and resynchronise against: a fresh read, or the last rendered
+        /// state when the form cannot be read right now, for example while a host transaction
+        /// holds the borrow that also rejects the write. Decisions never read labels, so a fresh
+        /// read leaves them unlocalized.
+        fn current_state(&self) -> Option<ChoiceState> {
+            choice_state_of(self.node.read_untracked(), str::to_owned)
+                .or_else(|| self.state.peek().clone())
+        }
+
+        fn select(&self, identity: Option<ChoiceIdentity>) {
+            let Some(state) = self.current_state() else {
+                return;
+            };
+            let Some(entry) = identity.and_then(|identity| {
+                state
+                    .entries
+                    .iter()
+                    .find(|entry| entry.option.identity == identity)
+            }) else {
+                self.resynchronize(&state);
+                return;
+            };
+            if !state.write_only && state.selected.as_ref() == Some(&entry.option.identity) {
+                self.resynchronize(&state);
+                return;
+            }
+            let result = if entry.option.is_null {
+                self.node.actions.set_null()
+            } else {
+                self.node
+                    .set_or_replace(entry.value.clone(), Some(state.operations))
+            };
+            let succeeded = self.node.report(result);
+            if state.write_only || !succeeded {
+                self.resynchronize(&state);
+            }
+        }
+
+        fn resynchronize(&self, state: &ChoiceState) {
+            let selected = state.selected.as_ref().map_or("", ChoiceIdentity::as_str);
+            crate::resynchronize_control_value(&self.node.element_id, selected);
+        }
+    }
+
+    /// The choice state of a node read, with labels passed through `localize`, or `None` when the
+    /// node could not be read.
+    fn choice_state_of(
+        read: Result<Option<NodeProjection>, HandleError>,
+        mut localize: impl FnMut(&str) -> String,
+    ) -> Option<ChoiceState> {
+        let projection = read.ok().flatten()?;
+        let operations = projection.allowed_operations;
+        let write_only = projection.write_only;
+        let selected = (!write_only)
+            .then(|| {
+                projection
+                    .choice_options
+                    .iter()
+                    .find(|option| option.selected)
+                    .map(|option| option.identity.clone())
+            })
+            .flatten();
+        let entries = projection
+            .choice_options
+            .iter()
+            .map(|option| {
+                let is_null = option.value.is_null();
+                let current = !write_only && option.selected;
+                let allowed = if is_null {
+                    operations.can_set_null()
+                } else {
+                    operations.can_set_value() || operations.can_replace_value()
+                };
+                ChoiceEntry {
+                    option: ChoiceOption {
+                        identity: option.identity.clone(),
+                        label: localize(&option.label),
+                        is_null,
+                        disabled: !current && !allowed,
+                    },
+                    value: option.value.clone(),
+                }
+            })
+            .collect();
+        Some(ChoiceState {
+            selected,
+            entries,
+            operations,
+            write_only,
+        })
     }
 
     /// Display text for a projected text control, as the built-in control shows it.
@@ -4238,7 +4843,7 @@ fn BoundNode(props: BoundNodeProps) -> Element {
             child
         }
         render::BoundNode::Control(control) => rsx! {
-            BuiltinControl {
+            ControlHost {
                 form: props.form,
                 control,
             }
@@ -6260,7 +6865,7 @@ fn validation_descriptors_from_finding(
 }
 
 #[derive(Props, Clone, PartialEq)]
-struct BuiltinControlProps {
+struct ControlHostProps {
     form: render::BoundForm,
     control: render::BoundControl,
 }
@@ -6504,8 +7109,14 @@ fn scalar_presence_actions(presence: &[render::Affordance]) -> Element {
     }
 }
 
+/// Hosts one bound control: computes its render context and hands it to the preflight-selected
+/// renderer.
+///
+/// This is the single control render path. The built-in renderer is one possible selection, so
+/// there is no built-in/custom fork here. Renderer-entry observation lives in this host so the
+/// reactivity gate sees exactly one entry per edit regardless of how the renderer is composed.
 #[allow(non_snake_case)]
-fn BuiltinControl(props: BuiltinControlProps) -> Element {
+fn ControlHost(props: ControlHostProps) -> Element {
     #[cfg(schemaform_test_validation_faults)]
     observe_renderer_entry(
         &props.form,
@@ -6552,358 +7163,9 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
         presentation,
         facets,
         props.control.extensions.clone(),
-        operation_errors.clone(),
+        operation_errors,
     );
-    if let Some(renderer) = &props.control.renderer {
-        return renderer.render(context);
-    }
-    if props.control.kind.is_text() {
-        return rsx! {
-            BuiltinTextControl { context }
-        };
-    }
-
-    let reader = context.node().clone();
-    let actions = context.actions().clone();
-    let presentation = context.presentation();
-    let facets = context.control();
-    let invalid = presentation.invalid;
-    let described_by = presentation.described_by();
-    let supplements = presentation.present_help();
-    let presented_findings = presentation.present_findings();
-    let required = facets.required;
-    let disabled = facets.disabled;
-    let value_state = projection.value_state;
-    let value_state_attribute = value_state_attribute(value_state);
-    let presence_actions = scalar_presence_actions(&presentation.presence);
-    let incompatible_value = incompatible_value(&projection);
-    let display_value = edit::display_text(&projection);
-    let replacement_label = facets
-        .write_only_replacement
-        .as_ref()
-        .map(|replacement| replacement.label.clone());
-    let accessible_label = (!projection.label_visible).then(|| {
-        replacement_label
-            .clone()
-            .unwrap_or_else(|| projection.label.clone())
-    });
-    if projection.read_only {
-        return rsx! {
-            div {
-                class: "schemaform-control",
-                "data-schemaform-control": props.control.kind.data_attribute(),
-                if projection.label_visible {
-                    label {
-                        r#for: props.control.input_id.clone(),
-                        "{projection.label}"
-                    }
-                }
-                output {
-                    id: props.control.input_id,
-                    name: props.control.name,
-                    tabindex: "-1",
-                    "data-read-only": "",
-                    "aria-invalid": invalid,
-                    "aria-label": accessible_label.clone(),
-                    "aria-describedby": described_by,
-                    "data-value-state": value_state_attribute,
-                    "{display_value}"
-                }
-                {supplements}
-                {presented_findings}
-            }
-        };
-    }
-    if let (
-        render::ControlKind::Boolean,
-        Some(replacement),
-        Some(render::BooleanLabels {
-            false_label,
-            true_label,
-            ..
-        }),
-    ) = (
-        props.control.kind,
-        facets.write_only_replacement.clone(),
-        facets.boolean_labels.clone(),
-    ) {
-        let replacement_actions = actions.clone();
-        let replacement_operations = projection.allowed_operations;
-        let replacement_errors = operation_errors.clone();
-        let replacement_control_id = props.control.input_id.clone();
-        let blur_errors = operation_errors.clone();
-        return rsx! {
-            div {
-                class: "schemaform-control",
-                "data-schemaform-control": props.control.kind.data_attribute(),
-                if projection.label_visible {
-                    label {
-                        r#for: props.control.input_id.clone(),
-                        "{replacement.label}"
-                    }
-                }
-                select {
-                    id: props.control.input_id,
-                    name: props.control.name,
-                    value: "",
-                    "data-write-only-replacement": "",
-                    required,
-                    "aria-invalid": invalid,
-                    "aria-label": accessible_label.clone(),
-                    "aria-describedby": described_by,
-                    "data-value-state": value_state_attribute,
-                    onchange: move |event| {
-                        let value = match event.value().as_str() {
-                            "true" => Some(Value::Bool(true)),
-                            "false" => Some(Value::Bool(false)),
-                            _ => None,
-                        };
-                        if let Some(value) = value {
-                            let result = if replacement_operations.can_replace_value() {
-                                replacement_actions.replace_value(value)
-                            } else {
-                                replacement_actions.set_value(value)
-                            };
-                            report_operation(&replacement_errors, result);
-                            resynchronize_control_value(&replacement_control_id, "");
-                        }
-                    },
-                    onblur: move |_| {
-                        report_operation(&blur_errors, actions.blur());
-                    },
-                    option { value: "", disabled: true, selected: true, "{replacement.placeholder}" }
-                    option { value: "false", "{false_label}" }
-                    option { value: "true", "{true_label}" }
-                }
-                {supplements}
-                {presence_actions}
-                {presented_findings}
-            }
-        };
-    }
-    match props.control.kind {
-        // Text kinds returned above; keep the arm total without a panic in a render path.
-        render::ControlKind::String
-        | render::ControlKind::Number
-        | render::ControlKind::Integer => rsx! {
-            BuiltinTextControl { context: context.clone() }
-        },
-        render::ControlKind::Boolean => {
-            let input_actions = actions.clone();
-            let checkbox_operations = projection.allowed_operations;
-            let checked = projection
-                .current_data
-                .as_ref()
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            let input_errors = operation_errors.clone();
-            let blur_errors = operation_errors.clone();
-            let input_control_id = props.control.input_id.clone();
-            rsx! {
-                div {
-                    class: "schemaform-control",
-                    "data-schemaform-control": props.control.kind.data_attribute(),
-                    input {
-                        id: props.control.input_id.clone(),
-                        name: props.control.name,
-                        r#type: "checkbox",
-                        checked,
-                        disabled,
-                        "aria-required": required,
-                        "aria-invalid": invalid,
-                        "aria-label": accessible_label.clone(),
-                        "aria-describedby": described_by,
-                        "data-value-state": value_state_attribute,
-                        oninput: move |event| {
-                            let value = Value::Bool(event.checked());
-                            let result = if checkbox_operations.can_replace_value() {
-                                input_actions.replace_value(value)
-                            } else {
-                                input_actions.set_value(value)
-                            };
-                            if !report_operation(&input_errors, result) {
-                                resynchronize_checkbox(&input_control_id, checked);
-                            }
-                        },
-                        onblur: move |_| {
-                            report_operation(&blur_errors, actions.blur());
-                        },
-                    }
-                    if projection.label_visible {
-                        label {
-                            r#for: props.control.input_id.clone(),
-                            "{projection.label}"
-                        }
-                    }
-                    {supplements}
-                    if let Some(incompatible_value) = incompatible_value {
-                        output { "data-incompatible-value": "", "{incompatible_value}" }
-                    }
-                    {presence_actions}
-                    {presented_findings}
-                }
-            }
-        }
-        render::ControlKind::Choice => {
-            let select_actions = actions.clone();
-            let select_reader = reader.clone();
-            let write_only = projection.write_only;
-            let selected = (!projection.write_only)
-                .then(|| {
-                    projection
-                        .choice_options
-                        .iter()
-                        .find(|option| option.selected)
-                        .map(|option| option.identity.as_str().to_owned())
-                })
-                .flatten()
-                .unwrap_or_default();
-            let placeholder_selected = selected.is_empty();
-            let placeholder_hidden = !write_only
-                && !matches!(
-                    value_state,
-                    Some(schemaform::form::ScalarValueState::Incompatible)
-                );
-            let placeholder_label = match &facets.write_only_replacement {
-                Some(replacement) => replacement.placeholder.clone(),
-                None if placeholder_hidden => String::new(),
-                None => display_value,
-            };
-            let select_options = projection.choice_options.clone();
-            let select_operations = projection.allowed_operations;
-            let select_errors = operation_errors.clone();
-            let blur_errors = operation_errors.clone();
-            let select_control_id = props.control.input_id.clone();
-            let canonical_selected = selected.clone();
-            rsx! {
-                div {
-                    class: "schemaform-control",
-                    "data-schemaform-control": props.control.kind.data_attribute(),
-                    if projection.label_visible {
-                        label {
-                            r#for: props.control.input_id.clone(),
-                            if projection.write_only {
-                                "{replacement_label.clone().unwrap_or_default()}"
-                            } else {
-                                "{projection.label}"
-                            }
-                        }
-                    }
-                    select {
-                        id: props.control.input_id,
-                        name: props.control.name,
-                        value: selected,
-                        "data-write-only-replacement": projection.write_only.then_some(""),
-                        disabled,
-                        required,
-                        "aria-invalid": invalid,
-                        "aria-label": accessible_label.clone(),
-                        "aria-describedby": described_by,
-                        "data-value-state": value_state_attribute,
-                        onchange: move |event| {
-                            let current = select_reader.read_untracked().ok().flatten();
-                            let current_selected = if write_only {
-                                String::new()
-                            } else {
-                                current
-                                    .as_ref()
-                                    .and_then(|projection| {
-                                        projection
-                                            .choice_options
-                                            .iter()
-                                            .find(|option| option.selected)
-                                    })
-                                    .map(|option| option.identity.as_str().to_owned())
-                                    .unwrap_or_else(|| canonical_selected.clone())
-                            };
-                            if let Some(option) = select_options
-                                .iter()
-                                .find(|option| option.identity.as_str() == event.value())
-                            {
-                                if !write_only && option.identity.as_str() == current_selected {
-                                    resynchronize_control_value(
-                                        &select_control_id,
-                                        &current_selected,
-                                    );
-                                    return;
-                                }
-                                let current_operations = current
-                                    .as_ref()
-                                    .map(|projection| projection.allowed_operations)
-                                    .unwrap_or(select_operations);
-                                let result = if option.value.is_null() {
-                                    select_actions.set_null()
-                                } else if current_operations.can_replace_value() {
-                                    select_actions.replace_value(option.value.clone())
-                                } else {
-                                    select_actions.set_value(option.value.clone())
-                                };
-                                let succeeded = report_operation(&select_errors, result);
-                                if write_only || !succeeded {
-                                    resynchronize_control_value(
-                                        &select_control_id,
-                                        &current_selected,
-                                    );
-                                }
-                            }
-                        },
-                        onblur: move |_| {
-                            report_operation(&blur_errors, actions.blur());
-                        },
-                        option {
-                            value: "",
-                            disabled: true,
-                            hidden: placeholder_hidden,
-                            selected: placeholder_selected,
-                            "{placeholder_label}"
-                        }
-                        for option in projection.choice_options {
-                            option {
-                                value: option.identity.as_str().to_owned(),
-                                selected: !write_only && option.selected,
-                                "{option.label}"
-                            }
-                        }
-                    }
-                    {supplements}
-                    {presence_actions}
-                    {presented_findings}
-                }
-            }
-        }
-        render::ControlKind::Constant => {
-            let write_only_status = facets.write_only_status.clone();
-            rsx! {
-                div {
-                    class: "schemaform-control",
-                    "data-schemaform-control": props.control.kind.data_attribute(),
-                    if projection.label_visible {
-                        label {
-                            r#for: props.control.input_id.clone(),
-                            "{projection.label}"
-                        }
-                    }
-                    output {
-                        id: props.control.input_id,
-                        name: props.control.name,
-                        tabindex: "-1",
-                        "aria-invalid": invalid,
-                        "aria-label": accessible_label,
-                        "aria-describedby": described_by,
-                        "data-value-state": value_state_attribute,
-                        if let Some(status) = write_only_status {
-                            "{status}"
-                        } else {
-                            "{display_value}"
-                        }
-                    }
-                    {supplements}
-                    {presence_actions}
-                    {presented_findings}
-                }
-            }
-        }
-    }
+    props.control.renderer.render(context)
 }
 
 /// The value shown beside a control that cannot edit its current data, as the built-in shows it.
@@ -6929,116 +7191,384 @@ fn incompatible_value(projection: &handle::NodeProjection) -> Option<String> {
 }
 
 #[derive(Props, Clone, PartialEq)]
-struct BuiltinTextControlProps {
+struct BuiltinControlProps {
     context: render::ControlRenderContext,
+}
+
+/// The chrome every built-in control derives from its render context.
+///
+/// Each built-in child component reads the node like any renderer would: whether the node is
+/// read-only (rendered as `output`) rather than merely rejecting edits right now, and the
+/// incompatible value to show beside an editable widget, are node state the facets fold together.
+struct BuiltinChrome {
+    element_id: String,
+    name: String,
+    kind: render::ControlKind,
+    label: String,
+    label_visible: bool,
+    invalid: bool,
+    described_by: Option<String>,
+    supplements: Element,
+    presented_findings: Element,
+    presence_actions: Element,
+    value_state_attribute: &'static str,
+    /// The write-only replacement label, shown in place of the label for editable write-only
+    /// widgets.
+    replacement_label: Option<String>,
+    /// The accessible name for a widget whose label is not rendered.
+    accessible_label: Option<String>,
+}
+
+impl BuiltinChrome {
+    fn new(context: &render::ControlRenderContext, projection: &handle::NodeProjection) -> Self {
+        let presentation = context.presentation();
+        let facets = context.control();
+        let replacement_label = facets
+            .write_only_replacement
+            .as_ref()
+            .map(|replacement| replacement.label.clone());
+        let accessible_label = (!presentation.label_visible).then(|| {
+            replacement_label
+                .clone()
+                .unwrap_or_else(|| presentation.label.clone())
+        });
+        Self {
+            element_id: presentation.element_id.clone(),
+            name: facets.name.clone(),
+            kind: facets.kind,
+            label: presentation.label.clone(),
+            label_visible: presentation.label_visible,
+            invalid: presentation.invalid,
+            described_by: presentation.described_by(),
+            supplements: presentation.present_help(),
+            presented_findings: presentation.present_findings(),
+            presence_actions: scalar_presence_actions(&presentation.presence),
+            value_state_attribute: value_state_attribute(projection.value_state),
+            replacement_label,
+            accessible_label,
+        }
+    }
+
+    /// The visible label text: the replacement label for editable write-only widgets.
+    fn widget_label(&self, write_only: bool) -> String {
+        if write_only {
+            self.replacement_label.clone().unwrap_or_default()
+        } else {
+            self.label.clone()
+        }
+    }
+
+    /// Renders the visible label for the primary element, or nothing while the label is hidden.
+    fn label(&self, text: String) -> Element {
+        let element_id = self.element_id.clone();
+        rsx! {
+            if self.label_visible {
+                label { r#for: element_id, "{text}" }
+            }
+        }
+    }
+
+    /// Renders a read-only node as noninteractive `output`, as every built-in kind does.
+    fn read_only_output(self, display_value: String) -> Element {
+        let label = self.label(self.label.clone());
+        rsx! {
+            div {
+                class: "schemaform-control",
+                "data-schemaform-control": self.kind.data_attribute(),
+                {label}
+                output {
+                    id: self.element_id,
+                    name: self.name,
+                    tabindex: "-1",
+                    "data-read-only": "",
+                    "aria-invalid": self.invalid,
+                    "aria-label": self.accessible_label,
+                    "aria-describedby": self.described_by,
+                    "data-value-state": self.value_state_attribute,
+                    "{display_value}"
+                }
+                {self.supplements}
+                {self.presented_findings}
+            }
+        }
+    }
 }
 
 /// The built-in string, number, and integer control.
 ///
 /// It is rendered from the public [`render::ControlRenderContext`] and [`edit::use_text_edit`]
 /// exactly as a custom renderer would be, so the hook is proven complete by the built-in running
-/// on it. The host [`BuiltinControl`] computes the context and records renderer entry; this child
-/// owns the widget.
+/// on it. The host [`ControlHost`] computes the context and records renderer entry; this child
+/// owns the widget. It displays `value` and therefore re-renders per keystroke anyway; the hook's
+/// stable handles matter to widgets that receive them as props.
 #[allow(non_snake_case)]
-fn BuiltinTextControl(props: BuiltinTextControlProps) -> Element {
+fn BuiltinTextControl(props: BuiltinControlProps) -> Element {
     let context = &props.context;
     let edit = use_text_edit(context);
-    // Whether the node is read-only (rendered as output) rather than merely rejecting text right
-    // now (rendered as a read-only input), and the incompatible value to show beside the input,
-    // are node state the facets fold together, so read the node like any renderer would. This
-    // component displays `value` and therefore re-renders per keystroke anyway; the hook's
-    // stable handles matter to widgets that receive them as props.
     let Some(projection) = context.node().read().ok().flatten() else {
         return rsx! {};
     };
-    let presentation = context.presentation();
-    let facets = context.control();
-    let element_id = presentation.element_id.clone();
-    let name = facets.name.clone();
-    let kind = facets.kind;
-    let label = presentation.label.clone();
-    let label_visible = presentation.label_visible;
-    let invalid = presentation.invalid;
-    let described_by = presentation.described_by();
-    let supplements = presentation.present_help();
-    let presented_findings = presentation.present_findings();
-    let value_state_attribute = value_state_attribute(projection.value_state);
+    let chrome = BuiltinChrome::new(context, &projection);
     let display_value = edit.value.cloned();
-    let replacement_label = facets
-        .write_only_replacement
-        .as_ref()
-        .map(|replacement| replacement.label.clone());
-    let accessible_label =
-        (!label_visible).then(|| replacement_label.clone().unwrap_or_else(|| label.clone()));
     if projection.read_only {
-        return rsx! {
-            div {
-                class: "schemaform-control",
-                "data-schemaform-control": kind.data_attribute(),
-                if label_visible {
-                    label {
-                        r#for: element_id.clone(),
-                        "{label}"
-                    }
-                }
-                output {
-                    id: element_id,
-                    name,
-                    tabindex: "-1",
-                    "data-read-only": "",
-                    "aria-invalid": invalid,
-                    "aria-label": accessible_label,
-                    "aria-describedby": described_by,
-                    "data-value-state": value_state_attribute,
-                    "{display_value}"
-                }
-                {supplements}
-                {presented_findings}
-            }
-        };
+        return chrome.read_only_output(display_value);
     }
+    let facets = context.control();
     let write_only = facets.write_only;
     let required = facets.required;
-    let presence_actions = scalar_presence_actions(&presentation.presence);
+    let label = chrome.label(chrome.widget_label(write_only));
     let incompatible_value = incompatible_value(&projection);
     rsx! {
         div {
             class: "schemaform-control",
-            "data-schemaform-control": kind.data_attribute(),
-            if label_visible {
-                label {
-                    r#for: element_id.clone(),
-                    if write_only {
-                        "{replacement_label.clone().unwrap_or_default()}"
-                    } else {
-                        "{label}"
-                    }
-                }
-            }
+            "data-schemaform-control": chrome.kind.data_attribute(),
+            {label}
             input {
-                id: element_id,
-                name,
+                id: chrome.element_id,
+                name: chrome.name,
                 r#type: if write_only { "password" } else { "text" },
-                inputmode: kind.input_mode(),
+                inputmode: chrome.kind.input_mode(),
                 value: display_value,
                 "data-write-only-replacement": write_only.then_some(""),
                 required,
-                "aria-invalid": invalid,
-                "aria-label": accessible_label,
-                "aria-describedby": described_by,
+                "aria-invalid": chrome.invalid,
+                "aria-label": chrome.accessible_label,
+                "aria-describedby": chrome.described_by,
                 readonly: edit.read_only,
-                "data-value-state": value_state_attribute,
+                "data-value-state": chrome.value_state_attribute,
                 oninput: move |event| edit.input.call(event.value()),
                 oncompositionstart: move |_| edit.composition_start.call(()),
                 oncompositionend: move |_| edit.composition_end.call(()),
                 onblur: move |_| edit.blur.call(()),
             }
-            {supplements}
+            {chrome.supplements}
             if let Some(incompatible_value) = incompatible_value {
                 output { "data-incompatible-value": "", "{incompatible_value}" }
             }
-            {presence_actions}
-            {presented_findings}
+            {chrome.presence_actions}
+            {chrome.presented_findings}
+        }
+    }
+}
+
+/// The built-in boolean control: a native checkbox, or a replacement select for a write-only
+/// boolean whose value must not be echoed.
+///
+/// Built on [`edit::use_boolean_edit`] and the public context, as a custom renderer would be.
+#[allow(non_snake_case)]
+fn BuiltinBooleanControl(props: BuiltinControlProps) -> Element {
+    let context = &props.context;
+    let edit = use_boolean_edit(context);
+    let Some(projection) = context.node().read().ok().flatten() else {
+        return rsx! {};
+    };
+    let chrome = BuiltinChrome::new(context, &projection);
+    if projection.read_only {
+        return chrome.read_only_output(edit::display_text(&projection));
+    }
+    let facets = context.control();
+    let required = facets.required;
+    let disabled = facets.disabled;
+    if let (Some(replacement), Some(labels)) = (
+        facets.write_only_replacement.clone(),
+        facets.boolean_labels.clone(),
+    ) {
+        let label = chrome.label(chrome.widget_label(true));
+        return rsx! {
+            div {
+                class: "schemaform-control",
+                "data-schemaform-control": chrome.kind.data_attribute(),
+                {label}
+                select {
+                    id: chrome.element_id,
+                    name: chrome.name,
+                    value: "",
+                    "data-write-only-replacement": "",
+                    required,
+                    "aria-invalid": chrome.invalid,
+                    "aria-label": chrome.accessible_label,
+                    "aria-describedby": chrome.described_by,
+                    "data-value-state": chrome.value_state_attribute,
+                    onchange: move |event| {
+                        // The placeholder is disabled, so only the two value options reach here;
+                        // the hook puts the select back on the placeholder after every write.
+                        let value = match event.value().as_str() {
+                            "true" => Some(true),
+                            "false" => Some(false),
+                            _ => None,
+                        };
+                        if let Some(value) = value {
+                            edit.set.call(Some(value));
+                        }
+                    },
+                    onblur: move |_| edit.blur.call(()),
+                    option { value: "", disabled: true, selected: true, "{replacement.placeholder}" }
+                    option { value: "false", "{labels.false_label}" }
+                    option { value: "true", "{labels.true_label}" }
+                }
+                {chrome.supplements}
+                {chrome.presence_actions}
+                {chrome.presented_findings}
+            }
+        };
+    }
+    let checked = edit.checked.cloned().unwrap_or(false);
+    let incompatible_value = incompatible_value(&projection);
+    // The checkbox's label follows the widget, unlike every other built-in kind.
+    let label = chrome.label(chrome.label.clone());
+    rsx! {
+        div {
+            class: "schemaform-control",
+            "data-schemaform-control": chrome.kind.data_attribute(),
+            input {
+                id: chrome.element_id.clone(),
+                name: chrome.name,
+                r#type: "checkbox",
+                checked,
+                disabled,
+                "aria-required": required,
+                "aria-invalid": chrome.invalid,
+                "aria-label": chrome.accessible_label,
+                "aria-describedby": chrome.described_by,
+                "data-value-state": chrome.value_state_attribute,
+                oninput: move |event| edit.set.call(Some(event.checked())),
+                onblur: move |_| edit.blur.call(()),
+            }
+            {label}
+            {chrome.supplements}
+            if let Some(incompatible_value) = incompatible_value {
+                output { "data-incompatible-value": "", "{incompatible_value}" }
+            }
+            {chrome.presence_actions}
+            {chrome.presented_findings}
+        }
+    }
+}
+
+/// The built-in choice control: a native select over opaque option identities.
+///
+/// Built on [`edit::use_choice_edit`] and the public context, as a custom renderer would be.
+#[allow(non_snake_case)]
+fn BuiltinChoiceControl(props: BuiltinControlProps) -> Element {
+    let context = &props.context;
+    let edit = use_choice_edit(context);
+    let Some(projection) = context.node().read().ok().flatten() else {
+        return rsx! {};
+    };
+    let chrome = BuiltinChrome::new(context, &projection);
+    if projection.read_only {
+        return chrome.read_only_output(edit::display_text(&projection));
+    }
+    let facets = context.control();
+    let write_only = facets.write_only;
+    let required = facets.required;
+    let disabled = facets.disabled;
+    let label = chrome.label(chrome.widget_label(write_only));
+    let selected = edit.selected.cloned();
+    let selected_value = selected
+        .as_ref()
+        .map(|identity| identity.as_str().to_owned())
+        .unwrap_or_default();
+    let placeholder_selected = selected.is_none();
+    let placeholder_hidden = !write_only
+        && !matches!(
+            projection.value_state,
+            Some(schemaform::form::ScalarValueState::Incompatible)
+        );
+    let placeholder_label = match &facets.write_only_replacement {
+        Some(replacement) => replacement.placeholder.clone(),
+        None if placeholder_hidden => String::new(),
+        None => edit::display_text(&projection),
+    };
+    // The event handler maps the select's DOM value back to an opaque identity, so it needs its
+    // own copy of the options the option list below consumes.
+    let options = edit.options.clone();
+    let lookup = edit.options;
+    rsx! {
+        div {
+            class: "schemaform-control",
+            "data-schemaform-control": chrome.kind.data_attribute(),
+            {label}
+            select {
+                id: chrome.element_id,
+                name: chrome.name,
+                value: selected_value,
+                "data-write-only-replacement": write_only.then_some(""),
+                disabled,
+                required,
+                "aria-invalid": chrome.invalid,
+                "aria-label": chrome.accessible_label,
+                "aria-describedby": chrome.described_by,
+                "data-value-state": chrome.value_state_attribute,
+                onchange: move |event| {
+                    let identity = lookup
+                        .iter()
+                        .find(|option| option.identity.as_str() == event.value())
+                        .map(|option| option.identity.clone());
+                    edit.select.call(identity);
+                },
+                onblur: move |_| edit.blur.call(()),
+                option {
+                    value: "",
+                    disabled: true,
+                    hidden: placeholder_hidden,
+                    selected: placeholder_selected,
+                    "{placeholder_label}"
+                }
+                for option in options {
+                    option {
+                        value: option.identity.as_str().to_owned(),
+                        selected: selected.as_ref() == Some(&option.identity),
+                        "{option.label}"
+                    }
+                }
+            }
+            {chrome.supplements}
+            {chrome.presence_actions}
+            {chrome.presented_findings}
+        }
+    }
+}
+
+/// The built-in constant control: noninteractive output of a fixed value, with the presence
+/// affordances that can still repair it.
+///
+/// Constants have no edit hook; the output comes from the presentation and facets alone.
+#[allow(non_snake_case)]
+fn BuiltinConstantControl(props: BuiltinControlProps) -> Element {
+    let context = &props.context;
+    let Some(projection) = context.node().read().ok().flatten() else {
+        return rsx! {};
+    };
+    let chrome = BuiltinChrome::new(context, &projection);
+    let display_value = edit::display_text(&projection);
+    if projection.read_only {
+        return chrome.read_only_output(display_value);
+    }
+    let text = context
+        .control()
+        .write_only_status
+        .clone()
+        .unwrap_or(display_value);
+    let label = chrome.label(chrome.label.clone());
+    rsx! {
+        div {
+            class: "schemaform-control",
+            "data-schemaform-control": chrome.kind.data_attribute(),
+            {label}
+            output {
+                id: chrome.element_id,
+                name: chrome.name,
+                tabindex: "-1",
+                "aria-invalid": chrome.invalid,
+                "aria-label": chrome.accessible_label,
+                "aria-describedby": chrome.described_by,
+                "data-value-state": chrome.value_state_attribute,
+                "{text}"
+            }
+            {chrome.supplements}
+            {chrome.presence_actions}
+            {chrome.presented_findings}
         }
     }
 }
@@ -7050,24 +7580,29 @@ export function schemaformResynchronizeControlValue(id, value) {
     if (control) control.value = value;
 }
 
-export function schemaformResynchronizeCheckbox(id, checked) {
+export function schemaformResynchronizeBoolean(id, checked) {
     const control = document.getElementById(id);
-    if (control) control.checked = checked;
+    if (!control) return;
+    if (control instanceof HTMLSelectElement) {
+        control.value = checked === undefined ? "" : String(checked);
+    } else {
+        control.checked = checked === true;
+    }
 }
 "#)]
 extern "C" {
     #[wasm_bindgen::prelude::wasm_bindgen(js_name = schemaformResynchronizeControlValue)]
     fn resynchronize_control_value(control_id: &str, value: &str);
 
-    #[wasm_bindgen::prelude::wasm_bindgen(js_name = schemaformResynchronizeCheckbox)]
-    fn resynchronize_checkbox(control_id: &str, checked: bool);
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name = schemaformResynchronizeBoolean)]
+    fn resynchronize_boolean(control_id: &str, checked: Option<bool>);
 }
 
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 fn resynchronize_control_value(_control_id: &str, _value: &str) {}
 
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-fn resynchronize_checkbox(_control_id: &str, _checked: bool) {}
+fn resynchronize_boolean(_control_id: &str, _checked: Option<bool>) {}
 
 fn render_local_findings(
     form: &render::BoundForm,
@@ -7095,16 +7630,20 @@ fn validation_finding_fallback(finding: &schemaform::ValidationFinding) -> Strin
     format!("Value does not satisfy {}.", finding.code())
 }
 
-pub use edit::{TextEdit, use_text_edit};
+pub use edit::{
+    BooleanEdit, ChoiceEdit, ChoiceOption, TextEdit, use_boolean_edit, use_choice_edit,
+    use_text_edit,
+};
 pub use handle::{
     ChoiceIdentity, ChoiceOptionProjection, CollectionActions, ControlActions, FormHandle,
     FormReader, HandleError, HandleTransactionError, NodeProjection, NodeReader, use_form,
 };
 pub use render::{
-    Affordance, AffordanceKind, BindError, BindFinding, BoundForm, ControlFacets, ControlKind,
-    ControlMatcher, ControlRegistry, ControlRenderContext, ControlRenderer, ExtensionHandler,
-    ExtensionOccurrence, ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter,
-    Help, Localizer, NodePresentation, PreparedExtension, PreparedExtensions, RenderConfiguration,
+    Affordance, AffordanceKind, BindError, BindFinding, BoundForm, BuiltinControlRenderer,
+    ControlFacets, ControlKind, ControlMatcher, ControlRegistry, ControlRenderContext,
+    ControlRenderer, ExtensionHandler, ExtensionOccurrence, ExtensionPrepareError,
+    ExtensionRenderContext, FindingCollectionPresenter, Help, Localizer, NodePresentation,
+    PreparedExtension, PreparedExtensions, RenderConfiguration,
 };
 #[cfg(schemaform_test_validation_faults)]
 pub use render_observation::{RenderEvent, RenderNodeKind, RenderObservation, RenderObserver};

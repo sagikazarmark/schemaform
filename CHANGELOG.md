@@ -67,6 +67,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   integer controls, including the write-only password and read-only output
   paths, now render through a child component built on this hook and the public
   render context, with unchanged DOM output.
+- `use_boolean_edit(&ControlRenderContext) -> BooleanEdit` and
+  `use_choice_edit(&ControlRenderContext) -> ChoiceEdit` complete the headless
+  hook set. `BooleanEdit` carries a tri-state `checked: ReadSignal<Option<bool>>`
+  (`None` for null, missing, or incompatible data, and always for a write-only
+  control), a `set: Callback<Option<bool>>` that sets null for `None` and, for
+  `Some`, reads the operations the core allows at event time to choose set
+  value or replace value, and `blur`. `ChoiceEdit` carries
+  `selected: ReadSignal<Option<ChoiceIdentity>>`, `options: Vec<ChoiceOption>`
+  (opaque `identity`, `label` localized through the configured `Localizer`,
+  `is_null`, and `disabled` when the core would reject selecting the option
+  right now), `select: Callback<Option<ChoiceIdentity>>` (the null option sets
+  null; another option sets or replaces at event time; reselection, `None`, and
+  an unknown identity run no core operation), and `blur`. Both report failures
+  to `SchemaForm::on_error` and resynchronise the widget carrying the element
+  id after a rejected write and, for write-only controls, after every write.
+- `BuiltinControlRenderer`, the built-in scalar control, is a public
+  `ControlRenderer` built on the three hooks and the public render context, so
+  a host can register it under an exact widget symbol or at another priority.
+- `ControlRegistry::empty()` creates a registry without the built-in renderer,
+  and binding reports the additive `BindFinding::NoMatchingRenderer
+  { definition_node }` for every control no registration accepts.
 - `NodePresentation::presence` lists the presence affordances the core allows
   for a scalar control right now, and `Affordance` (`kind`, localized `label`,
   the DOM `id` the triggering element must carry, `invoke`) performs the
@@ -113,6 +134,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   region compute their label, help, findings, `invalid`, and `aria-describedby`
   through one shared node-presentation helper instead of four near-identical
   computations.
+- `ControlRegistry::with_builtins()` now registers `BuiltinControlRenderer` at
+  `BUILTIN_CONTROL_PRIORITY` like any other matcher registration, and the
+  adapter has one control render path: the host computes the render context and
+  hands it to the preflight-selected renderer, built-in or custom. The built-in
+  boolean (checkbox and write-only replacement select), choice, and constant
+  controls render through child components built on `use_boolean_edit`,
+  `use_choice_edit`, and the public context, with unchanged DOM output. Two
+  behaviours follow from the hooks: the built-in checkbox and write-only
+  boolean select decide between set value and replace value from the operations
+  the core allows when the event fires rather than from a render-time snapshot,
+  and choice option labels pass through the configured `Localizer` as keyless
+  messages whose fallback is the authored label, so the default localizer
+  renders them unchanged.
 - The READMEs no longer describe the crates as unpublished and describe
   `SchemaForm::on_error` as the optional prop it is.
 

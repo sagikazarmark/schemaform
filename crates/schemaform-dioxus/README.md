@@ -285,9 +285,55 @@ fn PlainTextControl(context: ControlRenderContext) -> Element {
 }
 ```
 
-Boolean, choice, and constant controls do not have a hook yet; render them from
-`node().read()`, `actions()`, and the facets as the example above the hook
-section does.
+Boolean and choice controls have their own hooks with the same shape: hook-stable
+callbacks plus a read signal derived through a memo over the node.
+
+`use_boolean_edit(&context)` returns a `BooleanEdit`:
+
+- `checked: ReadSignal<Option<bool>>` is the tri-state to display: `Some(true)`
+  or `Some(false)` while the current data is a JSON boolean, `None` while it is
+  null, missing, or incompatible, and always `None` for a write-only control.
+- `set: Callback<Option<bool>>` applies the widget's state. `None` sets null;
+  `Some` reads the operations the core allows at event time and replaces the
+  value when replacement is allowed (incompatible data, or a write-only
+  control), otherwise sets it. A failure is reported to `on_error` and the
+  widget carrying the element id is resynchronised to `checked` (a checkbox's
+  `checked` property, or a `select`'s `value` as `"true"`, `"false"`, or `""`);
+  a write-only control is resynchronised after every call.
+- `blur` marks the control touched.
+
+`use_choice_edit(&context)` returns a `ChoiceEdit`:
+
+- `selected: ReadSignal<Option<ChoiceIdentity>>` is the option to show as
+  selected, `None` while no option matches the current data and always for a
+  write-only control.
+- `options: Vec<ChoiceOption>` lists the options in the core's compiled order
+  (the null option first), each with an opaque `identity`, a `label` localized
+  through the configured `Localizer`, `is_null`, and `disabled`, which is true
+  when selecting the option right now would be rejected by the core (the null
+  option while set null is not allowed; another option while neither set nor
+  replace is allowed). The current option is never disabled.
+- `select: Callback<Option<ChoiceIdentity>>` applies a selection. The null
+  option sets null; another option sets or replaces the value as `set` does
+  above; reselecting the current option, `None`, and an unknown identity run no
+  core operation. Whenever no operation changed the value, and after every call
+  for a write-only control, the widget's `value` property is restored to the
+  selected identity (or `""`).
+- `blur` marks the control touched.
+
+A widget maps its DOM value back to an identity by looking it up in `options`
+with `ChoiceIdentity::as_str`. Constant controls have no hook: render read-only
+output from `presentation()` and `control()`.
+
+The built-in scalar control is itself a `ControlRenderer` built on these hooks
+and the public context. `ControlRegistry::with_builtins()` registers
+`BuiltinControlRenderer` at `render::BUILTIN_CONTROL_PRIORITY` with a matcher
+for every supported semantic kind, so renderer resolution has no built-in
+special case: the highest matching priority wins, a tie is
+`BindFinding::AmbiguousMatcher`, and a registry created with
+`ControlRegistry::empty()` reports `BindFinding::NoMatchingRenderer` for any
+control no registration accepts. A host can also register
+`BuiltinControlRenderer` under an exact widget symbol or at another priority.
 
 `Localizer` receives a `render::MessageDescriptor` with an optional stable key,
 an English fallback, and structured parameters. Authored UI-schema text, schema

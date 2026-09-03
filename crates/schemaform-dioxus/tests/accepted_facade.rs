@@ -3,10 +3,11 @@ use std::sync::Arc;
 use dioxus::prelude::Element;
 use schemaform::{ExtensionNamespace, WidgetSymbol, definition::DefinitionNodeView};
 use schemaform_dioxus::{
-    Affordance, AffordanceKind, ControlFacets, ControlKind, ControlMatcher, ControlRegistry,
-    ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
-    ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter, Localizer,
-    NodePresentation, PreparedExtension, RenderConfiguration,
+    Affordance, AffordanceKind, BooleanEdit, BuiltinControlRenderer, ChoiceEdit, ChoiceOption,
+    ControlFacets, ControlKind, ControlMatcher, ControlRegistry, ControlRenderContext,
+    ControlRenderer, ExtensionHandler, ExtensionOccurrence, ExtensionPrepareError,
+    ExtensionRenderContext, FindingCollectionPresenter, Localizer, NodePresentation,
+    PreparedExtension, RenderConfiguration, TextEdit,
     render::{BUILTIN_CONTROL_PRIORITY, FindingCollectionContext, FindingKind, MessageDescriptor},
 };
 
@@ -84,6 +85,30 @@ impl ControlRenderer for Renderer {
     }
 }
 
+/// The headless edit handles a renderer's child component obtains from the hooks. Hooks need a
+/// component scope, so this only pins the accepted field set.
+#[allow(dead_code)]
+fn headless_edit_handles(text: &TextEdit, boolean: &BooleanEdit, choice: &ChoiceEdit) {
+    let _text = (
+        text.value,
+        text.input,
+        text.composition_start,
+        text.composition_end,
+        text.blur,
+        text.read_only,
+    );
+    let _boolean = (boolean.checked, boolean.set, boolean.blur);
+    let _choice = (choice.selected, choice.select, choice.blur);
+    let _options = choice.options.iter().map(|option: &ChoiceOption| {
+        (
+            option.identity.as_str(),
+            option.label.as_str(),
+            option.is_null,
+            option.disabled,
+        )
+    });
+}
+
 struct Matcher;
 
 impl ControlMatcher for Matcher {
@@ -156,7 +181,17 @@ fn accepted_adapter_customization_types_build_an_immutable_configuration() {
             WidgetSymbol::parse("company:text").expect("the widget symbol should be valid"),
             renderer.clone(),
         )
-        .matcher(BUILTIN_CONTROL_PRIORITY + 10, Arc::new(Matcher), renderer);
+        .widget(
+            WidgetSymbol::parse("company:plain").expect("the widget symbol should be valid"),
+            Arc::new(BuiltinControlRenderer),
+        )
+        .matcher(
+            BUILTIN_CONTROL_PRIORITY + 10,
+            Arc::new(Matcher),
+            renderer.clone(),
+        );
+    let _without_builtins =
+        ControlRegistry::empty().matcher(BUILTIN_CONTROL_PRIORITY, Arc::new(Matcher), renderer);
     let _configuration = RenderConfiguration::builder()
         .controls(controls)
         .local_presenter(Arc::new(Presenter))
