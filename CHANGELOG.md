@@ -70,8 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `use_boolean_edit(&ControlRenderContext) -> BooleanEdit` and
   `use_choice_edit(&ControlRenderContext) -> ChoiceEdit` complete the headless
   hook set. `BooleanEdit` carries a tri-state `checked: ReadSignal<Option<bool>>`
-  (`None` for null, missing, or incompatible data, and always for a write-only
-  control), a `set: Callback<Option<bool>>` that sets null for `None` and, for
+  (`None` for null and for a write-only control, `Some(false)` for missing or
+  incompatible data as the built-in checkbox shows it), a
+  `set: Callback<Option<bool>>` that sets null for `None` and, for
   `Some`, reads the operations the core allows at event time to choose set
   value or replace value, and `blur`. `ChoiceEdit` carries
   `selected: ReadSignal<Option<ChoiceIdentity>>`, `options: Vec<ChoiceOption>`
@@ -115,6 +116,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Constant`; non-exhaustive).
 - `NodeProjection::nullable` reports whether the bound scalar accepts JSON
   null.
+
+### Fixed
+
+- `SchemaForm::on_error` is optional in the props builder, as its documentation
+  has always said; omitting it drops adapter failures instead of failing to
+  compile.
 
 ### Changed
 

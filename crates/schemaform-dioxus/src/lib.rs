@@ -3943,10 +3943,12 @@ pub mod edit {
     pub struct BooleanEdit {
         /// The tri-state the widget should display right now.
         ///
-        /// `Some(true)` or `Some(false)` while the node's current data is a JSON boolean; `None`
-        /// while it is null, missing, or incompatible, and always for a write-only control, whose
-        /// value is never echoed. It is derived through a memo that subscribes to the node, so
-        /// the first render after a transition already sees the new state.
+        /// `Some(true)` or `Some(false)` while the node's current data is a JSON boolean and
+        /// `None` while it is null. A missing or incompatible value reads as `Some(false)`: there
+        /// is no boolean to show, and the built-in checkbox renders it unchecked beside its
+        /// value state and repair affordances. A write-only control always reads as `None`; its
+        /// value is never echoed. The signal is derived through a memo that subscribes to the
+        /// node, so the first render after a transition already sees the new state.
         pub checked: ReadSignal<Option<bool>>,
         /// Applies the widget's new state.
         ///
@@ -4091,12 +4093,24 @@ pub mod edit {
     /// The boolean state of a node read, or `None` when the node could not be read.
     fn boolean_state_of(read: Result<Option<NodeProjection>, HandleError>) -> Option<BooleanState> {
         read.ok().flatten().map(|projection| BooleanState {
-            checked: (!projection.write_only)
-                .then(|| projection.current_data.as_ref().and_then(Value::as_bool))
-                .flatten(),
+            checked: if projection.write_only {
+                None
+            } else {
+                displayed_boolean(projection.current_data.as_ref())
+            },
             operations: projection.allowed_operations,
             write_only: projection.write_only,
         })
+    }
+
+    /// The tri-state a boolean widget displays for `data`: the boolean itself, `None` for null,
+    /// and unchecked for a missing or incompatible value, as the built-in checkbox shows it.
+    fn displayed_boolean(data: Option<&Value>) -> Option<bool> {
+        match data {
+            Some(Value::Bool(value)) => Some(*value),
+            Some(Value::Null) => None,
+            _ => Some(false),
+        }
     }
 
     /// Headless editing behaviour for one choice control.
@@ -4502,6 +4516,7 @@ pub struct SchemaFormProps {
     ///
     /// This callback is optional; when it is not set, failures are dropped. Failures are never
     /// converted into submission blockers.
+    #[props(default)]
     pub on_error: EventHandler<handle::HandleError>,
 }
 

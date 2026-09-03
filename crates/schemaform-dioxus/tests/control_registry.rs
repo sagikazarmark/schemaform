@@ -107,10 +107,10 @@ fn registry_app(props: RegistryAppProps) -> Element {
     });
     rsx! {
         if let Some(bound) = bound {
+            // `on_error` is optional; this test has no failures to observe.
             SchemaForm {
                 form: bound,
                 on_submit: move |_| {},
-                on_error: move |_| {},
             }
         }
     }

@@ -291,8 +291,10 @@ callbacks plus a read signal derived through a memo over the node.
 `use_boolean_edit(&context)` returns a `BooleanEdit`:
 
 - `checked: ReadSignal<Option<bool>>` is the tri-state to display: `Some(true)`
-  or `Some(false)` while the current data is a JSON boolean, `None` while it is
-  null, missing, or incompatible, and always `None` for a write-only control.
+  or `Some(false)` while the current data is a JSON boolean and `None` while it
+  is null. A missing or incompatible value reads as `Some(false)`, as the
+  built-in checkbox shows it unchecked; a write-only control always reads as
+  `None` and never echoes its value.
 - `set: Callback<Option<bool>>` applies the widget's state. `None` sets null;
   `Some` reads the operations the core allows at event time and replaces the
   value when replacement is allowed (incompatible data, or a write-only

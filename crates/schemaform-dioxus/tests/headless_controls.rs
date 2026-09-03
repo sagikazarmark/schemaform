@@ -551,7 +551,8 @@ fn boolean_set_chooses_set_value_or_replace_value_at_event_time() {
     assert_eq!(mounted.form_data()["enabled"], json!(true));
     assert_eq!(mounted.checked("/enabled"), Some(true));
 
-    // Incompatible data installed by the host: the same callback must replace instead.
+    // Incompatible data installed by the host displays unchecked, and the same callback must
+    // replace instead of set.
     let mut incompatible = initial_form_data();
     incompatible["enabled"] = json!("yes");
     mounted
@@ -559,7 +560,7 @@ fn boolean_set_chooses_set_value_or_replace_value_at_event_time() {
         .reinitialize(incompatible)
         .expect("reinitialization should accept incompatible boolean data");
     mounted.settle();
-    assert_eq!(mounted.checked("/enabled"), None);
+    assert_eq!(mounted.checked("/enabled"), Some(false));
 
     mounted.drive(|| edit.set.call(Some(false)));
     assert_eq!(mounted.form_data()["enabled"], json!(false));
