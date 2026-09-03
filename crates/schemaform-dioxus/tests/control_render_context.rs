@@ -14,9 +14,9 @@ use dioxus::prelude::{Element, Props, rsx, use_hook};
 use dioxus_core::{ScopeId, VirtualDom};
 use schemaform::{FormDefinition, definition::DefinitionNodeView};
 use schemaform_dioxus::{
-    ControlFacets, ControlKind, ControlMatcher, ControlRegistry, ControlRenderContext,
-    ControlRenderer, FormHandle, HandleError, RenderConfiguration, SchemaForm, render::FindingKind,
-    use_form,
+    AffordanceKind, ControlFacets, ControlKind, ControlMatcher, ControlRegistry,
+    ControlRenderContext, ControlRenderer, FormHandle, HandleError, RenderConfiguration,
+    SchemaForm, render::FindingKind, use_form,
 };
 use serde_json::json;
 
@@ -152,6 +152,172 @@ fn captured(contexts: &CapturedContexts, name: &str) -> ControlRenderContext {
 
 fn facets(contexts: &CapturedContexts, name: &str) -> ControlFacets {
     captured(contexts, name).control().clone()
+}
+
+fn presence_kinds(contexts: &CapturedContexts, name: &str) -> Vec<AffordanceKind> {
+    captured(contexts, name)
+        .presentation()
+        .presence
+        .iter()
+        .map(|affordance| affordance.kind)
+        .collect()
+}
+
+fn invoke_presence(
+    dom: &mut VirtualDom,
+    contexts: &CapturedContexts,
+    name: &str,
+    kind: AffordanceKind,
+) {
+    let context = captured(contexts, name);
+    let affordance = context
+        .presentation()
+        .presence
+        .iter()
+        .find(|affordance| affordance.kind == kind)
+        .unwrap_or_else(|| panic!("{name} should offer the {kind:?} affordance right now"))
+        .clone();
+    dom.in_scope(ScopeId::ROOT, || affordance.invoke.call(()));
+    dom.render_immediate(&mut dioxus_core::NoOpMutations);
+}
+
+fn form_data(handle: &FormHandle) -> serde_json::Value {
+    handle
+        .reader()
+        .form_data()
+        .expect("the form should be readable")
+}
+
+#[test]
+fn presence_affordances_list_only_the_allowed_operations_and_perform_them_when_invoked() {
+    let MountedContract {
+        mut dom,
+        contexts,
+        handle,
+        errors,
+    } = mount_contract_app();
+
+    // A required, non-nullable string with compatible data offers no presence operation.
+    assert!(presence_kinds(&contexts, "/name").is_empty());
+    // A required boolean with a compatible value neither needs setting nor allows removal.
+    assert!(presence_kinds(&contexts, "/agree").is_empty());
+
+    // An optional nullable integer that is currently null can be set to its seed or removed.
+    let level = captured(&contexts, "/level");
+    let element_id = level.presentation().element_id.clone();
+    let presence = &level.presentation().presence;
+    assert_eq!(
+        presence
+            .iter()
+            .map(|affordance| (
+                affordance.kind,
+                affordance.label.as_str(),
+                affordance.id.as_str()
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                AffordanceKind::Set,
+                "Set Level",
+                format!("{element_id}-set-value").as_str()
+            ),
+            (
+                AffordanceKind::RemoveValue,
+                "Remove Level",
+                format!("{element_id}-remove-value").as_str()
+            ),
+        ]
+    );
+    assert_eq!(presence, &presence.clone());
+
+    invoke_presence(&mut dom, &contexts, "/level", AffordanceKind::Set);
+    assert_eq!(
+        form_data(&handle),
+        json!({ "name": "Ada", "agree": false, "secret": "hunter2", "level": 0 })
+    );
+    assert_eq!(
+        presence_kinds(&contexts, "/level"),
+        vec![AffordanceKind::SetNull, AffordanceKind::RemoveValue]
+    );
+
+    invoke_presence(&mut dom, &contexts, "/level", AffordanceKind::SetNull);
+    assert_eq!(
+        form_data(&handle),
+        json!({ "name": "Ada", "agree": false, "secret": "hunter2", "level": null })
+    );
+
+    invoke_presence(&mut dom, &contexts, "/level", AffordanceKind::RemoveValue);
+    assert_eq!(
+        form_data(&handle),
+        json!({ "name": "Ada", "agree": false, "secret": "hunter2" })
+    );
+    // A missing nullable value can be set to its seed or explicitly to null, but not removed.
+    assert_eq!(
+        presence_kinds(&contexts, "/level"),
+        vec![AffordanceKind::Set, AffordanceKind::SetNull]
+    );
+
+    handle
+        .reinitialize(json!({ "name": "Ada", "agree": false, "secret": "hunter2", "level": "x" }))
+        .expect("incompatible data should be preserved for explicit repair");
+    dom.render_immediate(&mut dioxus_core::NoOpMutations);
+    assert_eq!(
+        presence_kinds(&contexts, "/level"),
+        vec![
+            AffordanceKind::SetNull,
+            AffordanceKind::RemoveValue,
+            AffordanceKind::Replace
+        ]
+    );
+    invoke_presence(&mut dom, &contexts, "/level", AffordanceKind::Replace);
+    assert_eq!(
+        form_data(&handle),
+        json!({ "name": "Ada", "agree": false, "secret": "hunter2", "level": 0 })
+    );
+
+    assert!(errors.borrow().is_empty());
+}
+
+#[test]
+fn report_routes_failures_to_on_error_and_returns_the_success_value() {
+    let MountedContract {
+        dom,
+        contexts,
+        handle,
+        errors,
+    } = mount_contract_app();
+    let level = captured(&contexts, "/level");
+    let actions = level.actions().clone();
+
+    dom.in_scope(ScopeId::ROOT, || {
+        assert_eq!(level.report(Ok(7)), Some(7));
+        assert!(errors.borrow().is_empty());
+
+        let set = level
+            .presentation()
+            .presence
+            .iter()
+            .find(|affordance| affordance.kind == AffordanceKind::Set)
+            .expect("the null level should offer set")
+            .clone();
+        handle
+            .try_transact(|_| {
+                // The host holds the form borrow: every node operation fails with a conflict.
+                assert_eq!(level.report(actions.set_null()), None);
+                set.invoke.call(());
+                Ok::<_, ()>(())
+            })
+            .expect("the outer transaction should complete without mutation");
+    });
+
+    assert_eq!(
+        *errors.borrow(),
+        vec![HandleError::BorrowConflict, HandleError::BorrowConflict]
+    );
+    assert_eq!(
+        form_data(&handle),
+        json!({ "name": "Ada", "agree": false, "secret": "hunter2", "level": null })
+    );
 }
 
 #[test]

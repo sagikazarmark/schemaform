@@ -17,8 +17,8 @@ use std::{
 #[cfg(schemaform_test_validation_faults)]
 use dioxus::prelude::use_hook;
 use dioxus::prelude::{
-    Element, EventHandler, Props, ReadableExt, Signal, WritableExt, rsx, use_context_provider,
-    use_effect, use_signal,
+    Callback, Element, EventHandler, Props, ReadableExt, Signal, WritableExt, rsx, use_callback,
+    use_context_provider, use_effect, use_signal,
 };
 #[cfg(schemaform_test_validation_faults)]
 use dioxus_core::use_drop;
@@ -1522,14 +1522,14 @@ pub mod render {
         },
     };
 
-    use dioxus::prelude::{Element, ReadableExt, Signal, WritableExt};
+    use dioxus::prelude::{Callback, Element, ReadableExt, Signal, WritableExt};
     use schemaform::{
         DefinitionNodeId, ExtensionNamespace, Form, FormDefinition, InstanceIdentity, WidgetSymbol,
         definition::{DefinitionNodeKind, DefinitionNodeView, GridSpans, SemanticKind},
     };
     use serde_json::Value;
 
-    use crate::handle::{ControlActions, FormHandle, NodeReader};
+    use crate::handle::{ControlActions, FormHandle, HandleError, NodeReader};
     #[cfg(schemaform_test_validation_faults)]
     pub(crate) use crate::render_observation::{
         RenderEvent, RenderNodeKind, RenderObservation, RenderObserver,
@@ -1612,14 +1612,15 @@ pub mod render {
     /// context. Homogeneous array composition remains adapter-owned.
     ///
     /// The renderer owns the whole control region. The adapter renders exactly what
-    /// [`ControlRenderer::render`] returns: it does not add a label, help text, local findings, or
-    /// an `aria-describedby` relationship on the renderer's behalf. Everything needed to render
-    /// those is pre-localized on [`ControlRenderContext::presentation`] and
-    /// [`ControlRenderContext::control`].
+    /// [`ControlRenderer::render`] returns: it does not add a label, help text, local findings,
+    /// presence affordances, or an `aria-describedby` relationship on the renderer's behalf.
+    /// Everything needed to render those is pre-localized on
+    /// [`ControlRenderContext::presentation`] and [`ControlRenderContext::control`], and
+    /// operation failures reach the host through [`ControlRenderContext::report`].
     ///
-    /// The context compares by value for presentation and facets, by identity for the reader and
-    /// actions, and by pointer for prepared extensions, so it can be passed as a prop to a child
-    /// component without Dioxus memoization showing stale state.
+    /// The context compares by value for presentation and facets, by identity for the reader,
+    /// actions, and error route, and by pointer for prepared extensions, so it can be passed as a
+    /// prop to a child component without Dioxus memoization showing stale state.
     #[derive(Clone, PartialEq)]
     pub struct ControlRenderContext {
         node: NodeReader,
@@ -1627,6 +1628,7 @@ pub mod render {
         presentation: NodePresentation,
         control: ControlFacets,
         extensions: PreparedExtensions,
+        error_route: Option<crate::OperationErrorHandler>,
     }
 
     impl fmt::Debug for ControlRenderContext {
@@ -1647,6 +1649,7 @@ pub mod render {
             presentation: NodePresentation,
             control: ControlFacets,
             extensions: PreparedExtensions,
+            error_route: Option<crate::OperationErrorHandler>,
         ) -> Self {
             Self {
                 node,
@@ -1654,6 +1657,7 @@ pub mod render {
                 presentation,
                 control,
                 extensions,
+                error_route,
             }
         }
 
@@ -1664,7 +1668,9 @@ pub mod render {
 
         /// Returns approved actions scoped to this control's node.
         ///
-        /// Install these actions on event callbacks rather than invoking them during rendering.
+        /// Install these actions on event callbacks rather than invoking them during rendering,
+        /// and pass their results through [`ControlRenderContext::report`] so failures reach the
+        /// host instead of being dropped.
         pub fn actions(&self) -> &ControlActions {
             &self.actions
         }
@@ -1686,6 +1692,18 @@ pub mod render {
         pub fn extensions(&self) -> &PreparedExtensions {
             &self.extensions
         }
+
+        /// Routes a failed operation to the host's `SchemaForm::on_error` and returns the
+        /// success value.
+        ///
+        /// `Ok(value)` returns `Some(value)` without side effects; `Err(error)` calls `on_error`
+        /// with the error (or drops it when the host set no handler, as the built-ins do) and
+        /// returns `None`. Use it around [`ControlActions`] calls installed on event callbacks,
+        /// for example `context.report(actions.input_text(event.value()))` in an `oninput`
+        /// handler. Affordances in [`NodePresentation::presence`] already report internally.
+        pub fn report<T>(&self, result: Result<T, HandleError>) -> Option<T> {
+            crate::route_operation(&self.error_route, result)
+        }
     }
 
     /// Adapter-computed, localized presentation data for one form-tree node.
@@ -1694,9 +1712,10 @@ pub mod render {
     /// homogeneous arrays, and unsupported regions. Custom control renderers receive it through
     /// [`ControlRenderContext::presentation`] and are responsible for emitting the elements whose
     /// ids it references: the primary element carrying [`NodePresentation::element_id`], the help
-    /// element carrying [`Help::id`], and the finding elements carrying
+    /// element carrying [`Help::id`], the finding elements carrying
     /// [`FindingDescriptor::stable_id`] (rendered directly or through
-    /// [`NodePresentation::present_findings`]).
+    /// [`NodePresentation::present_findings`]), and one element per [`Affordance`] in
+    /// [`NodePresentation::presence`] carrying [`Affordance::id`].
     #[derive(Clone, PartialEq)]
     #[non_exhaustive]
     pub struct NodePresentation {
@@ -1720,6 +1739,15 @@ pub mod render {
         /// findings and parse blockers always block; capability and external findings block when
         /// the core marks them blocking. Advisory findings never make a node invalid.
         pub invalid: bool,
+        /// Presence affordances the core allows for this node right now, in the built-in's
+        /// order: set, set null, remove value, replace.
+        ///
+        /// Set is offered only while the value is missing or null and a creation seed exists;
+        /// replace only while the core allows replacement and a seed exists; set null and remove
+        /// value exactly when the core allows them. Renderers place these affordances; they do not
+        /// reconstruct the rules. The list is empty for every node kind other than scalar
+        /// controls.
+        pub presence: Vec<Affordance>,
         form: BoundForm,
     }
 
@@ -1733,6 +1761,7 @@ pub mod render {
                 .field("help", &self.help)
                 .field("findings", &self.findings)
                 .field("invalid", &self.invalid)
+                .field("presence", &self.presence)
                 .finish_non_exhaustive()
         }
     }
@@ -1745,6 +1774,7 @@ pub mod render {
             label_visible: bool,
             help: Option<Help>,
             findings: Vec<FindingDescriptor>,
+            presence: Vec<Affordance>,
         ) -> Self {
             let invalid = findings.iter().any(|finding| finding.blocking);
             Self {
@@ -1754,6 +1784,7 @@ pub mod render {
                 help,
                 findings,
                 invalid,
+                presence,
                 form,
             }
         }
@@ -1811,6 +1842,68 @@ pub mod render {
         pub id: String,
         /// Localized plain-text help.
         pub text: String,
+    }
+
+    /// The operation an [`Affordance`] performs when invoked.
+    ///
+    /// Only presence operations on scalar controls are produced today. The enum grows as further
+    /// renderer seams hand out affordances, so matches need a wildcard arm.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[non_exhaustive]
+    pub enum AffordanceKind {
+        /// Sets a missing or null value to its creation seed.
+        Set,
+        /// Sets a nullable value to JSON null.
+        SetNull,
+        /// Removes an optional value from its parent.
+        RemoveValue,
+        /// Replaces a value the control cannot edit with its creation seed.
+        Replace,
+    }
+
+    /// A localized, pre-authorized user action handed to a renderer.
+    ///
+    /// Invoking an affordance performs the core operation on the node it was computed for and
+    /// reports any failure to the host's `SchemaForm::on_error`; the renderer only places it. The
+    /// adapter recomputes the list of affordances on every node render, so an affordance is
+    /// present exactly while the core allows its operation.
+    ///
+    /// Two affordances compare equal when their `kind`, `label`, and `id` are equal. `invoke` is
+    /// excluded because an affordance's behaviour is fixed by its node and kind, so a component
+    /// that memoizes on an affordance and keeps an earlier `invoke` performs the same operation.
+    #[derive(Clone)]
+    #[non_exhaustive]
+    pub struct Affordance {
+        /// Operation performed by [`Affordance::invoke`].
+        pub kind: AffordanceKind,
+        /// Localized plain-text label for the element that triggers the affordance.
+        pub label: String,
+        /// DOM `id` the triggering element must carry.
+        ///
+        /// For presence affordances this is the node's [`NodePresentation::element_id`] followed
+        /// by `-set-value`, `-set-null`, `-remove-value`, or `-replace-value`.
+        pub id: String,
+        /// Performs the operation and reports failures to the host's `SchemaForm::on_error`.
+        ///
+        /// Install this on an event callback rather than calling it during rendering.
+        pub invoke: Callback<()>,
+    }
+
+    impl PartialEq for Affordance {
+        fn eq(&self, other: &Self) -> bool {
+            self.kind == other.kind && self.label == other.label && self.id == other.id
+        }
+    }
+
+    impl fmt::Debug for Affordance {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter
+                .debug_struct("Affordance")
+                .field("kind", &self.kind)
+                .field("label", &self.label)
+                .field("id", &self.id)
+                .finish_non_exhaustive()
+        }
     }
 
     /// Control-specific facets derived from the definition node and the node's current state.
@@ -3390,10 +3483,20 @@ pub mod render {
     impl Error for ExtensionPrepareError {}
 }
 
+/// Route from adapter operations to the host's `SchemaForm::on_error`.
+///
+/// One handler is provided as context per mounted [`SchemaForm`] and shared by the built-ins,
+/// presence affordances, and [`render::ControlRenderContext::report`]. It compares by identity.
 #[derive(Clone, Default)]
-struct BuiltinOperationErrorHandler(Rc<RefCell<Option<EventHandler<handle::HandleError>>>>);
+struct OperationErrorHandler(Rc<RefCell<Option<EventHandler<handle::HandleError>>>>);
 
-impl BuiltinOperationErrorHandler {
+impl PartialEq for OperationErrorHandler {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl OperationErrorHandler {
     fn set(&self, handler: Option<EventHandler<handle::HandleError>>) {
         *self.0.borrow_mut() = handler;
     }
@@ -3406,19 +3509,31 @@ impl BuiltinOperationErrorHandler {
     }
 }
 
-fn report_builtin_operation<T>(
-    handler: &Option<BuiltinOperationErrorHandler>,
+/// Routes a failed operation to `handler` and returns the success value.
+///
+/// `handler` is `None` when the operation runs outside a mounted [`SchemaForm`]; the error is
+/// then dropped, matching the documented behaviour of an unset `on_error`.
+fn route_operation<T>(
+    handler: &Option<OperationErrorHandler>,
     result: Result<T, handle::HandleError>,
-) -> bool {
+) -> Option<T> {
     match result {
-        Ok(_) => true,
+        Ok(value) => Some(value),
         Err(error) => {
             if let Some(handler) = handler {
                 handler.report(error);
             }
-            false
+            None
         }
     }
+}
+
+/// [`route_operation`] for built-ins that only branch on success.
+fn report_operation<T>(
+    handler: &Option<OperationErrorHandler>,
+    result: Result<T, handle::HandleError>,
+) -> bool {
+    route_operation(handler, result).is_some()
 }
 
 /// Properties for the browser-CSR [`SchemaForm`] component.
@@ -3452,7 +3567,7 @@ pub struct SchemaFormProps {
 /// whole control region and is responsible for emitting the elements its
 /// [`render::NodePresentation`] references.
 pub fn SchemaForm(props: SchemaFormProps) -> Element {
-    let operation_errors = use_context_provider(BuiltinOperationErrorHandler::default);
+    let operation_errors = use_context_provider(OperationErrorHandler::default);
     operation_errors.set(Some(props.on_error));
     let submit_form = props.form.clone();
     let summary_focus =
@@ -4609,11 +4724,13 @@ fn instantiate_array_template_children(
 ///
 /// `projection` must already be localized through [`localize_node_text`]. Stable finding ids are
 /// prefixed by `element_id`, so the same node rendered under a different element id yields
-/// distinct ids.
+/// distinct ids. `presence` is the node's current presence affordances; only scalar controls
+/// compute them today (see [`scalar_presence_affordances`]), containers pass an empty list.
 fn node_presentation(
     form: &render::BoundForm,
     projection: &handle::NodeProjection,
     element_id: &str,
+    presence: Vec<render::Affordance>,
 ) -> render::NodePresentation {
     let mut findings =
         validation_descriptors(form, projection, &format!("{element_id}-local-validation"));
@@ -4645,6 +4762,7 @@ fn node_presentation(
         projection.label_visible,
         help,
         findings,
+        presence,
     )
 }
 
@@ -4762,7 +4880,7 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
         },
     );
     let collection = reader.collection_actions();
-    let operation_errors = dioxus_core::try_consume_context::<BuiltinOperationErrorHandler>();
+    let operation_errors = dioxus_core::try_consume_context::<OperationErrorHandler>();
     let can_remove = projection.allowed_operations.can_remove_item();
     let can_insert = projection.allowed_operations.can_append_item();
     let can_move = projection.allowed_operations.can_move_item();
@@ -4810,7 +4928,12 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
         &projection,
         Some(presence_success),
     );
-    let presentation = node_presentation(&props.form, &projection, &props.array.element_id);
+    let presentation = node_presentation(
+        &props.form,
+        &projection,
+        &props.array.element_id,
+        Vec::new(),
+    );
     let described_by = presentation.described_by();
     let invalid = presentation.invalid;
     let help = presentation.present_help();
@@ -4903,7 +5026,7 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
                                         .flatten()
                                         .map(|view| view.children)
                                         .unwrap_or_default();
-                                    if report_builtin_operation(
+                                    if report_operation(
                                         &operation_errors,
                                         collection.insert_before(item),
                                     ) {
@@ -4951,7 +5074,7 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
                                 let row_id = row_id.clone();
                                 let operation_errors = operation_errors.clone();
                                 move |_| {
-                                    if report_builtin_operation(
+                                    if report_operation(
                                         &operation_errors,
                                         collection.move_up(item),
                                     ) {
@@ -4988,7 +5111,7 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
                                 let row_id = row_id.clone();
                                 let operation_errors = operation_errors.clone();
                                 move |_| {
-                                    if report_builtin_operation(
+                                    if report_operation(
                                         &operation_errors,
                                         collection.move_down(item),
                                     ) {
@@ -5063,7 +5186,7 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
                                         .unwrap_or_else(|| {
                                             ArrayFocusRequest::Element(vec![append_id.clone()])
                                         });
-                                    if report_builtin_operation(
+                                    if report_operation(
                                         &operation_errors,
                                         collection.remove(item),
                                     ) {
@@ -5096,7 +5219,7 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
                             .flatten()
                             .map(|view| view.children)
                             .unwrap_or_default();
-                        if report_builtin_operation(&append_errors, append.append()) {
+                        if report_operation(&append_errors, append.append()) {
                             if let Some(identity) = append_reader
                                 .read()
                                 .ok()
@@ -5226,7 +5349,7 @@ fn container_presence_actions(
     let replace_actions = actions.clone();
     let remove_actions = actions;
     let replacement = projection.creation_seed.clone();
-    let operation_errors = dioxus_core::try_consume_context::<BuiltinOperationErrorHandler>();
+    let operation_errors = dioxus_core::try_consume_context::<OperationErrorHandler>();
     let materialize_errors = operation_errors.clone();
     let replace_errors = operation_errors.clone();
     let remove_errors = operation_errors;
@@ -5266,7 +5389,7 @@ fn container_presence_actions(
                     r#type: "button",
                     "data-materialize": "",
                     onclick: move |_| {
-                        if report_builtin_operation(
+                        if report_operation(
                             &materialize_errors,
                             materialize_actions.materialize(),
                         ) && let Some(on_success) = &materialize_success {
@@ -5283,7 +5406,7 @@ fn container_presence_actions(
                     r#type: "button",
                     "data-replace-value": "",
                     onclick: move |_| {
-                        if report_builtin_operation(
+                        if report_operation(
                             &replace_errors,
                             replace_actions.replace_value(replacement.clone()),
                         ) && let Some(on_success) = &replace_success {
@@ -5298,7 +5421,7 @@ fn container_presence_actions(
                     r#type: "button",
                     "data-remove-value": "",
                     onclick: move |_| {
-                        if report_builtin_operation(&remove_errors, remove_actions.remove_value())
+                        if report_operation(&remove_errors, remove_actions.remove_value())
                             && let Some(on_success) = &remove_success
                         {
                             on_success(ContainerPresenceChange::Removed);
@@ -5329,7 +5452,12 @@ fn FixedObjectGroup(props: FixedObjectGroupProps) -> Element {
     localize_node_text(&props.form, &mut projection);
     let presence_actions =
         container_presence_actions(&props.form, reader.actions(), &projection, None);
-    let presentation = node_presentation(&props.form, &projection, &props.group.element_id);
+    let presentation = node_presentation(
+        &props.form,
+        &projection,
+        &props.group.element_id,
+        Vec::new(),
+    );
     let described_by = presentation.described_by();
     let invalid = presentation.invalid;
     let help = presentation.present_help();
@@ -5393,7 +5521,12 @@ fn UnsupportedRegion(props: UnsupportedRegionProps) -> Element {
         .as_ref()
         .map(|binding| binding.as_str().to_owned())
         .unwrap_or_default();
-    let presentation = node_presentation(&props.form, &projection, &props.region.element_id);
+    let presentation = node_presentation(
+        &props.form,
+        &projection,
+        &props.region.element_id,
+        Vec::new(),
+    );
     let described_by = presentation.described_by();
     let help = presentation.present_help();
     let presented_findings = presentation.present_findings();
@@ -5886,105 +6019,141 @@ fn value_state_attribute(state: Option<schemaform::form::ScalarValueState>) -> &
     }
 }
 
-fn scalar_presence_actions(
-    form: &render::BoundForm,
-    actions: handle::ControlActions,
-    projection: &handle::NodeProjection,
+/// Hook-stable callbacks behind one scalar control's presence affordances.
+///
+/// The callbacks keep their identity across renders, so a renderer that stores an
+/// [`render::Affordance`] does not accumulate a new callback per keystroke and a child component
+/// that memoizes on the affordance keeps calling a live callback.
+#[derive(Clone, Copy)]
+struct ScalarPresenceCallbacks {
+    set: Callback<()>,
+    set_null: Callback<()>,
+    remove_value: Callback<()>,
+    replace: Callback<()>,
+}
+
+/// Creates the presence callbacks for one scalar control.
+///
+/// Each callback performs its core operation through `actions` at invocation time and reports a
+/// failure to the host's `on_error`. `seed` is the definition's creation seed used by set and
+/// replace. `actions` is `None` and `seed` absent while the node is unavailable; the callbacks are
+/// then no-ops, and the matching affordances are never offered. This is a hook: call it at the
+/// same position on every render.
+fn use_scalar_presence_callbacks(
+    actions: Option<&handle::ControlActions>,
     seed: Option<Value>,
-) -> Element {
+    error_route: Option<OperationErrorHandler>,
+) -> ScalarPresenceCallbacks {
+    /// One presence operation; `None` when its precondition (a seed) is absent.
+    type Operation = fn(
+        &handle::ControlActions,
+        Option<&Value>,
+    ) -> Option<Result<schemaform::Transition, handle::HandleError>>;
+    let callback = |operation: Operation| {
+        let actions = actions.cloned();
+        let seed = seed.clone();
+        let error_route = error_route.clone();
+        use_callback(move |()| {
+            if let Some(actions) = &actions
+                && let Some(result) = operation(actions, seed.as_ref())
+            {
+                report_operation(&error_route, result);
+            }
+        })
+    };
+    ScalarPresenceCallbacks {
+        set: callback(|actions, seed| seed.map(|value| actions.set_value(value.clone()))),
+        set_null: callback(|actions, _| Some(actions.set_null())),
+        remove_value: callback(|actions, _| Some(actions.remove_value())),
+        replace: callback(|actions, seed| seed.map(|value| actions.replace_value(value.clone()))),
+    }
+}
+
+/// Computes the presence affordances the core allows for one scalar control right now.
+///
+/// This is the single statement of the built-in presence rules: set only while the value is
+/// missing or null and a creation seed exists; set null and remove value exactly when the core
+/// allows them; replace only while the core allows replacement and a seed exists. The built-in
+/// control renders its presence buttons from this list, so custom renderers receive exactly the
+/// operations the built-in would offer.
+fn scalar_presence_affordances(
+    form: &render::BoundForm,
+    projection: &handle::NodeProjection,
+    element_id: &str,
+    callbacks: ScalarPresenceCallbacks,
+) -> Vec<render::Affordance> {
+    use render::{Affordance, AffordanceKind};
     use schemaform::form::ScalarValueState;
 
-    let set_actions = actions.clone();
-    let null_actions = actions.clone();
-    let remove_actions = actions.clone();
-    let replace_actions = actions;
-    let set_seed = seed.clone();
-    let replace_seed = seed;
-    let operation_errors = dioxus_core::try_consume_context::<BuiltinOperationErrorHandler>();
-    let set_errors = operation_errors.clone();
-    let null_errors = operation_errors.clone();
-    let remove_errors = operation_errors.clone();
-    let replace_errors = operation_errors;
-    let show_set = projection.allowed_operations.can_set_value()
+    let operations = projection.allowed_operations;
+    let has_seed = projection.creation_seed.is_some();
+    let label = || projection.label.clone();
+    let mut presence = Vec::new();
+    if operations.can_set_value()
         && matches!(
             projection.value_state,
             Some(ScalarValueState::Missing | ScalarValueState::Null)
         )
-        && set_seed.is_some();
-    let set_label = localize_builtin(
-        form,
-        BuiltinMessage::PresenceSet {
-            label: projection.label.clone(),
-        },
-    );
-    let set_null_label = localize_builtin(
-        form,
-        BuiltinMessage::PresenceSetNull {
-            label: projection.label.clone(),
-        },
-    );
-    let remove_label = localize_builtin(
-        form,
-        BuiltinMessage::PresenceRemove {
-            label: projection.label.clone(),
-        },
-    );
-    let replace_label = localize_builtin(
-        form,
-        BuiltinMessage::PresenceReplace {
-            label: projection.label.clone(),
-        },
-    );
+        && has_seed
+    {
+        presence.push(Affordance {
+            kind: AffordanceKind::Set,
+            label: localize_builtin(form, BuiltinMessage::PresenceSet { label: label() }),
+            id: format!("{element_id}-set-value"),
+            invoke: callbacks.set,
+        });
+    }
+    if operations.can_set_null() {
+        presence.push(Affordance {
+            kind: AffordanceKind::SetNull,
+            label: localize_builtin(form, BuiltinMessage::PresenceSetNull { label: label() }),
+            id: format!("{element_id}-set-null"),
+            invoke: callbacks.set_null,
+        });
+    }
+    if operations.can_remove_value() {
+        presence.push(Affordance {
+            kind: AffordanceKind::RemoveValue,
+            label: localize_builtin(form, BuiltinMessage::PresenceRemove { label: label() }),
+            id: format!("{element_id}-remove-value"),
+            invoke: callbacks.remove_value,
+        });
+    }
+    if operations.can_replace_value() && has_seed {
+        presence.push(Affordance {
+            kind: AffordanceKind::Replace,
+            label: localize_builtin(form, BuiltinMessage::PresenceReplace { label: label() }),
+            id: format!("{element_id}-replace-value"),
+            invoke: callbacks.replace,
+        });
+    }
+    presence
+}
+
+/// Renders the built-in presence buttons for one scalar control from its affordances.
+///
+/// Each button carries the affordance's id and one marker attribute for its operation
+/// (`data-set-value`, `data-set-null`, `data-remove-value`, `data-replace-value`) and invokes the
+/// affordance. rsx attribute names are literal, so each marker is an `Option` attribute.
+fn scalar_presence_actions(presence: &[render::Affordance]) -> Element {
+    use render::AffordanceKind;
+
+    let buttons = presence.to_vec();
     rsx! {
         div { class: "schemaform-presence-actions",
-            if show_set {
+            for affordance in buttons {
                 button {
+                    key: "{affordance.id}",
+                    id: affordance.id.clone(),
                     r#type: "button",
-                    "data-set-value": "",
-                    onclick: move |_| {
-                        if let Some(value) = &set_seed {
-                            report_builtin_operation(
-                                &set_errors,
-                                set_actions.set_value(value.clone()),
-                            );
-                        }
-                    },
-                    "{set_label}"
-                }
-            }
-            if projection.allowed_operations.can_set_null() {
-                button {
-                    r#type: "button",
-                    "data-set-null": "",
-                    onclick: move |_| {
-                        report_builtin_operation(&null_errors, null_actions.set_null());
-                    },
-                    "{set_null_label}"
-                }
-            }
-            if projection.allowed_operations.can_remove_value() {
-                button {
-                    r#type: "button",
-                    "data-remove-value": "",
-                    onclick: move |_| {
-                        report_builtin_operation(&remove_errors, remove_actions.remove_value());
-                    },
-                    "{remove_label}"
-                }
-            }
-            if projection.allowed_operations.can_replace_value() && replace_seed.is_some() {
-                button {
-                    r#type: "button",
-                    "data-replace-value": "",
-                    onclick: move |_| {
-                        if let Some(value) = &replace_seed {
-                            report_builtin_operation(
-                                &replace_errors,
-                                replace_actions.replace_value(value.clone()),
-                            );
-                        }
-                    },
-                    "{replace_label}"
+                    "data-set-value": (affordance.kind == AffordanceKind::Set).then_some(""),
+                    "data-set-null": (affordance.kind == AffordanceKind::SetNull).then_some(""),
+                    "data-remove-value": (affordance.kind == AffordanceKind::RemoveValue)
+                        .then_some(""),
+                    "data-replace-value": (affordance.kind == AffordanceKind::Replace)
+                        .then_some(""),
+                    onclick: move |_| affordance.invoke.call(()),
+                    "{affordance.label}"
                 }
             }
         }
@@ -6000,18 +6169,40 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
         render::RenderNodeKind::Control,
         &props.control.input_id,
     );
-    let Ok(Some(reader)) = props.form.handle().node(props.control.identity) else {
-        return rsx! {};
-    };
-    let Ok(Some(mut projection)) = reader.read() else {
+    let reader = props
+        .form
+        .handle()
+        .node(props.control.identity)
+        .ok()
+        .flatten();
+    let projection = reader
+        .as_ref()
+        .and_then(|reader| reader.read().ok().flatten());
+    // Hooks run before the availability guards below so the hook order is identical on every
+    // render, including renders where the node has already been removed or disposed.
+    let lifecycle_version = props.form.handle().observe_lifecycle();
+    let mut composition_value = use_signal(|| (lifecycle_version, None::<String>));
+    let operation_errors = dioxus_core::try_consume_context::<OperationErrorHandler>();
+    let actions = reader.as_ref().map(handle::NodeReader::actions);
+    let presence_callbacks = use_scalar_presence_callbacks(
+        actions.as_ref(),
+        projection
+            .as_ref()
+            .and_then(|projection| projection.creation_seed.clone()),
+        operation_errors.clone(),
+    );
+    let (Some(reader), Some(mut projection), Some(actions)) = (reader, projection, actions) else {
         return rsx! {};
     };
     localize_node_text(&props.form, &mut projection);
-    let lifecycle_version = props.form.handle().observe_lifecycle();
-    let mut composition_value = use_signal(|| (lifecycle_version, None::<String>));
-    let actions = reader.actions();
-    let operation_errors = dioxus_core::try_consume_context::<BuiltinOperationErrorHandler>();
-    let presentation = node_presentation(&props.form, &projection, &props.control.input_id);
+    let presence = scalar_presence_affordances(
+        &props.form,
+        &projection,
+        &props.control.input_id,
+        presence_callbacks,
+    );
+    let presentation =
+        node_presentation(&props.form, &projection, &props.control.input_id, presence);
     let facets = control_facets(&props.form, &props.control, &projection);
     if let Some(renderer) = &props.control.renderer {
         return renderer.render(render::ControlRenderContext::new(
@@ -6020,6 +6211,7 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
             presentation,
             facets,
             props.control.extensions.clone(),
+            operation_errors,
         ));
     }
 
@@ -6031,8 +6223,7 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
     let disabled = facets.disabled;
     let value_state = projection.value_state;
     let value_state_attribute = value_state_attribute(value_state);
-    let seed = projection.creation_seed.clone();
-    let presence_actions = scalar_presence_actions(&props.form, actions.clone(), &projection, seed);
+    let presence_actions = scalar_presence_actions(&presentation.presence);
     let incompatible_value = (matches!(
         value_state,
         Some(schemaform::form::ScalarValueState::Incompatible)
@@ -6163,12 +6354,12 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
                             } else {
                                 replacement_actions.set_value(value)
                             };
-                            report_builtin_operation(&replacement_errors, result);
+                            report_operation(&replacement_errors, result);
                             resynchronize_control_value(&replacement_control_id, "");
                         }
                     },
                     onblur: move |_| {
-                        report_builtin_operation(&blur_errors, actions.blur());
+                        report_operation(&blur_errors, actions.blur());
                     },
                     option { value: "", disabled: true, selected: true, "{replacement.placeholder}" }
                     option { value: "false", "{false_label}" }
@@ -6237,7 +6428,7 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
                             if composing {
                                 input_composition_value.set((lifecycle_version, Some(value)));
                             } else {
-                                if !report_builtin_operation(
+                                if !report_operation(
                                     &input_errors,
                                     input_actions.input_text(value),
                                 ) {
@@ -6273,7 +6464,7 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
                                 &blur_control_id,
                                 &blur_canonical_value,
                             );
-                            report_builtin_operation(&blur_errors, actions.blur());
+                            report_operation(&blur_errors, actions.blur());
                         },
                     }
                     {supplements}
@@ -6318,12 +6509,12 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
                             } else {
                                 input_actions.set_value(value)
                             };
-                            if !report_builtin_operation(&input_errors, result) {
+                            if !report_operation(&input_errors, result) {
                                 resynchronize_checkbox(&input_control_id, checked);
                             }
                         },
                         onblur: move |_| {
-                            report_builtin_operation(&blur_errors, actions.blur());
+                            report_operation(&blur_errors, actions.blur());
                         },
                     }
                     if projection.label_visible {
@@ -6435,7 +6626,7 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
                                 } else {
                                     select_actions.set_value(option.value.clone())
                                 };
-                                let succeeded = report_builtin_operation(&select_errors, result);
+                                let succeeded = report_operation(&select_errors, result);
                                 if write_only || !succeeded {
                                     resynchronize_control_value(
                                         &select_control_id,
@@ -6445,7 +6636,7 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
                             }
                         },
                         onblur: move |_| {
-                            report_builtin_operation(&blur_errors, actions.blur());
+                            report_operation(&blur_errors, actions.blur());
                         },
                         option {
                             value: "",
@@ -6507,7 +6698,7 @@ fn finish_composition(
     actions: &handle::ControlActions,
     mut composition_value: Signal<(u64, Option<String>)>,
     lifecycle_version: u64,
-    operation_errors: &Option<BuiltinOperationErrorHandler>,
+    operation_errors: &Option<OperationErrorHandler>,
     control_id: &str,
     canonical_value: &str,
 ) {
@@ -6515,7 +6706,7 @@ fn finish_composition(
     composition_value.set((lifecycle_version, None));
     if composition_lifecycle == lifecycle_version
         && let Some(value) = value
-        && !report_builtin_operation(operation_errors, actions.input_text(value))
+        && !report_operation(operation_errors, actions.input_text(value))
     {
         resynchronize_control_value(control_id, canonical_value);
     }
@@ -6578,10 +6769,10 @@ pub use handle::{
     FormReader, HandleError, HandleTransactionError, NodeProjection, NodeReader, use_form,
 };
 pub use render::{
-    BindError, BindFinding, BoundForm, ControlFacets, ControlKind, ControlMatcher, ControlRegistry,
-    ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
-    ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter, Help, Localizer,
-    NodePresentation, PreparedExtension, PreparedExtensions, RenderConfiguration,
+    Affordance, AffordanceKind, BindError, BindFinding, BoundForm, ControlFacets, ControlKind,
+    ControlMatcher, ControlRegistry, ControlRenderContext, ControlRenderer, ExtensionHandler,
+    ExtensionOccurrence, ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter,
+    Help, Localizer, NodePresentation, PreparedExtension, PreparedExtensions, RenderConfiguration,
 };
 #[cfg(schemaform_test_validation_faults)]
 pub use render_observation::{RenderEvent, RenderNodeKind, RenderObservation, RenderObserver};

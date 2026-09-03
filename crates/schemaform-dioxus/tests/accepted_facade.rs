@@ -3,10 +3,10 @@ use std::sync::Arc;
 use dioxus::prelude::Element;
 use schemaform::{ExtensionNamespace, WidgetSymbol, definition::DefinitionNodeView};
 use schemaform_dioxus::{
-    ControlFacets, ControlKind, ControlMatcher, ControlRegistry, ControlRenderContext,
-    ControlRenderer, ExtensionHandler, ExtensionOccurrence, ExtensionPrepareError,
-    ExtensionRenderContext, FindingCollectionPresenter, Localizer, NodePresentation,
-    PreparedExtension, RenderConfiguration,
+    Affordance, AffordanceKind, ControlFacets, ControlKind, ControlMatcher, ControlRegistry,
+    ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
+    ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter, Localizer,
+    NodePresentation, PreparedExtension, RenderConfiguration,
     render::{BUILTIN_CONTROL_PRIORITY, FindingCollectionContext, FindingKind, MessageDescriptor},
 };
 
@@ -34,6 +34,22 @@ impl ControlRenderer for Renderer {
             presentation.invalid,
             presentation.described_by(),
         );
+        let _affordances = presentation.presence.iter().map(|affordance: &Affordance| {
+            (
+                matches!(
+                    affordance.kind,
+                    AffordanceKind::Set
+                        | AffordanceKind::SetNull
+                        | AffordanceKind::RemoveValue
+                        | AffordanceKind::Replace
+                ),
+                affordance.label.as_str(),
+                affordance.id.as_str(),
+                affordance.invoke,
+                affordance.clone() == *affordance,
+            )
+        });
+        let _reported: Option<()> = context.report(Ok(()));
         let control: &ControlFacets = context.control();
         let _control_fields = (
             control.kind == ControlKind::String,

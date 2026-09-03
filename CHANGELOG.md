@@ -47,15 +47,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   | `projection.binding` as the rendered `name` | `context.control().name` |
   | adapter-rendered help | `context.presentation().present_help()` or render `help.text` in an element with `id: help.id` |
   | adapter-rendered findings | `context.presentation().present_findings()` or render `presentation().findings` yourself, keeping each `stable_id` |
+  | no presence affordances for custom controls | render one element per `context.presentation().presence` affordance, keeping its `id`, and call `affordance.invoke.call(())` |
+  | `let _ = actions.input_text(..)` (dropped errors) | `context.report(actions.input_text(..))` |
 
 ### Added
 
+- `NodePresentation::presence` lists the presence affordances the core allows
+  for a scalar control right now, and `Affordance` (`kind`, localized `label`,
+  the DOM `id` the triggering element must carry, `invoke`) performs the
+  operation and reports failures to `SchemaForm::on_error` itself. Set is
+  offered only while the value is missing or null and a creation seed exists,
+  replace only while the core allows replacement and a seed exists, set null
+  and remove value whenever the core allows them. `AffordanceKind` is
+  non-exhaustive (`Set`, `SetNull`, `RemoveValue`, `Replace` today) so later
+  renderer seams can add collection and submit affordances. The built-in
+  control renders its presence buttons from the same list, so a custom
+  renderer receives exactly the operations the built-in would offer; those
+  buttons now carry the affordance id.
+- `ControlRenderContext::report(result)` routes a failed `ControlActions` call
+  to `SchemaForm::on_error` and returns the success value as `Option`, so
+  custom renderers no longer have to drop `HandleError` values.
 - `ControlRenderContext`, `NodeReader`, `ControlActions`, `NodePresentation`,
   and `ControlFacets` implement `PartialEq` (value equality for presentation
   data and facets, identity equality for the reader, actions, and the bound
   form a presentation renders findings through, pointer equality for prepared
   extensions), so a context can be passed as a prop to a child component
-  without Dioxus memoization showing stale state.
+  without Dioxus memoization showing stale state. `Affordance` compares by
+  `kind`, `label`, and `id`; its `invoke` callback is hook-stable and excluded.
 - `ControlKind` is public: the widget family the adapter derives from a
   definition node (`String`, `Number`, `Integer`, `Boolean`, `Choice`,
   `Constant`; non-exhaustive).

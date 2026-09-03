@@ -91,11 +91,21 @@ renderer everything it needs, pre-localized:
 - `presentation()` is the node presentation: the `element_id` the primary
   element must carry, the localized `label` and whether it is `label_visible`,
   optional `help` with the element id it must carry, local `findings` as
-  descriptors with stable ids, and `invalid`. `described_by()` joins the help
-  and finding ids for `aria-describedby`; `present_help()` renders the help as
-  the built-in does; `present_findings()` renders the findings through the
+  descriptors with stable ids, `invalid`, and `presence`: the presence
+  affordances the core allows right now. `described_by()` joins the help and
+  finding ids for `aria-describedby`; `present_help()` renders the help as the
+  built-in does; `present_findings()` renders the findings through the
   configured local finding presenter so presenter swaps keep working without
   re-calling the renderer.
+- Each `Affordance` in `presence` is a pre-localized, pre-authorized action:
+  its `kind` (`Set`, `SetNull`, `RemoveValue`, `Replace`), localized `label`,
+  the `id` the triggering element must carry, and `invoke`, a callback that
+  performs the core operation and reports failures to `on_error` itself. The
+  list holds exactly the operations the built-in would offer: set only while
+  the value is missing or null and a creation seed exists, replace only while
+  the core allows replacement and a seed exists, set null and remove value
+  whenever the core allows them. Renderers place affordances; they do not
+  reconstruct the rules.
 - `control()` is the control facets: `kind` (`String`, `Number`, `Integer`,
   `Boolean`, `Choice`, `Constant`), the control binding as `name`, `required`,
   `disabled`, `read_only`, `write_only`, `touched`, `dirty`, `nullable`, and the
@@ -103,6 +113,9 @@ renderer everything it needs, pre-localized:
   text, and boolean value labels the built-in uses.
 - `node()` is a target-scoped reactive reader, `actions()` the approved scalar
   actions for that node, and `extensions()` the prepared extension decorators.
+- `report(result)` routes a failed `actions()` call to `SchemaForm::on_error`
+  and returns the success value as `Option`, so a renderer never has to drop a
+  `HandleError` such as a borrow conflict or a rejected write.
 
 Every id referenced by the presentation names an element the renderer is
 responsible for emitting; finding-summary focus and label association rely on
@@ -127,7 +140,11 @@ authored configuration may be interpreted by an extension handler while it
 prepares its decorator, but is not exposed as an open-ended renderer-options
 object.
 
-An exact-widget renderer renders its whole region from the node-scoped context:
+An exact-widget renderer renders its whole region from the node-scoped context,
+places the presence affordances the adapter computed, and reports operation
+failures. Render-time reads are the one place a renderer legitimately falls back
+instead of reporting: a node that cannot be read is about to be unmounted, so
+the renderer renders nothing rather than raising an error on every frame.
 
 ```rust
 use std::sync::Arc;
@@ -141,12 +158,15 @@ struct TextRenderer;
 
 impl ControlRenderer for TextRenderer {
     fn render(&self, context: ControlRenderContext) -> Element {
+        // A node that cannot be read right now is unavailable; render nothing for it.
         let Some(projection) = context.node().read().ok().flatten() else {
             return rsx! {};
         };
         let actions = context.actions().clone();
+        let reporter = context.clone();
         let presentation = context.presentation();
         let control = context.control();
+        let presence = presentation.presence.clone();
         rsx! {
             label { r#for: presentation.element_id.clone(), "{presentation.label}" }
             input {
@@ -158,12 +178,23 @@ impl ControlRenderer for TextRenderer {
                 readonly: control.read_only,
                 "aria-invalid": presentation.invalid,
                 "aria-describedby": presentation.described_by(),
-                oninput: move |event| { let _ = actions.input_text(event.value()); }
+                oninput: move |event| {
+                    reporter.report(actions.input_text(event.value()));
+                }
             }
             if let Some(help) = &presentation.help {
                 p { id: help.id.clone(), "{help.text}" }
             }
             {presentation.present_findings()}
+            for affordance in presence {
+                button {
+                    key: "{affordance.id}",
+                    id: affordance.id.clone(),
+                    r#type: "button",
+                    onclick: move |_| affordance.invoke.call(()),
+                    "{affordance.label}"
+                }
+            }
         }
     }
 }
@@ -191,7 +222,7 @@ interface. Text is rendered as escaped plain text.
 | --- | --- |
 | Form construction | `schemaform::FormBuildError` |
 | Render preflight | `render::BindError` with structured `render::BindFinding` values |
-| Handle and control operations | `HandleError` |
+| Handle and control operations | `HandleError`; a custom renderer routes it to `on_error` with `ControlRenderContext::report` |
 | Host transactions | `HandleTransactionError` |
 | Submission | `SchemaForm::on_submit` for a ready snapshot; optional `SchemaForm::on_error` for adapter failures |
 

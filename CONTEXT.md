@@ -41,8 +41,16 @@ An object shape whose editable projection is a finite set of statically named pr
 _Avoid_: Closed object, static object
 
 **Node presentation**:
-Adapter-computed, localized presentation data for one form-tree node: its suggested element id, label, help, local findings with stable ids, and invalid state. A renderer that receives it owns the elements it references; the adapter renders nothing on the renderer's behalf.
+Adapter-computed, localized presentation data for one form-tree node: its suggested element id, label, help, local findings with stable ids, presence affordances, and invalid state. A renderer that receives it owns the elements it references; the adapter renders nothing on the renderer's behalf.
 _Avoid_: Accessibility data, field meta, control context
+
+**Presence operation**:
+A user operation that changes whether a value exists at a control binding — materialize, set, set null, remove, replace — rather than editing its content. The core decides which presence operations a node allows right now.
+_Avoid_: Nullability toggle, clear
+
+**Affordance**:
+A localized, pre-authorized user action handed to a renderer. Invoking it performs the core operation and reports failures to the host; collection affordances also announce and move focus. Renderers place affordances, they do not compose them.
+_Avoid_: Button, action callback
 
 **Form data**:
 The canonical JSON instance currently being edited and validated by a form.

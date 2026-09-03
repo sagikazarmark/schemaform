@@ -242,6 +242,67 @@ impl ControlMatcher for CountingMatcher {
     }
 }
 
+/// Matches every control without counting, for apps that hand every control to one renderer.
+struct EveryControl;
+
+impl ControlMatcher for EveryControl {
+    fn matches(&self, _definition: DefinitionNodeView<'_>) -> bool {
+        true
+    }
+}
+
+/// A custom renderer that owns its whole region: label, input, help, findings, and the presence
+/// affordances the adapter computed, each as a button carrying the affordance id and a
+/// `data-affordance` kind marker. Every operation result is passed through `report()`.
+struct AffordanceRenderer;
+
+impl ControlRenderer for AffordanceRenderer {
+    fn render(&self, context: ControlRenderContext) -> Element {
+        let projection = context
+            .node()
+            .read()
+            .expect("the affordance control should remain readable")
+            .expect("the affordance control should remain present");
+        let actions = context.actions().clone();
+        let reporter = context.clone();
+        let presentation = context.presentation();
+        let control = context.control();
+        let presence = presentation.presence.clone();
+        rsx! {
+            label {
+                r#for: presentation.element_id.clone(),
+                "{presentation.label}"
+            }
+            input {
+                id: presentation.element_id.clone(),
+                name: control.name.clone(),
+                value: projection.value.unwrap_or_default(),
+                required: control.required,
+                disabled: control.disabled,
+                readonly: control.read_only,
+                "aria-invalid": presentation.invalid,
+                "aria-describedby": presentation.described_by(),
+                "data-affordance-widget": "",
+                oninput: move |event| {
+                    reporter.report(actions.input_text(event.value()));
+                },
+            }
+            {presentation.present_help()}
+            {presentation.present_findings()}
+            for affordance in presence {
+                button {
+                    key: "{affordance.id}",
+                    id: affordance.id.clone(),
+                    r#type: "button",
+                    "data-affordance": format!("{:?}", affordance.kind),
+                    onclick: move |_| affordance.invoke.call(()),
+                    "{affordance.label}"
+                }
+            }
+        }
+    }
+}
+
 struct ExactRenderer {
     matcher_calls: Rc<RefCell<usize>>,
 }
@@ -845,6 +906,74 @@ fn operation_error_test_app(props: TestAppProps) -> Element {
             form: bound,
             on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
             on_error: move |error| errors.borrow_mut().push(error),
+        }
+    }
+}
+
+/// Binds every control to [`AffordanceRenderer`] above the built-in priority.
+fn bind_affordance_renderer(form: &FormHandle) -> schemaform_dioxus::BoundForm {
+    RenderConfiguration::builder()
+        .controls(ControlRegistry::with_builtins().matcher(
+            schemaform_dioxus::render::BUILTIN_CONTROL_PRIORITY + 10,
+            Arc::new(EveryControl),
+            Arc::new(AffordanceRenderer),
+        ))
+        .build()
+        .bind(form)
+        .expect("the affordance renderer should bind every control")
+}
+
+fn custom_renderer_operation_error_test_app(props: TestAppProps) -> Element {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+            "text": { "type": "string", "title": "Text" },
+            "optional": { "type": ["string", "null"], "title": "Optional" }
+        }
+    }))
+    .expect("the custom-renderer operation-error data schema should compile");
+    let form = use_form(definition, json!({ "text": "canonical" }))
+        .expect("the custom-renderer operation-error form should be created");
+    let bound = bind_affordance_renderer(&form);
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+    let errors = props.errors.clone();
+
+    rsx! {
+        SchemaForm {
+            form: bound,
+            on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
+            on_error: move |error| errors.borrow_mut().push(error),
+        }
+    }
+}
+
+fn custom_renderer_presence_test_app(props: TestAppProps) -> Element {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+            "value": { "type": ["string", "null"], "title": "Value" },
+            "note": { "type": "string", "title": "Note", "description": "Optional note" }
+        }
+    }))
+    .expect("the custom-renderer presence data schema should compile");
+    let form = use_form(definition, json!({}))
+        .expect("the custom-renderer presence form should be created");
+    let bound = bind_affordance_renderer(&form);
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+
+    rsx! {
+        SchemaForm {
+            form: bound,
+            on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
         }
     }
 }
@@ -5656,6 +5785,89 @@ async fn scalar_presence_controls_repair_explicitly_without_render_time_mutation
 }
 
 #[wasm_bindgen_test]
+async fn custom_renderer_presence_affordances_repair_nullable_and_optional_scalars_without_render_time_mutation()
+ {
+    let MountedTestApp {
+        root,
+        form_handle,
+        submitted: _,
+    } = mount_test_app(custom_renderer_presence_test_app).await;
+    let value = input_with_binding(&root, "/value");
+    let note = input_with_binding(&root, "/note");
+    assert!(value.has_attribute("data-affordance-widget"));
+    let mounted = form_handle
+        .reader()
+        .read()
+        .expect("form should be readable");
+    let form_data = || {
+        form_handle
+            .reader()
+            .form_data()
+            .expect("form should be readable")
+    };
+
+    // Mounting a custom renderer that places affordances must not touch form data.
+    assert_eq!(form_data(), json!({}));
+    assert_eq!(affordance_kinds(&root, &value), ["Set", "SetNull"]);
+    assert_eq!(affordance_kinds(&root, &note), ["Set"]);
+    assert_described_by_resolves(&note);
+    value
+        .focus()
+        .expect("the missing input should accept focus");
+    next_microtask().await;
+    value.blur().expect("the untouched input should blur");
+    next_microtask().await;
+    assert_eq!(
+        form_handle
+            .reader()
+            .read()
+            .expect("form should be readable")
+            .data_revision,
+        mounted.data_revision
+    );
+    assert_eq!(form_data(), json!({}));
+
+    // Optional, non-nullable scalar: set materializes the seed, then only remove is offered.
+    affordance_button(&root, &note, "Set").click();
+    poll_dom(|| (form_data() == json!({ "note": "" })).then_some(())).await;
+    poll_dom(|| (affordance_kinds(&root, &note) == ["RemoveValue"]).then_some(())).await;
+    assert_eq!(note.value(), "");
+    affordance_button(&root, &note, "RemoveValue").click();
+    poll_dom(|| (form_data() == json!({})).then_some(())).await;
+    poll_dom(|| (affordance_kinds(&root, &note) == ["Set"]).then_some(())).await;
+
+    // Nullable scalar: set null, then set to the seed, then remove.
+    affordance_button(&root, &value, "SetNull").click();
+    poll_dom(|| (form_data() == json!({ "value": null })).then_some(())).await;
+    poll_dom(|| (affordance_kinds(&root, &value) == ["Set", "RemoveValue"]).then_some(())).await;
+    affordance_button(&root, &value, "Set").click();
+    poll_dom(|| (form_data() == json!({ "value": "" })).then_some(())).await;
+    poll_dom(|| (affordance_kinds(&root, &value) == ["SetNull", "RemoveValue"]).then_some(()))
+        .await;
+    affordance_button(&root, &value, "RemoveValue").click();
+    poll_dom(|| (form_data() == json!({})).then_some(())).await;
+    poll_dom(|| (affordance_kinds(&root, &value) == ["Set", "SetNull"]).then_some(())).await;
+
+    // Incompatible data is preserved until the renderer's replace affordance repairs it.
+    form_handle
+        .reinitialize(json!({ "value": 7 }))
+        .expect("the browser form should preserve incompatible scalar data");
+    poll_dom(|| {
+        (affordance_kinds(&root, &value) == ["SetNull", "RemoveValue", "Replace"]).then_some(())
+    })
+    .await;
+    assert!(value.read_only());
+    assert_eq!(form_data(), json!({ "value": 7 }));
+    affordance_button(&root, &value, "Replace").click();
+    poll_dom(|| (form_data() == json!({ "value": "" })).then_some(())).await;
+    poll_dom(|| (affordance_kinds(&root, &value) == ["SetNull", "RemoveValue"]).then_some(()))
+        .await;
+    assert_described_by_resolves(&value);
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
 async fn arbitrary_precision_integer_browser_trace_matches_the_core_facade() {
     let MountedTestApp {
         root,
@@ -8852,6 +9064,75 @@ async fn every_builtin_user_operation_failure_reaches_schema_form_on_error() {
     );
 
     root.remove();
+}
+
+#[wasm_bindgen_test]
+async fn custom_renderer_reported_failures_reach_schema_form_on_error() {
+    let (
+        MountedTestApp {
+            root, form_handle, ..
+        },
+        errors,
+    ) = mount_test_app_with_errors(custom_renderer_operation_error_test_app).await;
+    let text = input_with_binding(&root, "/text");
+    let optional = input_with_binding(&root, "/optional");
+    assert!(text.has_attribute("data-affordance-widget"));
+    let set_optional = affordance_button(&root, &optional, "Set");
+
+    form_handle
+        .try_transact(|_| {
+            // The host holds the form borrow: the renderer's `report()` and the affordance's
+            // internal reporting must both route the conflict to `on_error`.
+            dispatch_input(&text, "rejected");
+            set_optional.click();
+            Ok::<_, ()>(())
+        })
+        .expect("the outer transaction should complete without mutation");
+
+    assert_eq!(
+        form_handle.reader().form_data().unwrap(),
+        json!({ "text": "canonical" })
+    );
+    assert_eq!(
+        *errors.borrow(),
+        vec![HandleError::BorrowConflict, HandleError::BorrowConflict]
+    );
+
+    root.remove();
+}
+
+/// Returns the affordance button of `kind` that the custom renderer emitted for `input`. The
+/// selector requires the adapter's id prefix, so a renderer that drops the id is caught here.
+fn affordance_button(
+    root: &web_sys::Element,
+    input: &HtmlInputElement,
+    kind: &str,
+) -> web_sys::HtmlElement {
+    root.query_selector(&format!(
+        "button[data-affordance=\"{kind}\"][id^=\"{}-\"]",
+        input.id()
+    ))
+    .expect("the affordance selector should be valid")
+    .unwrap_or_else(|| {
+        panic!(
+            "{} should offer the {kind} affordance right now",
+            input.id()
+        )
+    })
+    .dyn_into::<web_sys::HtmlElement>()
+    .expect("the affordance should be a button")
+}
+
+/// Lists the affordance kinds the custom renderer currently offers for `input`, in order.
+fn affordance_kinds(root: &web_sys::Element, input: &HtmlInputElement) -> Vec<String> {
+    let buttons = root
+        .query_selector_all(&format!("button[data-affordance][id^=\"{}-\"]", input.id()))
+        .expect("the affordance selector should be valid");
+    (0..buttons.length())
+        .filter_map(|index| buttons.item(index))
+        .filter_map(|node| node.dyn_into::<web_sys::Element>().ok())
+        .filter_map(|element| element.get_attribute("data-affordance"))
+        .collect()
 }
 
 struct MountedTestApp {
