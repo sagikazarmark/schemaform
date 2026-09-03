@@ -40,6 +40,10 @@ _Avoid_: Scope, field path, schema path
 An object shape whose editable projection is a finite set of statically named properties. Undeclared members may still be preserved and validated; supporting them does not imply dynamic-key editing.
 _Avoid_: Closed object, static object
 
+**Node presentation**:
+Adapter-computed, localized presentation data for one form-tree node: its suggested element id, label, help, local findings with stable ids, and invalid state. A renderer that receives it owns the elements it references; the adapter renders nothing on the renderer's behalf.
+_Avoid_: Accessibility data, field meta, control context
+
 **Form data**:
 The canonical JSON instance currently being edited and validated by a form.
 _Avoid_: Model, form value, values

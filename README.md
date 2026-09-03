@@ -56,11 +56,10 @@ two packages: the Dioxus-free `schemaform` core and the browser-CSR
 
 ## Status
 
-The two-package first-release candidate is implemented but **unpublished**; the
-workspace version is `0.0.0`. Production artifacts and exact-tag evidence are
-regenerated from the release commit before publication. Browser latency and
-runtime-memory calibration are post-first-release work, and this release
-candidate makes no quantitative claim for either.
+Both packages are published on crates.io and share one version; see
+[CHANGELOG.md](CHANGELOG.md) for what changed in each release. Browser latency
+and runtime-memory calibration remain future work, and no release makes a
+quantitative claim for either.
 
 ## Quick Start
 

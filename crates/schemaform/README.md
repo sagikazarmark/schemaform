@@ -23,9 +23,6 @@ definition in a Dioxus browser application.
 
 ## Install
 
-The first release is not published yet. Once it is available, add the crate
-with:
-
 ```toml
 [dependencies]
 schemaform = "0.1"

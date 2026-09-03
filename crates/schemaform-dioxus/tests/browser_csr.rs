@@ -214,25 +214,23 @@ impl ControlRenderer for PriorityRenderer {
             .read()
             .expect("the priority-selected control should remain readable")
             .expect("the priority-selected control should remain present");
-        let name = projection
-            .binding
-            .expect("the priority-selected control should have a binding")
-            .as_str()
-            .to_owned();
         let actions = context.actions().clone();
-        let accessibility = context.accessibility();
+        let presentation = context.presentation();
         let matcher_calls = *self.matcher_calls.borrow();
         rsx! {
             input {
-                id: accessibility.control_id.clone(),
-                name,
+                id: presentation.element_id.clone(),
+                name: context.control().name.clone(),
                 value: projection.value.unwrap_or_default(),
+                "aria-describedby": presentation.described_by(),
                 "data-priority-renderer": self.marker,
                 "data-matcher-calls": matcher_calls,
                 oninput: move |event| {
                     let _ = actions.input_text(event.value());
                 },
             }
+            {presentation.present_help()}
+            {presentation.present_findings()}
         }
     }
 }
@@ -300,33 +298,40 @@ impl ControlRenderer for ExactRenderer {
             .expect("the exact custom control should remain readable")
             .expect("the exact custom control should remain present");
         let actions = context.actions().clone();
-        let accessibility = context.accessibility();
-        let described_by = accessibility.described_by.join(" ");
+        let presentation = context.presentation();
+        let control = context.control();
         let matcher_calls = *self.matcher_calls.borrow();
         let extension_count = context.extensions().iter().count();
         rsx! {
             label {
-                r#for: accessibility.control_id.clone(),
-                "{context.label()}"
+                r#for: presentation.element_id.clone(),
+                "{presentation.label}"
             }
             input {
-                id: accessibility.control_id.clone(),
-                name: projection.binding.unwrap().as_str().to_owned(),
+                id: presentation.element_id.clone(),
+                name: control.name.clone(),
                 value: projection.value.unwrap_or_default(),
-                required: accessibility.required,
-                disabled: accessibility.disabled,
-                readonly: accessibility.read_only,
-                "aria-invalid": accessibility.invalid,
-                "aria-describedby": described_by,
+                required: control.required,
+                disabled: control.disabled,
+                readonly: control.read_only,
+                "aria-invalid": presentation.invalid,
+                "aria-describedby": presentation.described_by(),
                 "data-exact-widget": "",
-                "data-label-visible": context.is_label_visible(),
-                "data-help": context.help(),
+                "data-control-kind": format!("{:?}", control.kind),
+                "data-label-visible": presentation.label_visible,
+                "data-help": presentation.help.as_ref().map(|help| help.text.clone()),
+                "data-touched": control.touched,
+                "data-dirty": control.dirty,
                 "data-matcher-calls": matcher_calls,
                 "data-extension-count": extension_count,
                 oninput: move |event| {
                     let _ = actions.input_text(event.value());
                 },
             }
+            if let Some(help) = &presentation.help {
+                p { id: help.id.clone(), "data-exact-help": "", "{help.text}" }
+            }
+            {presentation.present_findings()}
         }
     }
 }
@@ -339,8 +344,7 @@ struct InstrumentedControlProps {
 
 impl PartialEq for InstrumentedControlProps {
     fn eq(&self, other: &Self) -> bool {
-        self.context.node().identity() == other.context.node().identity()
-            && Rc::ptr_eq(&self.lifecycle, &other.lifecycle)
+        self.context == other.context && Rc::ptr_eq(&self.lifecycle, &other.lifecycle)
     }
 }
 
@@ -358,31 +362,30 @@ fn InstrumentedControl(props: InstrumentedControlProps) -> Element {
         .expect("the instrumented control should remain readable")
         .expect("the instrumented control should remain present");
     let actions = props.context.actions().clone();
-    let accessibility = props.context.accessibility();
-    let name = projection
-        .binding
-        .expect("the instrumented control should have a binding")
-        .as_str()
-        .to_owned();
+    let presentation = props.context.presentation();
+    let control = props.context.control();
 
     rsx! {
         div {
             class: "schemaform-control",
             label {
-                r#for: accessibility.control_id.clone(),
-                "{projection.label}"
+                r#for: presentation.element_id.clone(),
+                "{presentation.label}"
             }
             input {
-                id: accessibility.control_id.clone(),
-                name,
+                id: presentation.element_id.clone(),
+                name: control.name.clone(),
                 r#type: "text",
                 value: projection.value.unwrap_or_default(),
-                required: accessibility.required,
-                "aria-invalid": accessibility.invalid,
+                required: control.required,
+                "aria-invalid": presentation.invalid,
+                "aria-describedby": presentation.described_by(),
                 oninput: move |event| {
                     let _ = actions.input_text(event.value());
                 },
             }
+            {presentation.present_help()}
+            {presentation.present_findings()}
         }
     }
 }
@@ -931,22 +934,27 @@ impl ControlRenderer for PresentationRenderer {
             .expect("the localized custom control should remain readable")
             .expect("the localized custom control should remain present");
         let actions = context.actions().clone();
+        let presentation = context.presentation();
         rsx! {
             div {
                 "data-presentation-renderer": "",
                 "data-renderer-calls": calls,
                 label {
-                    r#for: context.accessibility().control_id.clone(),
-                    "{context.label()}"
+                    r#for: presentation.element_id.clone(),
+                    "{presentation.label}"
                 }
                 input {
-                    id: context.accessibility().control_id.clone(),
-                    name: projection.binding.unwrap().as_str().to_owned(),
+                    id: presentation.element_id.clone(),
+                    name: context.control().name.clone(),
                     value: projection.value.unwrap_or_default(),
+                    "aria-invalid": presentation.invalid,
+                    "aria-describedby": presentation.described_by(),
                     oninput: move |event| {
                         let _ = actions.input_text(event.value());
                     },
                 }
+                {presentation.present_help()}
+                {presentation.present_findings()}
             }
         }
     }
@@ -7270,6 +7278,8 @@ async fn scalar_transition_rerenders_only_the_changed_instance_without_remountin
     assert_eq!(*matcher_calls.borrow(), 2);
     assert_eq!(before.get(&first_name).map(|counts| counts.mounts), Some(1));
     assert_eq!(before.get(&last_name).map(|counts| counts.mounts), Some(1));
+    assert_described_by_resolves(&first_input);
+    assert_described_by_resolves(&last_input);
 
     dispatch_input(&first_input, "Grace");
     poll_dom(|| {
@@ -7553,10 +7563,36 @@ async fn exact_widget_binding_is_definition_stable_and_grants_only_node_capabili
         input.get_attribute("data-extension-count").as_deref(),
         Some("0")
     );
+    assert_eq!(
+        input.get_attribute("data-control-kind").as_deref(),
+        Some("String")
+    );
+    assert_eq!(
+        input.get_attribute("data-touched").as_deref(),
+        Some("false")
+    );
+    assert_eq!(input.get_attribute("data-dirty").as_deref(), Some("false"));
+    let help_ids = assert_described_by_resolves(&input);
+    assert_eq!(
+        help_ids.len(),
+        1,
+        "an untouched valid control is described only by its help"
+    );
+    let help = root
+        .query_selector(&format!("#{}", help_ids[0]))
+        .unwrap()
+        .expect("the help id should resolve");
     assert!(
-        input
-            .get_attribute("aria-describedby")
-            .is_some_and(|ids| !ids.is_empty())
+        help.has_attribute("data-exact-help"),
+        "the custom renderer owns the help element"
+    );
+    assert_eq!(help.text_content().as_deref(), Some("Enter a full name"));
+    assert_eq!(
+        root.query_selector_all(".schemaform-help")
+            .unwrap()
+            .length(),
+        0,
+        "the adapter must not append its own help after a custom renderer"
     );
 
     dispatch_input(&input, "");
@@ -7575,6 +7611,27 @@ async fn exact_widget_binding_is_definition_stable_and_grants_only_node_capabili
         .then_some(())
     })
     .await;
+    let invalid_input = input_with_binding(&root, "/name");
+    let referenced = assert_described_by_resolves(&invalid_input);
+    assert_eq!(
+        referenced.len(),
+        2,
+        "an invalid control is described by its help and its one finding"
+    );
+    let local_findings = root
+        .query_selector_all("[data-validation-finding]")
+        .unwrap();
+    assert_eq!(
+        local_findings.length(),
+        1,
+        "present_findings() renders the local finding exactly once"
+    );
+    let local_finding: web_sys::Element = local_findings.get(0).unwrap().dyn_into().unwrap();
+    assert_eq!(local_finding.id(), referenced[1]);
+    assert_eq!(
+        invalid_input.get_attribute("data-dirty").as_deref(),
+        Some("true")
+    );
     dispatch_input(&input, "Grace");
     poll_dom(|| {
         (form_handle
@@ -7685,6 +7742,7 @@ async fn highest_static_matcher_wins_once_and_below_floor_leaves_the_builtin() {
         Some("6")
     );
     assert!(low.get_attribute("data-priority-renderer").is_none());
+    assert_described_by_resolves(&high);
 
     dispatch_input(&high, "Grace");
     poll_dom(|| {
@@ -7731,6 +7789,7 @@ async fn custom_item_widget_renders_under_adapter_owned_array() {
         first.get_attribute("data-matcher-calls").as_deref(),
         Some("0")
     );
+    assert_described_by_resolves(&first);
 
     dispatch_input(&first, "updated");
     poll_dom(|| {
@@ -7776,6 +7835,7 @@ async fn custom_item_widget_renders_under_adapter_owned_array() {
         second.get_attribute("data-matcher-calls").as_deref(),
         Some("0")
     );
+    assert_described_by_resolves(&second);
     root.remove();
 }
 
@@ -8284,6 +8344,27 @@ async fn locale_and_presenter_changes_update_only_reactive_plain_text_presentati
             .ok()?
     })
     .await;
+    assert_eq!(
+        root.query_selector_all("[data-presentation-renderer] [data-reactive-presenter='local']")
+            .unwrap()
+            .length(),
+        1,
+        "the custom renderer places the local collection through present_findings()"
+    );
+    assert_eq!(
+        root.query_selector_all(
+            "[data-reactive-presenter='local'] [data-reactive-finding='minimum']"
+        )
+        .unwrap()
+        .length(),
+        1,
+        "the adapter must not render a second local collection after the custom control"
+    );
+    let described_by = assert_described_by_resolves(&input_with_binding(&root, "/quantity"));
+    assert!(
+        described_by.iter().any(|id| id == &local_finding.id()),
+        "the custom control must be described by the presented finding"
+    );
     let summary_finding = root
         .query_selector("[data-reactive-presenter='summary'] [data-reactive-finding='minimum']")
         .unwrap()
@@ -9149,6 +9230,31 @@ fn assert_settled_lifecycle_state(form: &FormHandle, control: InstanceIdentity) 
 
 fn input_with_binding(root: &web_sys::Element, binding: &str) -> HtmlInputElement {
     maybe_input_with_binding(root, binding).expect("the bound input should exist")
+}
+
+/// Asserts that every id referenced by `aria-describedby` and `aria-errormessage` on `element`
+/// resolves to an element in the document.
+fn assert_described_by_resolves(element: &web_sys::Element) -> Vec<String> {
+    let document = web_sys::window()
+        .expect("the browser test should run in a window")
+        .document()
+        .expect("the browser test should have a document");
+    let mut referenced = Vec::new();
+    for attribute in ["aria-describedby", "aria-errormessage"] {
+        for id in element
+            .get_attribute(attribute)
+            .unwrap_or_default()
+            .split_whitespace()
+        {
+            assert!(
+                document.get_element_by_id(id).is_some(),
+                "{attribute} on #{} references missing element #{id}",
+                element.id()
+            );
+            referenced.push(id.to_owned());
+        }
+    }
+    referenced
 }
 
 fn maybe_input_with_binding(root: &web_sys::Element, binding: &str) -> Option<HtmlInputElement> {

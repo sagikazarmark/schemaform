@@ -521,10 +521,28 @@ pub mod handle {
     ///
     /// Reads subscribe only to transitions for this identity. The reader can outlive a dynamic
     /// collection node; [`NodeReader::read`] then returns `Ok(None)`.
+    ///
+    /// Two readers compare equal when they observe the same node of the same form handle; the
+    /// comparison is identity-based and does not read form state.
     #[derive(Clone)]
     pub struct NodeReader {
         handle: FormHandle,
         identity: InstanceIdentity,
+    }
+
+    impl PartialEq for NodeReader {
+        fn eq(&self, other: &Self) -> bool {
+            self.handle == other.handle && self.identity == other.identity
+        }
+    }
+
+    impl fmt::Debug for NodeReader {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter
+                .debug_struct("NodeReader")
+                .field("identity", &self.identity)
+                .finish_non_exhaustive()
+        }
     }
 
     impl NodeReader {
@@ -607,6 +625,7 @@ pub mod handle {
                 read_only: node.is_read_only(),
                 write_only: node.is_write_only(),
                 required: definition.is_required(),
+                nullable: definition.accepts_null(),
                 edit_buffer: node.edit_buffer().map(str::to_owned),
                 parse_blocker: node.parse_blocker(),
                 validation_findings: node.validation_findings().cloned().collect(),
@@ -803,6 +822,8 @@ pub mod handle {
         pub write_only: bool,
         /// Whether the bound value is required by its parent shape.
         pub required: bool,
+        /// Whether the bound scalar accepts JSON null independently of being required.
+        pub nullable: bool,
         /// Exact in-progress textual edit, if one exists.
         pub edit_buffer: Option<String>,
         /// Parse blocker associated with the edit buffer, if any.
@@ -862,10 +883,27 @@ pub mod handle {
     ///
     /// These methods are intended for browser event callbacks, not execution during rendering.
     /// Every operation is revalidated by the core and can report a borrow conflict on re-entry.
+    ///
+    /// Two action sets compare equal when they target the same node of the same form handle.
     #[derive(Clone)]
     pub struct ControlActions {
         handle: FormHandle,
         target: InstanceIdentity,
+    }
+
+    impl PartialEq for ControlActions {
+        fn eq(&self, other: &Self) -> bool {
+            self.handle == other.handle && self.target == other.target
+        }
+    }
+
+    impl fmt::Debug for ControlActions {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter
+                .debug_struct("ControlActions")
+                .field("target", &self.target)
+                .finish_non_exhaustive()
+        }
     }
 
     impl ControlActions {
@@ -1571,41 +1609,52 @@ pub mod render {
     ///
     /// Authority is node-scoped: the renderer can observe one [`NodeReader`] and invoke approved
     /// [`ControlActions`] for that node. It cannot obtain unrestricted form mutation through this
-    /// context. Homogeneous array composition and collection actions remain adapter-owned.
-    #[derive(Clone)]
+    /// context. Homogeneous array composition remains adapter-owned.
+    ///
+    /// The renderer owns the whole control region. The adapter renders exactly what
+    /// [`ControlRenderer::render`] returns: it does not add a label, help text, local findings, or
+    /// an `aria-describedby` relationship on the renderer's behalf. Everything needed to render
+    /// those is pre-localized on [`ControlRenderContext::presentation`] and
+    /// [`ControlRenderContext::control`].
+    ///
+    /// The context compares by value for presentation and facets, by identity for the reader and
+    /// actions, and by pointer for prepared extensions, so it can be passed as a prop to a child
+    /// component without Dioxus memoization showing stale state.
+    #[derive(Clone, PartialEq)]
     pub struct ControlRenderContext {
         node: NodeReader,
         actions: ControlActions,
-        accessibility: Accessibility,
-        label: String,
-        label_visible: bool,
-        help: Option<String>,
+        presentation: NodePresentation,
+        control: ControlFacets,
         extensions: PreparedExtensions,
+    }
+
+    impl fmt::Debug for ControlRenderContext {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter
+                .debug_struct("ControlRenderContext")
+                .field("node", &self.node)
+                .field("presentation", &self.presentation)
+                .field("control", &self.control)
+                .finish_non_exhaustive()
+        }
     }
 
     impl ControlRenderContext {
         pub(crate) fn new(
             node: NodeReader,
             actions: ControlActions,
-            accessibility: Accessibility,
-            label: String,
-            label_visible: bool,
-            help: Option<String>,
+            presentation: NodePresentation,
+            control: ControlFacets,
+            extensions: PreparedExtensions,
         ) -> Self {
             Self {
                 node,
                 actions,
-                accessibility,
-                label,
-                label_visible,
-                help,
-                extensions: PreparedExtensions::default(),
+                presentation,
+                control,
+                extensions,
             }
-        }
-
-        pub(crate) fn with_extensions(mut self, extensions: PreparedExtensions) -> Self {
-            self.extensions = extensions;
-            self
         }
 
         /// Returns the target-scoped reactive reader for this control.
@@ -1620,26 +1669,14 @@ pub mod render {
             &self.actions
         }
 
-        /// Returns adapter-computed DOM accessibility attributes and relationships.
-        pub fn accessibility(&self) -> &Accessibility {
-            &self.accessibility
+        /// Returns the adapter-computed, localized presentation for this node.
+        pub fn presentation(&self) -> &NodePresentation {
+            &self.presentation
         }
 
-        /// Returns the localized plain-text control label.
-        pub fn label(&self) -> &str {
-            &self.label
-        }
-
-        /// Returns whether the label should be visibly rendered.
-        ///
-        /// The label may still be required for an accessible name when this returns `false`.
-        pub fn is_label_visible(&self) -> bool {
-            self.label_visible
-        }
-
-        /// Returns localized plain-text help, when available.
-        pub fn help(&self) -> Option<&str> {
-            self.help.as_deref()
+        /// Returns the control-specific facets derived from the definition and current state.
+        pub fn control(&self) -> &ControlFacets {
+            &self.control
         }
 
         /// Returns extension decorators prepared for this definition node during binding.
@@ -1651,22 +1688,189 @@ pub mod render {
         }
     }
 
-    /// Adapter-computed accessibility contract for a custom control's primary DOM element.
-    #[derive(Debug, Clone)]
+    /// Adapter-computed, localized presentation data for one form-tree node.
+    ///
+    /// The adapter computes one value per node render for controls, fixed-object groups,
+    /// homogeneous arrays, and unsupported regions. Custom control renderers receive it through
+    /// [`ControlRenderContext::presentation`] and are responsible for emitting the elements whose
+    /// ids it references: the primary element carrying [`NodePresentation::element_id`], the help
+    /// element carrying [`Help::id`], and the finding elements carrying
+    /// [`FindingDescriptor::stable_id`] (rendered directly or through
+    /// [`NodePresentation::present_findings`]).
+    #[derive(Clone, PartialEq)]
     #[non_exhaustive]
-    pub struct Accessibility {
-        /// Unique DOM `id` to assign to the primary control element.
-        pub control_id: String,
-        /// DOM IDs to join for the control's `aria-describedby` value.
-        pub described_by: Vec<String>,
-        /// Value for the control's required semantics.
-        pub required: bool,
-        /// Whether current local state should be exposed as invalid.
+    pub struct NodePresentation {
+        /// DOM `id` the node's primary element must carry.
+        ///
+        /// Finding-summary focus, label association, and array focus management target this id.
+        pub element_id: String,
+        /// Localized plain-text label.
+        pub label: String,
+        /// Whether the label should be visibly rendered.
+        ///
+        /// The label is still required for an accessible name when this is `false`.
+        pub label_visible: bool,
+        /// Localized help text and the DOM id its element must carry, when help exists.
+        pub help: Option<Help>,
+        /// Local findings in presentation order: validation, capability, external, then parse.
+        pub findings: Vec<FindingDescriptor>,
+        /// Whether the node's current local state should be exposed as invalid.
+        ///
+        /// A node is invalid exactly when any of its local findings is blocking. Validation
+        /// findings and parse blockers always block; capability and external findings block when
+        /// the core marks them blocking. Advisory findings never make a node invalid.
         pub invalid: bool,
+        form: BoundForm,
+    }
+
+    impl fmt::Debug for NodePresentation {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter
+                .debug_struct("NodePresentation")
+                .field("element_id", &self.element_id)
+                .field("label", &self.label)
+                .field("label_visible", &self.label_visible)
+                .field("help", &self.help)
+                .field("findings", &self.findings)
+                .field("invalid", &self.invalid)
+                .finish_non_exhaustive()
+        }
+    }
+
+    impl NodePresentation {
+        pub(crate) fn new(
+            form: BoundForm,
+            element_id: String,
+            label: String,
+            label_visible: bool,
+            help: Option<Help>,
+            findings: Vec<FindingDescriptor>,
+        ) -> Self {
+            let invalid = findings.iter().any(|finding| finding.blocking);
+            Self {
+                element_id,
+                label,
+                label_visible,
+                help,
+                findings,
+                invalid,
+                form,
+            }
+        }
+
+        /// Returns the space-joined `aria-describedby` value for the primary element.
+        ///
+        /// The value references the help id followed by every finding id, or is `None` when the
+        /// node has neither help nor findings. Every referenced id names an element the renderer
+        /// is responsible for emitting.
+        pub fn described_by(&self) -> Option<String> {
+            let ids = self
+                .help
+                .iter()
+                .map(|help| help.id.as_str())
+                .chain(
+                    self.findings
+                        .iter()
+                        .map(|finding| finding.stable_id.as_str()),
+                )
+                .collect::<Vec<_>>();
+            (!ids.is_empty()).then(|| ids.join(" "))
+        }
+
+        /// Renders the node's local findings through the configured local finding presenter.
+        ///
+        /// The returned element reads the presenter in a child scope, so swapping the presenter
+        /// through [`RenderConfiguration::rebind_presentation`] updates the findings without
+        /// calling the control renderer again. Each finding element carries its
+        /// [`FindingDescriptor::stable_id`], and its focus action targets
+        /// [`NodePresentation::element_id`].
+        pub fn present_findings(&self) -> Element {
+            crate::render_local_findings(&self.form, self.findings.clone(), self.element_id.clone())
+        }
+
+        /// Renders the help text as the built-in does: a `div.schemaform-help` carrying
+        /// [`Help::id`], or nothing when the node has no help.
+        ///
+        /// Renderers that want different help markup render [`NodePresentation::help`] themselves
+        /// and keep the id.
+        pub fn present_help(&self) -> Element {
+            let help = self.help.clone();
+            dioxus::prelude::rsx! {
+                if let Some(help) = help {
+                    div { id: help.id, class: "schemaform-help", "{help.text}" }
+                }
+            }
+        }
+    }
+
+    /// Localized help text and the DOM id of the element that must present it.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[non_exhaustive]
+    pub struct Help {
+        /// DOM `id` the help element must carry; [`NodePresentation::described_by`] references it.
+        pub id: String,
+        /// Localized plain-text help.
+        pub text: String,
+    }
+
+    /// Control-specific facets derived from the definition node and the node's current state.
+    ///
+    /// Every string is pre-localized through the configured [`Localizer`], so a custom renderer
+    /// can reproduce the built-in write-only and boolean behaviour without the message catalog.
+    #[derive(Debug, Clone, PartialEq)]
+    #[non_exhaustive]
+    pub struct ControlFacets {
+        /// Widget family the adapter derived from the definition node.
+        pub kind: ControlKind,
+        /// Root-origin control binding as a JSON Pointer string, intended as the rendered `name`.
+        pub name: String,
+        /// Whether the control should present required semantics right now.
+        pub required: bool,
         /// Whether the control is unavailable for interaction.
         pub disabled: bool,
         /// Whether the control permits observation but not ordinary editing.
         pub read_only: bool,
+        /// Whether the bound value is write-only and must not be echoed back.
+        pub write_only: bool,
+        /// Whether the user has blurred this control.
+        pub touched: bool,
+        /// Whether canonical data at this control differs from its baseline.
+        pub dirty: bool,
+        /// Whether the bound scalar accepts JSON null.
+        pub nullable: bool,
+        /// Localized replacement chrome for a write-only control that can accept a new value.
+        ///
+        /// Present exactly when the built-in renders a replacement widget: the control is
+        /// write-only, not read-only, and not a constant.
+        pub write_only_replacement: Option<WriteOnlyReplacement>,
+        /// Localized status text describing a write-only value without revealing it.
+        ///
+        /// Present for every write-only control.
+        pub write_only_status: Option<String>,
+        /// Localized labels for the two boolean values.
+        ///
+        /// Present for every boolean control.
+        pub boolean_labels: Option<BooleanLabels>,
+    }
+
+    /// Localized label and placeholder for a write-only replacement widget.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[non_exhaustive]
+    pub struct WriteOnlyReplacement {
+        /// Localized label naming the replacement action, such as `Replace Password`.
+        pub label: String,
+        /// Localized placeholder shown before a replacement value is chosen.
+        pub placeholder: String,
+    }
+
+    /// Localized labels for boolean values.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[non_exhaustive]
+    pub struct BooleanLabels {
+        /// Localized label for `false`.
+        pub false_label: String,
+        /// Localized label for `true`.
+        pub true_label: String,
     }
 
     /// Immutable prepared extensions attached to one render context.
@@ -2124,12 +2328,12 @@ pub mod render {
             &self,
             definition: DefinitionNodeView<'_>,
             findings: &mut Vec<BindFinding>,
-        ) -> Option<(BuiltinControlKind, Option<Arc<dyn ControlRenderer>>)> {
+        ) -> Option<(ControlKind, Option<Arc<dyn ControlRenderer>>)> {
             let Some(semantic_kind) = definition.semantic_kind() else {
                 findings.push(BindFinding::UnsupportedDefinitionNode);
                 return None;
             };
-            let Some(kind) = BuiltinControlKind::from_definition(definition) else {
+            let Some(kind) = ControlKind::from_definition(definition) else {
                 findings.push(BindFinding::UnsupportedSemanticKind(semantic_kind));
                 return None;
             };
@@ -2470,11 +2674,7 @@ pub mod render {
                     RenderNodeKind::StaticLayout,
                     tabs.element_id.clone(),
                 )),
-                Self::TabPanel(panel) => Some((
-                    panel.identity,
-                    RenderNodeKind::StaticLayout,
-                    panel.element_id.clone(),
-                )),
+                Self::TabPanel(_) => None,
                 Self::Text(text) => Some((
                     text.identity,
                     RenderNodeKind::StaticLayout,
@@ -2661,7 +2861,7 @@ pub mod render {
     #[derive(Clone)]
     pub(crate) struct BoundTemplateControl {
         pub(crate) definition: DefinitionNodeId,
-        pub(crate) kind: BuiltinControlKind,
+        pub(crate) kind: ControlKind,
         pub(crate) renderer: Option<Arc<dyn ControlRenderer>>,
         pub(crate) extensions: PreparedExtensions,
     }
@@ -3016,7 +3216,7 @@ pub mod render {
         pub(crate) identity: InstanceIdentity,
         pub(crate) input_id: String,
         pub(crate) name: String,
-        pub(crate) kind: BuiltinControlKind,
+        pub(crate) kind: ControlKind,
         pub(crate) renderer: Option<Arc<dyn ControlRenderer>>,
         pub(crate) extensions: PreparedExtensions,
     }
@@ -3032,17 +3232,29 @@ pub mod render {
         }
     }
 
-    #[derive(Clone, Copy, PartialEq, Eq)]
-    pub(crate) enum BuiltinControlKind {
+    /// Widget family the adapter derives from a control's definition node.
+    ///
+    /// The derivation uses only definition-time information, so the kind is fixed for the
+    /// lifetime of a [`BoundForm`]. `Constant` covers nodes that present a fixed value without
+    /// offering a selection: non-selectable choices and null-typed nodes.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[non_exhaustive]
+    pub enum ControlKind {
+        /// Free-text string input.
         String,
+        /// Decimal number input.
         Number,
+        /// Integer input.
         Integer,
+        /// Two-state or nullable boolean.
         Boolean,
+        /// Selection among compiled choice options.
         Choice,
+        /// Fixed value presented without a selection.
         Constant,
     }
 
-    impl BuiltinControlKind {
+    impl ControlKind {
         fn from_definition(definition: DefinitionNodeView<'_>) -> Option<Self> {
             match definition.semantic_kind()? {
                 SemanticKind::String => Some(Self::String),
@@ -3224,7 +3436,8 @@ pub struct SchemaFormProps {
     pub on_submit: EventHandler<SubmissionSnapshot>,
     /// Receives adapter operation failures, including reentrant handle borrow conflicts.
     ///
-    /// This callback is required; failures are never converted into submission blockers.
+    /// This callback is optional; when it is not set, failures are dropped. Failures are never
+    /// converted into submission blockers.
     pub on_error: EventHandler<handle::HandleError>,
 }
 
@@ -3235,8 +3448,9 @@ pub struct SchemaFormProps {
 /// WebView targets. A [`render::BoundForm`] and its clones share generated DOM identity and must
 /// have at most one concurrent mount. Submission calls `on_submit` only for a ready
 /// [`SubmissionSnapshot`]; blocked outcomes update findings and focus, while adapter failures call
-/// `on_error`. Built-ins emit semantic accessibility markup; custom renderers and extensions are
-/// responsible for honoring the supplied accessibility contract.
+/// `on_error`. Built-ins emit semantic accessibility markup; a custom control renderer owns its
+/// whole control region and is responsible for emitting the elements its
+/// [`render::NodePresentation`] references.
 pub fn SchemaForm(props: SchemaFormProps) -> Element {
     let operation_errors = use_context_provider(BuiltinOperationErrorHandler::default);
     operation_errors.set(Some(props.on_error));
@@ -3535,20 +3749,13 @@ fn BoundNode(props: BoundNodeProps) -> Element {
     #[cfg(schemaform_test_validation_faults)]
     use_observed_lifecycle(&props.form, props.node.observation());
     #[cfg(schemaform_test_validation_faults)]
-    match &props.node {
-        render::BoundNode::TabPanel(panel) => observe_renderer_entry(
-            &props.form,
-            panel.identity,
-            render::RenderNodeKind::StaticLayout,
-            &panel.element_id,
-        ),
-        render::BoundNode::Text(text) => observe_renderer_entry(
+    if let render::BoundNode::Text(text) = &props.node {
+        observe_renderer_entry(
             &props.form,
             text.identity,
             render::RenderNodeKind::StaticLayout,
             &text.element_id,
-        ),
-        _ => {}
+        );
     }
     match props.node {
         render::BoundNode::Decorated(decorated) => {
@@ -3613,19 +3820,9 @@ fn BoundNode(props: BoundNodeProps) -> Element {
                 tabs,
             }
         },
-        render::BoundNode::TabPanel(panel) => rsx! {
-            div {
-                id: panel.element_id,
-                tabindex: "-1",
-                for node in panel.children {
-                    BoundNode {
-                        key: "{node.key()}",
-                        form: props.form.clone(),
-                        node,
-                    }
-                }
-            }
-        },
+        render::BoundNode::TabPanel(_) => {
+            unreachable!("tab panels are rendered only through their tabs component")
+        }
         render::BoundNode::Text(text) => {
             let content = localize_ui_text(&props.form, &text.content);
             rsx! {
@@ -4408,17 +4605,16 @@ fn instantiate_array_template_children(
         .collect()
 }
 
-struct LocalControlFindings {
-    findings: Vec<render::FindingDescriptor>,
-    help_id: Option<String>,
-    described_by: Vec<String>,
-}
-
-fn local_control_findings(
+/// Computes the localized presentation shared by every node kind that renders chrome.
+///
+/// `projection` must already be localized through [`localize_node_text`]. Stable finding ids are
+/// prefixed by `element_id`, so the same node rendered under a different element id yields
+/// distinct ids.
+fn node_presentation(
     form: &render::BoundForm,
     projection: &handle::NodeProjection,
     element_id: &str,
-) -> LocalControlFindings {
+) -> render::NodePresentation {
     let mut findings =
         validation_descriptors(form, projection, &format!("{element_id}-local-validation"));
     findings.extend(capability_descriptors(
@@ -4438,20 +4634,18 @@ fn local_control_findings(
             format!("{element_id}-local-parse"),
         ));
     }
-    let help_id = projection
-        .help
-        .as_ref()
-        .map(|_| format!("{element_id}-help"));
-    let described_by = help_id
-        .iter()
-        .cloned()
-        .chain(findings.iter().map(|finding| finding.stable_id.clone()))
-        .collect();
-    LocalControlFindings {
+    let help = projection.help.clone().map(|text| render::Help {
+        id: format!("{element_id}-help"),
+        text,
+    });
+    render::NodePresentation::new(
+        form.clone(),
+        element_id.to_owned(),
+        projection.label.clone(),
+        projection.label_visible,
+        help,
         findings,
-        help_id,
-        described_by,
-    }
+    )
 }
 
 #[derive(Props, Clone, PartialEq)]
@@ -4616,15 +4810,11 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
         &projection,
         Some(presence_success),
     );
-    let LocalControlFindings {
-        findings,
-        help_id,
-        described_by,
-    } = local_control_findings(&props.form, &projection, &props.array.element_id);
-    let finding_target = props.array.element_id.clone();
-    let described_by = (!described_by.is_empty()).then(|| described_by.join(" "));
-    let invalid = findings.iter().any(|finding| finding.blocking);
-    let presented_findings = render_local_findings(&props.form, findings, finding_target);
+    let presentation = node_presentation(&props.form, &projection, &props.array.element_id);
+    let described_by = presentation.described_by();
+    let invalid = presentation.invalid;
+    let help = presentation.present_help();
+    let presented_findings = presentation.present_findings();
     let mut items = Vec::new();
     for identity in projection.children.iter().copied() {
         let Ok(Some(item_reader)) = props.form.handle().node(identity) else {
@@ -4677,9 +4867,7 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
             "aria-describedby": described_by,
             tabindex: "-1",
             legend { "{projection.label}" }
-            if let (Some(help_id), Some(help)) = (help_id, projection.help) {
-                div { id: help_id, class: "schemaform-help", "{help}" }
-            }
+            {help}
             {presence_actions}
             for (item, row_id, node, index) in rendered_items {
                 div {
@@ -5141,17 +5329,12 @@ fn FixedObjectGroup(props: FixedObjectGroupProps) -> Element {
     localize_node_text(&props.form, &mut projection);
     let presence_actions =
         container_presence_actions(&props.form, reader.actions(), &projection, None);
-    let LocalControlFindings {
-        findings,
-        help_id,
-        described_by,
-    } = local_control_findings(&props.form, &projection, &props.group.element_id);
-    let finding_target = props.group.element_id.clone();
-    let described_by = (!described_by.is_empty()).then(|| described_by.join(" "));
-    let invalid = findings.iter().any(|finding| finding.blocking);
-    let presented_findings = render_local_findings(&props.form, findings, finding_target);
+    let presentation = node_presentation(&props.form, &projection, &props.group.element_id);
+    let described_by = presentation.described_by();
+    let invalid = presentation.invalid;
+    let help = presentation.present_help();
+    let presented_findings = presentation.present_findings();
     let group_label = projection.label.clone();
-    let group_help = projection.help.clone();
     rsx! {
         fieldset {
             id: props.group.element_id,
@@ -5161,9 +5344,7 @@ fn FixedObjectGroup(props: FixedObjectGroupProps) -> Element {
             "aria-describedby": described_by,
             tabindex: "-1",
             legend { "{group_label}" }
-            if let (Some(help_id), Some(help)) = (help_id, group_help) {
-                div { id: help_id, class: "schemaform-help", "{help}" }
-            }
+            {help}
             {presence_actions}
             for node in props.group.children {
                 BoundNode {
@@ -5212,14 +5393,10 @@ fn UnsupportedRegion(props: UnsupportedRegionProps) -> Element {
         .as_ref()
         .map(|binding| binding.as_str().to_owned())
         .unwrap_or_default();
-    let LocalControlFindings {
-        findings,
-        help_id,
-        described_by,
-    } = local_control_findings(&props.form, &projection, &props.region.element_id);
-    let described_by = described_by.join(" ");
-    let presented_findings =
-        render_local_findings(&props.form, findings, props.region.element_id.clone());
+    let presentation = node_presentation(&props.form, &projection, &props.region.element_id);
+    let described_by = presentation.described_by();
+    let help = presentation.present_help();
+    let presented_findings = presentation.present_findings();
 
     rsx! {
         section {
@@ -5232,9 +5409,7 @@ fn UnsupportedRegion(props: UnsupportedRegionProps) -> Element {
             "aria-describedby": described_by,
             tabindex: "-1",
             strong { "{projection.label}" }
-            if let (Some(help_id), Some(help)) = (help_id, projection.help) {
-                div { id: help_id, class: "schemaform-help", "{help}" }
-            }
+            {help}
             {presented_findings}
         }
     }
@@ -5613,6 +5788,91 @@ struct BuiltinControlProps {
     control: render::BoundControl,
 }
 
+/// Derives the control facets shared by the built-in control and custom renderers.
+///
+/// `projection` must already be localized through [`localize_node_text`].
+fn control_facets(
+    form: &render::BoundForm,
+    control: &render::BoundControl,
+    projection: &handle::NodeProjection,
+) -> render::ControlFacets {
+    use schemaform::form::{AllowedOperations, ScalarValueState};
+
+    let kind = control.kind;
+    let value_state = projection.value_state;
+    let operations = projection.allowed_operations;
+    let selectable =
+        operations.can_set_value() || operations.can_set_null() || operations.can_replace_value();
+    let required = projection.required
+        && if projection.write_only {
+            matches!(
+                value_state,
+                Some(ScalarValueState::Missing | ScalarValueState::Incompatible)
+            ) || matches!(value_state, Some(ScalarValueState::Null))
+                && operations.can_replace_value()
+        } else {
+            projection.current_data.is_some() || operations != AllowedOperations::default()
+        };
+    let disabled = kind == render::ControlKind::Constant
+        || matches!(
+            kind,
+            render::ControlKind::Boolean | render::ControlKind::Choice
+        ) && !selectable;
+    let read_only = projection.read_only
+        || kind == render::ControlKind::Constant
+        || matches!(
+            kind,
+            render::ControlKind::String
+                | render::ControlKind::Number
+                | render::ControlKind::Integer
+        ) && !operations.can_input_text();
+    let write_only_replacement =
+        (projection.write_only && !projection.read_only && kind != render::ControlKind::Constant)
+            .then(|| render::WriteOnlyReplacement {
+                label: localize_builtin(
+                    form,
+                    BuiltinMessage::WriteOnlyReplace {
+                        label: projection.label.clone(),
+                    },
+                ),
+                placeholder: localize_builtin(
+                    form,
+                    BuiltinMessage::WriteOnlyReplacementPlaceholder {
+                        label: projection.label.clone(),
+                    },
+                ),
+            });
+    let write_only_status = projection.write_only.then(|| {
+        let label = projection.label.clone();
+        let message = match value_state {
+            Some(ScalarValueState::Missing) => BuiltinMessage::WriteOnlyNotSet { label },
+            Some(ScalarValueState::Incompatible) => {
+                BuiltinMessage::WriteOnlyNeedsReplacement { label }
+            }
+            _ => BuiltinMessage::WriteOnlySet { label },
+        };
+        localize_builtin(form, message)
+    });
+    let boolean_labels = (kind == render::ControlKind::Boolean).then(|| render::BooleanLabels {
+        false_label: localize_builtin(form, BuiltinMessage::BooleanFalse),
+        true_label: localize_builtin(form, BuiltinMessage::BooleanTrue),
+    });
+    render::ControlFacets {
+        kind,
+        name: control.name.clone(),
+        required,
+        disabled,
+        read_only,
+        write_only: projection.write_only,
+        touched: projection.touched,
+        dirty: projection.dirty,
+        nullable: projection.nullable,
+        write_only_replacement,
+        write_only_status,
+        boolean_labels,
+    }
+}
+
 fn value_state_attribute(state: Option<schemaform::form::ScalarValueState>) -> &'static str {
     use schemaform::form::ScalarValueState;
 
@@ -5751,18 +6011,24 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
     let mut composition_value = use_signal(|| (lifecycle_version, None::<String>));
     let actions = reader.actions();
     let operation_errors = dioxus_core::try_consume_context::<BuiltinOperationErrorHandler>();
-    let invalid = projection.parse_blocker.is_some()
-        || !projection.validation_findings.is_empty()
-        || projection
-            .external_findings
-            .iter()
-            .any(|(_, finding)| finding.is_blocking());
-    let LocalControlFindings {
-        findings,
-        help_id,
-        described_by,
-    } = local_control_findings(&props.form, &projection, &props.control.input_id);
-    let finding_target = props.control.input_id.clone();
+    let presentation = node_presentation(&props.form, &projection, &props.control.input_id);
+    let facets = control_facets(&props.form, &props.control, &projection);
+    if let Some(renderer) = &props.control.renderer {
+        return renderer.render(render::ControlRenderContext::new(
+            reader,
+            actions,
+            presentation,
+            facets,
+            props.control.extensions.clone(),
+        ));
+    }
+
+    let invalid = presentation.invalid;
+    let described_by = presentation.described_by();
+    let supplements = presentation.present_help();
+    let presented_findings = presentation.present_findings();
+    let required = facets.required;
+    let disabled = facets.disabled;
     let value_state = projection.value_state;
     let value_state_attribute = value_state_attribute(value_state);
     let seed = projection.creation_seed.clone();
@@ -5781,66 +6047,6 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
                 .map(Value::to_string)
                 .unwrap_or_default()
         });
-    let selectable = projection.allowed_operations.can_set_value()
-        || projection.allowed_operations.can_set_null()
-        || projection.allowed_operations.can_replace_value();
-    let required = projection.required
-        && if projection.write_only {
-            matches!(
-                value_state,
-                Some(
-                    schemaform::form::ScalarValueState::Missing
-                        | schemaform::form::ScalarValueState::Incompatible
-                )
-            ) || matches!(value_state, Some(schemaform::form::ScalarValueState::Null))
-                && projection.allowed_operations.can_replace_value()
-        } else {
-            projection.current_data.is_some()
-                || projection.allowed_operations != schemaform::form::AllowedOperations::default()
-        };
-    let disabled = props.control.kind == render::BuiltinControlKind::Constant
-        || matches!(
-            props.control.kind,
-            render::BuiltinControlKind::Boolean | render::BuiltinControlKind::Choice
-        ) && !selectable;
-    let read_only = projection.read_only
-        || props.control.kind == render::BuiltinControlKind::Constant
-        || matches!(
-            props.control.kind,
-            render::BuiltinControlKind::String
-                | render::BuiltinControlKind::Number
-                | render::BuiltinControlKind::Integer
-        ) && !projection.allowed_operations.can_input_text();
-    if let Some(renderer) = &props.control.renderer {
-        let control = renderer.render(
-            render::ControlRenderContext::new(
-                reader,
-                actions,
-                render::Accessibility {
-                    control_id: props.control.input_id,
-                    described_by,
-                    required,
-                    invalid,
-                    disabled,
-                    read_only,
-                },
-                projection.label.clone(),
-                projection.label_visible,
-                projection.help.clone(),
-            )
-            .with_extensions(props.control.extensions.clone()),
-        );
-        let supplements = render_control_help(help_id, projection.help);
-        let presented_findings =
-            render_local_findings(&props.form, findings, finding_target.clone());
-        return rsx! {
-            {control}
-            {supplements}
-            {presented_findings}
-        };
-    }
-
-    let described_by = (!described_by.is_empty()).then(|| described_by.join(" "));
     let canonical_display_value = if projection.write_only && projection.edit_buffer.is_none() {
         String::new()
     } else {
@@ -5871,27 +6077,16 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
         (version, Some(value)) if version == lifecycle_version => value,
         _ => canonical_display_value.clone(),
     };
-    let help = projection.help;
-    let supplements = render_control_help(help_id, help);
-    let replacement_label = (projection.write_only
-        && !projection.read_only
-        && props.control.kind != render::BuiltinControlKind::Constant)
-        .then(|| {
-            localize_builtin(
-                &props.form,
-                BuiltinMessage::WriteOnlyReplace {
-                    label: projection.label.clone(),
-                },
-            )
-        });
+    let replacement_label = facets
+        .write_only_replacement
+        .as_ref()
+        .map(|replacement| replacement.label.clone());
     let accessible_label = (!projection.label_visible).then(|| {
         replacement_label
             .clone()
             .unwrap_or_else(|| projection.label.clone())
     });
     if projection.read_only {
-        let presented_findings =
-            render_local_findings(&props.form, findings, finding_target.clone());
         return rsx! {
             div {
                 class: "schemaform-control",
@@ -5918,25 +6113,24 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
             }
         };
     }
-    if projection.write_only && props.control.kind == render::BuiltinControlKind::Boolean {
+    if let (
+        render::ControlKind::Boolean,
+        Some(replacement),
+        Some(render::BooleanLabels {
+            false_label,
+            true_label,
+            ..
+        }),
+    ) = (
+        props.control.kind,
+        facets.write_only_replacement.clone(),
+        facets.boolean_labels.clone(),
+    ) {
         let replacement_actions = actions.clone();
         let replacement_operations = projection.allowed_operations;
         let replacement_errors = operation_errors.clone();
         let replacement_control_id = props.control.input_id.clone();
         let blur_errors = operation_errors.clone();
-        let presented_findings =
-            render_local_findings(&props.form, findings, finding_target.clone());
-        let replacement_label = replacement_label
-            .clone()
-            .expect("write-only controls have a replacement label");
-        let replacement_placeholder = localize_builtin(
-            &props.form,
-            BuiltinMessage::WriteOnlyReplacementPlaceholder {
-                label: projection.label.clone(),
-            },
-        );
-        let false_label = localize_builtin(&props.form, BuiltinMessage::BooleanFalse);
-        let true_label = localize_builtin(&props.form, BuiltinMessage::BooleanTrue);
         return rsx! {
             div {
                 class: "schemaform-control",
@@ -5944,7 +6138,7 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
                 if projection.label_visible {
                     label {
                         r#for: props.control.input_id.clone(),
-                        "{replacement_label}"
+                        "{replacement.label}"
                     }
                 }
                 select {
@@ -5976,7 +6170,7 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
                     onblur: move |_| {
                         report_builtin_operation(&blur_errors, actions.blur());
                     },
-                    option { value: "", disabled: true, selected: true, "{replacement_placeholder}" }
+                    option { value: "", disabled: true, selected: true, "{replacement.placeholder}" }
                     option { value: "false", "{false_label}" }
                     option { value: "true", "{true_label}" }
                 }
@@ -5987,9 +6181,9 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
         };
     }
     match props.control.kind {
-        render::BuiltinControlKind::String
-        | render::BuiltinControlKind::Number
-        | render::BuiltinControlKind::Integer => {
+        render::ControlKind::String
+        | render::ControlKind::Number
+        | render::ControlKind::Integer => {
             let input_actions = actions.clone();
             let composition_actions = actions.clone();
             let blur_actions = actions.clone();
@@ -6007,8 +6201,6 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
             let input_canonical_value = canonical_display_value.clone();
             let end_canonical_value = canonical_display_value.clone();
             let blur_canonical_value = canonical_display_value.clone();
-            let presented_findings =
-                render_local_findings(&props.form, findings, finding_target.clone());
             rsx! {
                 div {
                     class: "schemaform-control",
@@ -6093,7 +6285,7 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
                 }
             }
         }
-        render::BuiltinControlKind::Boolean => {
+        render::ControlKind::Boolean => {
             let input_actions = actions.clone();
             let checkbox_operations = projection.allowed_operations;
             let checked = projection
@@ -6104,8 +6296,6 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
             let input_errors = operation_errors.clone();
             let blur_errors = operation_errors.clone();
             let input_control_id = props.control.input_id.clone();
-            let presented_findings =
-                render_local_findings(&props.form, findings, finding_target.clone());
             rsx! {
                 div {
                     class: "schemaform-control",
@@ -6151,7 +6341,7 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
                 }
             }
         }
-        render::BuiltinControlKind::Choice => {
+        render::ControlKind::Choice => {
             let select_actions = actions.clone();
             let select_reader = reader.clone();
             let write_only = projection.write_only;
@@ -6171,17 +6361,10 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
                     value_state,
                     Some(schemaform::form::ScalarValueState::Incompatible)
                 );
-            let placeholder_label = if write_only {
-                localize_builtin(
-                    &props.form,
-                    BuiltinMessage::WriteOnlyReplacementPlaceholder {
-                        label: projection.label.clone(),
-                    },
-                )
-            } else if placeholder_hidden {
-                String::new()
-            } else {
-                display_value
+            let placeholder_label = match &facets.write_only_replacement {
+                Some(replacement) => replacement.placeholder.clone(),
+                None if placeholder_hidden => String::new(),
+                None => display_value,
             };
             let select_options = projection.choice_options.clone();
             let select_operations = projection.allowed_operations;
@@ -6189,8 +6372,6 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
             let blur_errors = operation_errors.clone();
             let select_control_id = props.control.input_id.clone();
             let canonical_selected = selected.clone();
-            let presented_findings =
-                render_local_findings(&props.form, findings, finding_target.clone());
             rsx! {
                 div {
                     class: "schemaform-control",
@@ -6287,39 +6468,8 @@ fn BuiltinControl(props: BuiltinControlProps) -> Element {
                 }
             }
         }
-        render::BuiltinControlKind::Constant => {
-            let presented_findings =
-                render_local_findings(&props.form, findings, finding_target.clone());
-            let write_only_status = projection.write_only.then(|| {
-                if matches!(
-                    projection.value_state,
-                    Some(schemaform::form::ScalarValueState::Missing)
-                ) {
-                    localize_builtin(
-                        &props.form,
-                        BuiltinMessage::WriteOnlyNotSet {
-                            label: projection.label.clone(),
-                        },
-                    )
-                } else if matches!(
-                    projection.value_state,
-                    Some(schemaform::form::ScalarValueState::Incompatible)
-                ) {
-                    localize_builtin(
-                        &props.form,
-                        BuiltinMessage::WriteOnlyNeedsReplacement {
-                            label: projection.label.clone(),
-                        },
-                    )
-                } else {
-                    localize_builtin(
-                        &props.form,
-                        BuiltinMessage::WriteOnlySet {
-                            label: projection.label.clone(),
-                        },
-                    )
-                }
-            });
+        render::ControlKind::Constant => {
+            let write_only_status = facets.write_only_status.clone();
             rsx! {
                 div {
                     class: "schemaform-control",
@@ -6397,14 +6547,6 @@ fn resynchronize_control_value(_control_id: &str, _value: &str) {}
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 fn resynchronize_checkbox(_control_id: &str, _checked: bool) {}
 
-fn render_control_help(help_id: Option<String>, help: Option<String>) -> Element {
-    rsx! {
-        if let (Some(id), Some(help)) = (help_id, help) {
-            div { id, class: "schemaform-help", "{help}" }
-        }
-    }
-}
-
 fn render_local_findings(
     form: &render::BoundForm,
     findings: Vec<render::FindingDescriptor>,
@@ -6436,10 +6578,10 @@ pub use handle::{
     FormReader, HandleError, HandleTransactionError, NodeProjection, NodeReader, use_form,
 };
 pub use render::{
-    BindError, BindFinding, BoundForm, ControlMatcher, ControlRegistry, ControlRenderContext,
-    ControlRenderer, ExtensionHandler, ExtensionOccurrence, ExtensionPrepareError,
-    ExtensionRenderContext, FindingCollectionPresenter, Localizer, PreparedExtension,
-    PreparedExtensions, RenderConfiguration,
+    BindError, BindFinding, BoundForm, ControlFacets, ControlKind, ControlMatcher, ControlRegistry,
+    ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
+    ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter, Help, Localizer,
+    NodePresentation, PreparedExtension, PreparedExtensions, RenderConfiguration,
 };
 #[cfg(schemaform_test_validation_faults)]
 pub use render_observation::{RenderEvent, RenderNodeKind, RenderObservation, RenderObserver};

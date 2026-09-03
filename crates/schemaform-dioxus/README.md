@@ -14,14 +14,18 @@ seams.
 
 ## Install
 
-The first release is not published yet. Once it is available, add both crates
-with:
+Both crates are published on crates.io and share one version. Add the same
+version of each:
 
 ```toml
 [dependencies]
 schemaform = "0.1"
 schemaform-dioxus = "0.1"
 ```
+
+See [CHANGELOG.md](../../CHANGELOG.md) for what changed in each release,
+including the migration note for custom renderer authors in the unreleased
+0.2 section.
 
 ## Quick Start
 
@@ -65,9 +69,9 @@ fn App() -> Element {
 `use_form` constructs one browser-local `FormHandle`.
 `RenderConfiguration::bind` performs definition-stable renderer and extension
 preflight before mounting. `SchemaForm` calls `on_submit` only for a ready
-snapshot; blocked submission updates finding presentation and focus instead,
-while adapter operation failures are reported through the required `on_error`
-callback.
+snapshot; blocked submission updates finding presentation and focus instead.
+Adapter operation failures are reported through the optional `on_error`
+callback and are dropped when it is not set.
 
 Handle operations are fallible because host callbacks can re-enter a handle.
 Borrow conflicts return `HandleError::BorrowConflict` or
@@ -79,28 +83,51 @@ reports the corresponding `BindFinding::Disposed`.
 
 ## Customization And Localization
 
-Custom controls receive a node reader, target-scoped approved scalar actions,
-accessibility data, localized labels and help, and prepared extension decorators.
-They do not receive the complete form handle, collection actions, or
-unrestricted core mutation authority. Custom renderers, presenters, localizers,
-and extension handlers are trusted host code and may capture authority
-independently.
+A custom `ControlRenderer` owns the entire control region: label, widget, help
+text, and local findings. The adapter renders exactly what the renderer
+returns and contributes nothing after it. The `ControlRenderContext` hands the
+renderer everything it needs, pre-localized:
 
-Homogeneous array composition remains adapter-owned in the first release.
-Array-level exact widget requests are preserved by stable UI-schema v1 parsing
-and compilation but fail render binding with
-`BindFinding::UnsupportedCollectionWidget`, even if registered. Matchers are
-not evaluated for array nodes. Inline item templates are still preflighted in
-full, and eligible controls within them retain exact or matcher-selected custom
-renderers and prepared extensions.
+- `presentation()` is the node presentation: the `element_id` the primary
+  element must carry, the localized `label` and whether it is `label_visible`,
+  optional `help` with the element id it must carry, local `findings` as
+  descriptors with stable ids, and `invalid`. `described_by()` joins the help
+  and finding ids for `aria-describedby`; `present_help()` renders the help as
+  the built-in does; `present_findings()` renders the findings through the
+  configured local finding presenter so presenter swaps keep working without
+  re-calling the renderer.
+- `control()` is the control facets: `kind` (`String`, `Number`, `Integer`,
+  `Boolean`, `Choice`, `Constant`), the control binding as `name`, `required`,
+  `disabled`, `read_only`, `write_only`, `touched`, `dirty`, `nullable`, and the
+  localized write-only replacement label and placeholder, write-only status
+  text, and boolean value labels the built-in uses.
+- `node()` is a target-scoped reactive reader, `actions()` the approved scalar
+  actions for that node, and `extensions()` the prepared extension decorators.
 
-The first-release control context does not expose raw data schemas or an
-exhaustive normalized schema-facet API. Control-specific authored configuration
-may be interpreted by an extension handler while it prepares its decorator, but
-is not exposed as an open-ended renderer-options object. Additional normalized
-facets are deferred until a concrete renderer contract is defined.
+Every id referenced by the presentation names an element the renderer is
+responsible for emitting; finding-summary focus and label association rely on
+the primary element carrying `element_id`. The context is `PartialEq`, so it
+can be passed as a prop to a child component.
 
-An exact-widget renderer uses only that node-scoped context:
+Custom renderers do not receive the complete form handle or unrestricted core
+mutation authority. Collection actions are obtainable through the node reader,
+and the core rejects them for nodes that are not arrays. Custom renderers,
+presenters, localizers, and extension handlers are trusted host code and may
+capture authority independently.
+
+Homogeneous array composition remains adapter-owned. Array-level exact widget
+requests are preserved by stable UI-schema v1 parsing and compilation but fail
+render binding with `BindFinding::UnsupportedCollectionWidget`, even if
+registered. Matchers are not evaluated for array nodes. Inline item templates
+are still preflighted in full, and eligible controls within them retain exact
+or matcher-selected custom renderers and prepared extensions.
+
+`ControlRenderContext` does not expose raw data schemas. Control-specific
+authored configuration may be interpreted by an extension handler while it
+prepares its decorator, but is not exposed as an open-ended renderer-options
+object.
+
+An exact-widget renderer renders its whole region from the node-scoped context:
 
 ```rust
 use std::sync::Arc;
@@ -118,17 +145,25 @@ impl ControlRenderer for TextRenderer {
             return rsx! {};
         };
         let actions = context.actions().clone();
-        let accessibility = context.accessibility();
+        let presentation = context.presentation();
+        let control = context.control();
         rsx! {
-            label { r#for: accessibility.control_id.clone(), "{context.label()}" }
+            label { r#for: presentation.element_id.clone(), "{presentation.label}" }
             input {
-                id: accessibility.control_id.clone(),
+                id: presentation.element_id.clone(),
+                name: control.name.clone(),
                 value: projection.value.unwrap_or_default(),
-                required: accessibility.required,
-                disabled: accessibility.disabled,
-                readonly: accessibility.read_only,
+                required: control.required,
+                disabled: control.disabled,
+                readonly: control.read_only,
+                "aria-invalid": presentation.invalid,
+                "aria-describedby": presentation.described_by(),
                 oninput: move |event| { let _ = actions.input_text(event.value()); }
             }
+            if let Some(help) = &presentation.help {
+                p { id: help.id.clone(), "{help.text}" }
+            }
+            {presentation.present_findings()}
         }
     }
 }
@@ -158,11 +193,11 @@ interface. Text is rendered as escaped plain text.
 | Render preflight | `render::BindError` with structured `render::BindFinding` values |
 | Handle and control operations | `HandleError` |
 | Host transactions | `HandleTransactionError` |
-| Submission | `SchemaForm::on_submit` for a ready snapshot; required `SchemaForm::on_error` for adapter failures |
+| Submission | `SchemaForm::on_submit` for a ready snapshot; optional `SchemaForm::on_error` for adapter failures |
 
 This package supports browser CSR. SSR, hydration, desktop/WebView execution,
 transport, authentication, retries, and pending/success lifecycle are outside
-the first release. It inherits the core trust boundary: data schemas must be
+its scope. It inherits the core trust boundary: data schemas must be
 application-trusted for evaluator work, referenced resources are supplied in
 memory, and structural limits are not hostile-schema execution containment. It
 also inherits the core capability boundary: nullable support is limited to
@@ -170,8 +205,9 @@ scalar controls, while nullable fixed objects and arrays are capability-blocking
 
 ## Feature Flags
 
-The first release has no public Cargo features. Repository qualification hooks
-cannot be activated through dependency feature unification or `--all-features`.
+The crate has no public Cargo features. Repository qualification hooks are
+enabled through a `--cfg` and cannot be activated through dependency feature
+unification or `--all-features`.
 
 ## License
 
