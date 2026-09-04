@@ -1,12 +1,27 @@
 type Demo {
   let dioxus: Dioxus!
 
+  """
+  The Playwright + axe project under `e2e/`.
+  """
+  let e2e: Directory!
+
+  """
+  The Playwright version `e2e/package.json` pins; the browser image must ship the same one.
+  """
+  let playwrightVersion: String!
+
   new(
     ws: Workspace!,
     rustVersion: String!,
     nodeVersion: String! = "latest",
     envFile: File,
   ) {
+    self.e2e = ws.directory("e2e", gitignore: true)
+    self.playwrightVersion = (
+      JSON.decode(ws.file("e2e/package.json").contents) :: NpmManifest!
+    ).devDependencies.playwright
+
     # clang is needed to cross-compile the C sysroot pulled in
     # by the `dioxus-code` snippet highlighter (arborium/tree-sitter) for the wasm32 target.
     # The `cc` crate auto-selects clang for wasm32-unknown-unknown, so installing it is enough.
@@ -21,8 +36,7 @@ type Demo {
     let node = Dagger
       .container
       .from("node:" + nodeVersion)
-      .withEnvVariable("NPM_CONFIG_CACHE", "/root/.npm")
-      .withMountedCache("${NPM_CONFIG_CACHE}", Dagger.cacheVolume("npm"), expand: true)
+      .{ withNpmCache(_) }
       .withWorkdir("/work/src")
       .withMountedDirectory("", ws.directory("", gitignore: true))
       .withExec(["npm", "install"])
@@ -80,6 +94,28 @@ type Demo {
     )
   }
 
+  """
+  Drive the daisyUI page of the built demo in a browser and hold it to zero axe violations.
+
+  Playwright opens the bundle `build` produces, walks `/daisyui` through named
+  checkpoints in the light and dark themes (and the RTL variant) running axe-core
+  at each, and exercises finding-summary focus-to-target and presence repair on
+  the daisyUI-rendered controls. The browser image is the one matching the
+  Playwright version `e2e/package.json` pins. See `e2e/README.md`.
+  """
+  accessibility: String! @check {
+    Dagger
+      .container
+      .from("mcr.microsoft.com/playwright:v" + self.playwrightVersion + "-noble")
+      .{ withNpmCache(_) }
+      .withWorkdir("/work/e2e")
+      .withMountedDirectory("", self.e2e)
+      .withExec(["npm", "ci"])
+      .withMountedDirectory("/work/site", self.build.directory("public"))
+      .withExec(["node", "daisyui.mjs", "--site", "/work/site", "--out", "/work/artifacts"])
+      .stdout
+  }
+
   workerBundle: Directory! @check {
     let client = self
       .dioxus
@@ -99,4 +135,22 @@ type Demo {
   }
 }
 
+"""
+Share one npm download cache between the containers that run npm.
+"""
+let withNpmCache(container: Container!): Container! {
+  container
+    .withEnvVariable("NPM_CONFIG_CACHE", "/root/.npm")
+    .withMountedCache("${NPM_CONFIG_CACHE}", Dagger.cacheVolume("npm"), expand: true)
+}
 
+"""
+The parts of an npm `package.json` the module reads.
+"""
+type NpmManifest {
+  devDependencies: NpmDevDependencies!
+}
+
+type NpmDevDependencies {
+  playwright: String!
+}

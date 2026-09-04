@@ -1,0 +1,9 @@
+{
+  "name": "schemaform-demo-e2e",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "axe-core": "4.10.3",
+    "playwright": "1.55.1"
+  }
+}

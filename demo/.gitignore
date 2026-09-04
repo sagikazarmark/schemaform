@@ -2,3 +2,6 @@
 /target
 /dist
 node_modules
+
+# Playwright + axe run output
+/e2e/artifacts

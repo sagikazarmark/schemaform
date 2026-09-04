@@ -1,7 +1,7 @@
 name = "demo"
 engineVersion = "v1.0.0"
 runtime.source = "dang"
-include = ["!.devenv", "!.wrangler", "!build", "!dist", "!node_modules", "!target"]
+include = ["!.devenv", "!.wrangler", "!build", "!dist", "!node_modules", "!target", "!e2e/node_modules", "!e2e/artifacts"]
 
 [[dependencies]]
 name = "dioxus"

@@ -190,7 +190,10 @@
     }
 
     /* Tabs. `tabs` applies to the tablist; `tabs-border` and `tab` are scoped to `.tabs > .tab`
-     * in daisyUI, so the tab button transcribes them onto the same variables. */
+     * in daisyUI, so the tab button transcribes them onto the same variables. One deliberate
+     * departure: daisyUI dims an unselected tab to 50% of the content colour, which is 3.4:1 on
+     * the light theme's surfaces and under the 4.5:1 WCAG AA asks of text; 65% reads at 5.4:1
+     * there and 7:1 on the dark theme. */
     .schemaform-tabs > [role="tablist"] {
       @apply tabs;
     }
@@ -205,7 +208,7 @@
       height: var(--tab-height);
       padding-inline: var(--tab-p);
       border-radius: var(--radius-field);
-      color: color-mix(in oklab, var(--color-base-content) 50%, transparent);
+      color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
       font-size: 0.875rem;
       text-align: center;
       cursor: pointer;

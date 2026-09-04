@@ -10,6 +10,21 @@
   themes: light --default, dark --prefersdark;
 }
 
+/* daisyUI's light `error` (oklch 71%) is a tint: as text on the base surfaces it
+ * measures 2.9:1, under the 4.5:1 WCAG AA asks of text, and this site uses it as
+ * text everywhere (the registry's `FieldError` part, findings, the finding
+ * summary alert, the playground's alerts). A darker red of the same hue reads at
+ * 5.4:1 on white; its content colour flips to a light one to stay legible on the
+ * new fill. The dark theme's error already passes on its dark surfaces and is
+ * left alone. The demo's Playwright + axe check (`e2e/`) holds both themes to
+ * zero violations. */
+@plugin "daisyui/theme" {
+  name: "light";
+  default: true;
+  --color-error: oklch(55% 0.2 13.428);
+  --color-error-content: oklch(98% 0.01 13.428);
+}
+
 @layer base {
   :root {
     color-scheme: light dark;

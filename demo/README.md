@@ -21,6 +21,24 @@ The native tests (example data schemas and the `schemaform_daisyui` mapping) run
 with `cargo test` from this directory; the Dagger pipeline runs them as the
 `test` check next to the wasm bundle.
 
+## Browser check
+
+The daisyUI page has a Playwright + axe check in `e2e/`: it opens `/daisyui`
+(and the RTL variant) from the built bundle, runs axe-core at named checkpoints
+in both site themes with zero violations allowed, and verifies finding-summary
+focus-to-target and presence repair on the daisyUI-rendered controls. The Dagger
+pipeline runs it as the `accessibility` check; the `Dagger (demo)` workflow runs
+every check on pushes to `main` and on every pull request, so a change to the
+demo or to `schemaform-dioxus` (which the demo builds from the workspace) is
+covered. To run it yourself, from this directory:
+
+```console
+dagger check accessibility
+```
+
+`e2e/README.md` lists the checkpoints and how to run the script against a
+locally served app.
+
 ## Project layout
 
 - `src/examples/` contains the small runnable components shown in the gallery.
@@ -36,7 +54,11 @@ with `cargo test` from this directory; the Dagger pipeline runs them as the
   the built-in renderer's `schemaform-*` class hooks: daisyUI's component
   classes applied to the hooks with `@apply`, plus the few rules a class cannot
   express (the tab buttons, the checkbox row, and the opt-out a form inside
-  `[data-schemaform-unstyled]` uses to render with no theme).
+  `[data-schemaform-unstyled]` uses to render with no theme). `style.css` also
+  darkens the light theme's `error` colour, which daisyUI ships too light to
+  pass as text.
+- `e2e/` is the Playwright + axe check for the daisyUI page, its own npm
+  project with exact pins (see its README).
 
 The gallery covers generated controls compiled from a data schema, homogeneous
 arrays with stable item identity, authored UI schemas with layouts and tabs,
