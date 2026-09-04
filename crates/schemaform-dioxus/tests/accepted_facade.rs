@@ -3,8 +3,9 @@ use std::sync::Arc;
 use dioxus::prelude::Element;
 use schemaform::{ExtensionNamespace, WidgetSymbol, definition::DefinitionNodeView};
 use schemaform_dioxus::{
-    Affordance, AffordanceKind, BooleanEdit, BuiltinControlRenderer, BuiltinShell, ChoiceEdit,
-    ChoiceOption, ControlFacets, ControlKind, ControlMatcher, ControlRegistry,
+    Affordance, AffordanceKind, BooleanEdit, BuiltinCollection, BuiltinControlRenderer,
+    BuiltinShell, ChoiceEdit, ChoiceOption, CollectionContext, CollectionItemContext,
+    CollectionRenderer, ControlFacets, ControlKind, ControlMatcher, ControlRegistry,
     ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
     ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter, Localizer,
     NodePresentation, PreparedExtension, RenderConfiguration, ShellContext, ShellRenderer,
@@ -34,6 +35,7 @@ impl ControlRenderer for Renderer {
                 )
             }),
             presentation.invalid,
+            presentation.incompatible_value.as_deref(),
             presentation.described_by(),
         );
         let _affordances = presentation.presence.iter().map(|affordance: &Affordance| {
@@ -44,6 +46,12 @@ impl ControlRenderer for Renderer {
                         | AffordanceKind::SetNull
                         | AffordanceKind::RemoveValue
                         | AffordanceKind::Replace
+                        | AffordanceKind::Materialize
+                        | AffordanceKind::Append
+                        | AffordanceKind::InsertBefore
+                        | AffordanceKind::MoveUp
+                        | AffordanceKind::MoveDown
+                        | AffordanceKind::RemoveItem
                         | AffordanceKind::Submit
                 ),
                 affordance.label.as_str(),
@@ -140,6 +148,50 @@ impl ShellRenderer for Shell {
     }
 }
 
+struct Collection;
+
+impl CollectionRenderer for Collection {
+    fn collection(&self, context: CollectionContext) -> Element {
+        let _collection_fields = (
+            &context.presentation,
+            context.item_label.as_str(),
+            context.count,
+            context
+                .append
+                .as_ref()
+                .map(|append| (append.kind == AffordanceKind::Append, append.invoke)),
+            &context.extensions,
+            context.clone() == context,
+        );
+        dioxus::prelude::rsx! {
+            {context.presentation.present_help()}
+            {context.items}
+            {context.announcement}
+            {context.presentation.present_findings()}
+        }
+    }
+
+    fn collection_item(&self, context: CollectionItemContext) -> Element {
+        let _item_fields = (
+            context.row_id.as_str(),
+            context.position,
+            context.count,
+            context.item_label.as_str(),
+            [
+                &context.insert_before,
+                &context.move_up,
+                &context.move_down,
+                &context.remove,
+            ]
+            .map(|affordance| affordance.as_ref().map(|affordance| affordance.invoke)),
+            context.clone() == context,
+        );
+        dioxus::prelude::rsx! {
+            {context.children}
+        }
+    }
+}
+
 struct Presenter;
 
 impl FindingCollectionPresenter for Presenter {
@@ -215,10 +267,16 @@ fn accepted_adapter_customization_types_build_an_immutable_configuration() {
         );
     let _without_builtins =
         ControlRegistry::empty().matcher(BUILTIN_CONTROL_PRIORITY, Arc::new(Matcher), renderer);
-    let _built_in_shell_explicitly = StructureRenderers::default().with_shell(BuiltinShell);
+    let _built_in_shell_explicitly = StructureRenderers::default()
+        .with_shell(BuiltinShell)
+        .with_collection(BuiltinCollection);
     let _configuration = RenderConfiguration::builder()
         .controls(controls)
-        .structure(StructureRenderers::default().with_shell(Shell))
+        .structure(
+            StructureRenderers::default()
+                .with_shell(Shell)
+                .with_collection(Collection),
+        )
         .local_presenter(Arc::new(Presenter))
         .summary_presenter(Arc::new(Presenter))
         .localizer(Arc::new(TestLocalizer))

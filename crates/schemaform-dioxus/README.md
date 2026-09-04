@@ -91,22 +91,26 @@ renderer everything it needs, pre-localized:
 - `presentation()` is the node presentation: the `element_id` the primary
   element must carry, the localized `label` and whether it is `label_visible`,
   optional `help` with the element id it must carry, local `findings` as
-  descriptors with stable ids, `invalid`, and `presence`: the presence
-  affordances the core allows right now. `described_by()` joins the help and
+  descriptors with stable ids, `invalid`, `presence`: the presence affordances
+  the core allows right now, and `incompatible_value`: the serialized current
+  value while the node cannot edit it but the core allows replacement, as the
+  built-in shows beside its replace button. `described_by()` joins the help and
   finding ids for `aria-describedby`; `present_help()` renders the help as the
   built-in does; `present_findings()` renders the findings through the
   configured local finding presenter so presenter swaps keep working without
   re-calling the renderer.
 - Each `Affordance` in `presence` is a pre-localized, pre-authorized action:
-  its `kind` (`Set`, `SetNull`, `RemoveValue`, `Replace`), localized `label`,
-  the `id` the triggering element must carry, an optional `accessible_name` to
-  use as `aria-label` when it is `Some`, and `invoke`, a callback that
-  performs the core operation and reports failures to `on_error` itself. The
-  list holds exactly the operations the built-in would offer: set only while
-  the value is missing or null and a creation seed exists, replace only while
-  the core allows replacement and a seed exists, set null and remove value
-  whenever the core allows them. Renderers place affordances; they do not
-  reconstruct the rules.
+  its `kind` (`Set`, `SetNull`, `RemoveValue`, `Replace` on a scalar control;
+  `AffordanceKind` is non-exhaustive and also carries the container and
+  collection kinds handed to structure renderers), localized `label`, the `id`
+  the triggering element must carry, an optional `accessible_name` to use as
+  `aria-label` when it is `Some`, and `invoke`, a callback that performs the
+  core operation and reports failures to `on_error` itself. The list holds
+  exactly the operations the built-in would offer: set only while the value is
+  missing or null and a creation seed exists, replace only while the core
+  allows replacement and a seed exists, set null and remove value whenever the
+  core allows them. Renderers place affordances; they do not reconstruct the
+  rules.
 - `control()` is the control facets: `kind` (`String`, `Number`, `Integer`,
   `Boolean`, `Choice`, `Constant`), the control binding as `name`, `required`,
   `disabled`, `read_only`, `write_only`, `touched`, `dirty`, `nullable`, and the
@@ -129,12 +133,15 @@ and the core rejects them for nodes that are not arrays. Custom renderers,
 presenters, localizers, and extension handlers are trusted host code and may
 capture authority independently.
 
-Homogeneous array composition remains adapter-owned. Array-level exact widget
-requests are preserved by stable UI-schema v1 parsing and compilation but fail
-render binding with `BindFinding::UnsupportedCollectionWidget`, even if
-registered. Matchers are not evaluated for array nodes. Inline item templates
-are still preflighted in full, and eligible controls within them retain exact
-or matcher-selected custom renderers and prepared extensions.
+Homogeneous array composition remains adapter-owned: item identity, keying,
+focus after a mutation, and live-region announcements are never delegated. The
+array's *chrome* is replaced through the `CollectionRenderer` structure slot
+described below, not through a widget. Array-level exact widget requests are
+preserved by stable UI-schema v1 parsing and compilation but fail render
+binding with `BindFinding::UnsupportedCollectionWidget`, even if registered.
+Matchers are not evaluated for array nodes. Inline item templates are still
+preflighted in full, and eligible controls within them retain exact or
+matcher-selected custom renderers and prepared extensions.
 
 `ControlRenderContext` does not expose raw data schemas. Control-specific
 authored configuration may be interpreted by an extension handler while it
@@ -409,6 +416,123 @@ let configuration = RenderConfiguration::builder()
 `ShellRenderer::shell` runs during rendering and is not a hook-safe call site;
 a shell that needs hooks renders a child component and passes the context as
 props (`ShellContext` is `PartialEq`).
+
+The second slot is the **collection**: the chrome of a homogeneous array and of
+each of its items. `CollectionRenderer` has two methods. `collection` receives
+a `CollectionContext`:
+
+- `presentation` is the array node's presentation. Its `element_id` must be on
+  the root element, which should be focusable (`tabindex="-1"`) because the
+  container presence affordances focus it. `presence` holds the container
+  operations the core allows right now (`Materialize`, `Replace`,
+  `RemoveValue`) and `incompatible_value` the serialized data while the value
+  is not an array and replaceable.
+- `item_label` is the localized singular item noun (the authored item label or
+  `{label} item`); `count` is the number of items, the only way to render an
+  empty state because `items` is opaque.
+- `items` is every item host in order, pre-keyed by instance identity. It must
+  be placed.
+- `append` is the `Append` affordance (`{element_id}-append`) while the core
+  allows appending.
+- `announcement` is the adapter-owned live region. It must be placed; wrapping
+  it in a visually hidden element is fine. Dropping it silently removes
+  screen-reader feedback for every mutation.
+- `extensions` are the prepared extension values of the array's UI-schema
+  element.
+
+`collection_item` is called from an adapter-owned keyed host, one scope per
+item, inside a wrapper `div` that carries `row_id` and `data-array-item`. It
+receives a `CollectionItemContext`: `row_id`, one-based `position`, `count`,
+`item_label`, `children` (the instantiated item template, which must be
+placed), and the four item affordances `insert_before`, `move_up`,
+`move_down`, `remove`, each `Some` exactly while the core allows it (and
+`move_up`/`move_down` additionally `None` for the first/last item). Item
+affordance ids are the item root's id followed by `-insert-before`,
+`-move-up`, `-move-down`, `-remove`. Every affordance already performs the
+operation, reports failures, announces, and moves focus when invoked; the
+renderer must give its triggering element the affordance's `id`, because focus
+after a move targets those ids.
+
+The adapter reserves `row_id` (the wrapper), the item root's id inside
+`children`, and the affordance ids. A renderer uses `row_id` only as a prefix
+for its own ids (`{row_id}-title`); those cannot collide with any adapter id.
+When an insert, append, or remove moves focus to an item, the adapter focuses
+that item's root (or the first focusable element inside it, then inside the
+wrapper), so a renderer may put its buttons before the children without
+stealing that focus.
+
+`collection` and `collection_item` are not called together: the collection
+re-renders after every announcement while item hosts memoize on their props. A
+renderer that needs per-item state renders a child component (both contexts
+are `PartialEq`) rather than carrying state between the two calls.
+
+`BuiltinCollection` is the public built-in: a `fieldset[data-schemaform-array]`
+with legend, help, presence buttons, item rows, append button, live region, and
+findings; each item renders its children followed by its action buttons.
+
+```rust
+use dioxus::prelude::*;
+use schemaform_dioxus::{
+    Affordance, CollectionContext, CollectionItemContext, CollectionRenderer,
+    RenderConfiguration, StructureRenderers,
+};
+
+struct CardCollection;
+
+fn action(affordance: Affordance) -> Element {
+    rsx! {
+        button {
+            id: affordance.id.clone(),
+            class: "btn btn-sm",
+            r#type: "button",
+            "aria-label": affordance.accessible_name.clone(),
+            onclick: move |_| affordance.invoke.call(()),
+            "{affordance.label}"
+        }
+    }
+}
+
+impl CollectionRenderer for CardCollection {
+    fn collection(&self, context: CollectionContext) -> Element {
+        let presentation = context.presentation;
+        let presence = presentation.presence.clone();
+        rsx! {
+            section {
+                id: presentation.element_id.clone(),
+                class: "card",
+                tabindex: "-1",
+                "aria-invalid": presentation.invalid,
+                "aria-describedby": presentation.described_by(),
+                h3 { "{presentation.label}" }
+                {presentation.present_help()}
+                for affordance in presence { {action(affordance)} }
+                if context.count == 0 { p { class: "empty", "—" } }
+                {context.items}
+                if let Some(append) = context.append { {action(append)} }
+                div { class: "sr-only", {context.announcement} }
+                {presentation.present_findings()}
+            }
+        }
+    }
+
+    fn collection_item(&self, context: CollectionItemContext) -> Element {
+        let actions = [context.move_up, context.move_down, context.insert_before, context.remove];
+        rsx! {
+            div { class: "card-row", "aria-labelledby": "{context.row_id}-title",
+                header {
+                    span { id: "{context.row_id}-title", "{context.item_label} {context.position}" }
+                    for affordance in actions.into_iter().flatten() { {action(affordance)} }
+                }
+                {context.children}
+            }
+        }
+    }
+}
+
+let configuration = RenderConfiguration::builder()
+    .structure(StructureRenderers::default().with_collection(CardCollection))
+    .build();
+```
 
 `Localizer` receives a `render::MessageDescriptor` with an optional stable key,
 an English fallback, and structured parameters. Authored UI-schema text, schema

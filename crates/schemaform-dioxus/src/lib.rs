@@ -1761,14 +1761,24 @@ pub mod render {
         /// the core marks them blocking. Advisory findings never make a node invalid.
         pub invalid: bool,
         /// Presence affordances the core allows for this node right now, in the built-in's
-        /// order: set, set null, remove value, replace.
+        /// order.
         ///
-        /// Set is offered only while the value is missing or null and a creation seed exists;
-        /// replace only while the core allows replacement and a seed exists; set null and remove
-        /// value exactly when the core allows them. Renderers place these affordances; they do not
-        /// reconstruct the rules. The list is empty for every node kind other than scalar
-        /// controls.
+        /// Scalar controls offer set, set null, remove value, and replace: set only while the
+        /// value is missing or null and a creation seed exists; replace only while the core
+        /// allows replacement and a seed exists; set null and remove value exactly when the core
+        /// allows them. Homogeneous arrays offer materialize, replace, and remove value under the
+        /// same seed rules; invoking one of them also announces the change and focuses the
+        /// array's primary element. Renderers place these affordances; they do not reconstruct
+        /// the rules. The list is empty for every other node kind.
         pub presence: Vec<Affordance>,
+        /// The serialized current value while the node cannot edit it but the core allows
+        /// replacement, as the built-in shows beside its replace affordance.
+        ///
+        /// `Some` for a scalar control whose value is incompatible (or null where null is not
+        /// accepted) while text input is rejected, and for a container whose value is
+        /// replaceable, unless the node is write-only. A renderer that shows it must not treat it
+        /// as editable text.
+        pub incompatible_value: Option<String>,
         form: BoundForm,
     }
 
@@ -1783,11 +1793,13 @@ pub mod render {
                 .field("findings", &self.findings)
                 .field("invalid", &self.invalid)
                 .field("presence", &self.presence)
+                .field("incompatible_value", &self.incompatible_value)
                 .finish_non_exhaustive()
         }
     }
 
     impl NodePresentation {
+        #[allow(clippy::too_many_arguments)]
         pub(crate) fn new(
             form: BoundForm,
             element_id: String,
@@ -1796,6 +1808,7 @@ pub mod render {
             help: Option<Help>,
             findings: Vec<FindingDescriptor>,
             presence: Vec<Affordance>,
+            incompatible_value: Option<String>,
         ) -> Self {
             let invalid = findings.iter().any(|finding| finding.blocking);
             Self {
@@ -1806,6 +1819,7 @@ pub mod render {
                 findings,
                 invalid,
                 presence,
+                incompatible_value,
                 form,
             }
         }
@@ -1872,8 +1886,9 @@ pub mod render {
 
     /// The operation an [`Affordance`] performs when invoked.
     ///
-    /// Presence operations on scalar controls and the form's submit are produced today. The enum
-    /// grows as further renderer seams hand out affordances, so matches need a wildcard arm.
+    /// Presence operations on scalar controls and homogeneous arrays, item operations on
+    /// homogeneous arrays, and the form's submit are produced today. The enum grows as further
+    /// renderer seams hand out affordances, so matches need a wildcard arm.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     #[non_exhaustive]
     pub enum AffordanceKind {
@@ -1885,6 +1900,18 @@ pub mod render {
         RemoveValue,
         /// Replaces a value the control cannot edit with its creation seed.
         Replace,
+        /// Materializes a missing container from its creation seed.
+        Materialize,
+        /// Appends one seeded item to a collection.
+        Append,
+        /// Inserts one seeded item before the item the affordance was computed for.
+        InsertBefore,
+        /// Moves the item one position towards the start of its collection.
+        MoveUp,
+        /// Moves the item one position towards the end of its collection.
+        MoveDown,
+        /// Removes the item from its collection.
+        RemoveItem,
         /// Finalizes edit buffers and prepares the form for submission.
         ///
         /// A ready outcome reaches `SchemaForm::on_submit`; a blocked outcome presents the
@@ -1895,9 +1922,10 @@ pub mod render {
     /// A localized, pre-authorized user action handed to a renderer.
     ///
     /// Invoking an affordance performs the core operation on the node it was computed for and
-    /// reports any failure to the host's `SchemaForm::on_error`; the renderer only places it. The
-    /// adapter recomputes the list of affordances on every node render, so an affordance is
-    /// present exactly while the core allows its operation.
+    /// reports any failure to the host's `SchemaForm::on_error`; collection affordances also
+    /// announce the change through the collection's live region and move focus. The renderer only
+    /// places it. The adapter recomputes the list of affordances on every node render, so an
+    /// affordance is present exactly while the core allows its operation.
     ///
     /// Two affordances compare equal when their `kind`, `label`, `id`, and `accessible_name` are
     /// equal. `invoke` is excluded because an affordance's behaviour is fixed by its node and
@@ -1913,15 +1941,19 @@ pub mod render {
         /// DOM `id` the triggering element must carry.
         ///
         /// For presence affordances this is the node's [`NodePresentation::element_id`] followed
-        /// by `-set-value`, `-set-null`, `-remove-value`, or `-replace-value`. For the submit
-        /// affordance it is [`ShellContext::form_id`] followed by `-submit`.
+        /// by `-set-value`, `-set-null`, `-remove-value`, `-replace-value`, or `-materialize`.
+        /// For the submit affordance it is [`ShellContext::form_id`] followed by `-submit`. For a
+        /// collection's append affordance it is the array's element id followed by `-append`; for
+        /// item affordances it is the item root's id followed by `-insert-before`, `-move-up`,
+        /// `-move-down`, or `-remove` (see [`CollectionItemContext::row_id`]).
         pub id: String,
         /// Localized accessible name when it differs from the visible `label`.
         ///
         /// `None` means `label` is the accessible name. `Some` is used when the visible text
         /// alone would be ambiguous, such as a positional variant of an item action; a renderer
         /// then sets the triggering element's `aria-label` to this value, whether it shows
-        /// `label` as text or renders an icon. Presence and submit affordances carry `None`.
+        /// `label` as text or renders an icon. The four item affordances carry `Some`; presence,
+        /// append, and submit affordances carry `None`.
         pub accessible_name: Option<String>,
         /// Performs the operation and reports failures to the host's `SchemaForm::on_error`.
         ///
@@ -2020,6 +2052,211 @@ pub mod render {
         }
     }
 
+    /// Host-supplied presentation for one homogeneous array: the chrome around its items, each
+    /// item's chrome, the append and item affordances, and the empty state.
+    ///
+    /// The adapter keeps ownership of everything a renderer could otherwise break: item identity
+    /// and keying (one keyed host scope per item, keyed by instance identity), the row wrapper
+    /// carrying [`CollectionItemContext::row_id`], focus after a mutation, and the live-region
+    /// announcement. Affordances already perform their operation, report failures, announce, and
+    /// move focus; the renderer places them and must give each triggering element its
+    /// [`Affordance::id`], because focus after a move targets those ids.
+    ///
+    /// Both methods run synchronously during Dioxus rendering and are not hook-safe call sites; a
+    /// renderer that needs hooks or per-item state renders a child component and passes the
+    /// context as props (both contexts are `PartialEq`). The two methods are not called together:
+    /// the collection re-renders on every announcement while item hosts memoize on their props,
+    /// so `collection` may run without `collection_item` running for any item. A renderer must not
+    /// carry state between the two calls through a side table.
+    ///
+    /// Structure renderers are fixed at [`RenderConfiguration::bind`]; see [`ShellRenderer`] for
+    /// why they are not signal-swappable.
+    pub trait CollectionRenderer: 'static {
+        /// Renders the collection chrome around the adapter-keyed items.
+        ///
+        /// The root element must carry [`NodePresentation::element_id`] and should be focusable
+        /// (`tabindex="-1"`), because the container presence affordances focus it. The output
+        /// must place [`CollectionContext::items`] and [`CollectionContext::announcement`];
+        /// omitting the announcement silently removes screen-reader feedback for every mutation.
+        fn collection(&self, context: CollectionContext) -> Element;
+
+        /// Renders one item's chrome around its children, inside the adapter-owned row wrapper.
+        ///
+        /// The output must place [`CollectionItemContext::children`]. The item root inside the
+        /// children already carries the item's element id, and the adapter focuses it (or the
+        /// first focusable element inside it) when an insert, append, or remove moves focus to an
+        /// item, so the renderer's own controls may precede the children without stealing that
+        /// focus.
+        fn collection_item(&self, context: CollectionItemContext) -> Element;
+    }
+
+    /// The adapter-computed context for one homogeneous array node.
+    ///
+    /// Items arrive as one pre-keyed element; the renderer never sees bound nodes, instance
+    /// identities, or recursion.
+    #[derive(Clone, PartialEq)]
+    #[non_exhaustive]
+    pub struct CollectionContext {
+        /// Localized label, help, findings, invalid state, and the container presence
+        /// affordances (materialize, replace, remove value) for the array node.
+        ///
+        /// [`NodePresentation::incompatible_value`] is `Some` while the array's current data is
+        /// not an array and the core allows replacement.
+        pub presentation: NodePresentation,
+        /// Localized singular noun for one item: the authored item label, or the built-in
+        /// `{label} item`.
+        ///
+        /// The renderer cannot derive it (there is no localization service on the context), and
+        /// composing it into a sentence is not grammatically safe across locales; use it as a
+        /// title or a name, not as a sentence fragment.
+        pub item_label: String,
+        /// Number of items currently in the collection.
+        ///
+        /// `items` is opaque, so this is the only way a renderer can render an empty state.
+        pub count: usize,
+        /// Every item host in collection order, keyed by instance identity. Must be placed.
+        pub items: Element,
+        /// The append affordance ([`AffordanceKind::Append`], id `{element_id}-append`) while the
+        /// core allows appending.
+        pub append: Option<Affordance>,
+        /// The adapter-owned live region (`role="status"`, `aria-live="polite"`,
+        /// `aria-atomic="true"`) that announces mutations. Must be placed; wrapping it in a
+        /// visually hidden element is fine.
+        pub announcement: Element,
+        /// Prepared extension values for the array's UI-schema element.
+        pub extensions: PreparedExtensions,
+    }
+
+    impl fmt::Debug for CollectionContext {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter
+                .debug_struct("CollectionContext")
+                .field("presentation", &self.presentation)
+                .field("item_label", &self.item_label)
+                .field("count", &self.count)
+                .field("append", &self.append)
+                .finish_non_exhaustive()
+        }
+    }
+
+    /// The adapter-computed context for one homogeneous-array item.
+    ///
+    /// The four item affordances are `Some` exactly while the core allows the operation for this
+    /// item right now; `move_up` is additionally `None` for the first item and `move_down` for
+    /// the last, so a renderer never computes first/last itself.
+    #[derive(Clone, PartialEq)]
+    #[non_exhaustive]
+    pub struct CollectionItemContext {
+        /// DOM `id` of the adapter-owned wrapper element around this item's output.
+        ///
+        /// The adapter reserves this id (the wrapper already carries it, together with
+        /// `data-array-item`), the item root's id inside `children`, and the four item affordance
+        /// ids. Renderers use `row_id` only as a prefix for their own ids (`{row_id}-title`);
+        /// such ids cannot collide with any adapter id.
+        pub row_id: String,
+        /// One-based position of the item in the collection.
+        pub position: usize,
+        /// Number of items in the collection.
+        pub count: usize,
+        /// Localized singular noun for one item; the same value as
+        /// [`CollectionContext::item_label`].
+        pub item_label: String,
+        /// The item's instantiated template. Must be placed.
+        pub children: Element,
+        /// Insert-before affordance ([`AffordanceKind::InsertBefore`]) while insertion is allowed.
+        pub insert_before: Option<Affordance>,
+        /// Move-up affordance ([`AffordanceKind::MoveUp`]) while moving is allowed and the item is
+        /// not first.
+        pub move_up: Option<Affordance>,
+        /// Move-down affordance ([`AffordanceKind::MoveDown`]) while moving is allowed and the
+        /// item is not last.
+        pub move_down: Option<Affordance>,
+        /// Remove affordance ([`AffordanceKind::RemoveItem`]) while removal is allowed.
+        pub remove: Option<Affordance>,
+    }
+
+    impl fmt::Debug for CollectionItemContext {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter
+                .debug_struct("CollectionItemContext")
+                .field("row_id", &self.row_id)
+                .field("position", &self.position)
+                .field("count", &self.count)
+                .field("item_label", &self.item_label)
+                .field("insert_before", &self.insert_before)
+                .field("move_up", &self.move_up)
+                .field("move_down", &self.move_down)
+                .field("remove", &self.remove)
+                .finish_non_exhaustive()
+        }
+    }
+
+    /// The built-in collection chrome: a focusable `fieldset` with a legend, help, presence
+    /// buttons, the item rows, the append button, the live region, and the local findings; each
+    /// item renders its children followed by its action buttons.
+    ///
+    /// Every button carries its affordance id and a `data-*` marker for its operation
+    /// (`data-append-item`, `data-insert-item-before`, `data-move-item-up`, `data-move-item-down`,
+    /// `data-remove-item`, `data-materialize`, `data-replace-value`, `data-remove-value`). The
+    /// markers are the built-in's own hooks, not part of the renderer contract.
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+    pub struct BuiltinCollection;
+
+    impl CollectionRenderer for BuiltinCollection {
+        fn collection(&self, context: CollectionContext) -> Element {
+            let presentation = context.presentation;
+            let described_by = presentation.described_by();
+            let help = presentation.present_help();
+            let findings = presentation.present_findings();
+            let presence = presentation.presence.clone();
+            let incompatible_value = presentation.incompatible_value.clone();
+            dioxus::prelude::rsx! {
+                fieldset {
+                    id: presentation.element_id.clone(),
+                    class: "schemaform-group schemaform-array",
+                    "data-schemaform-array": "",
+                    "aria-invalid": presentation.invalid,
+                    "aria-describedby": described_by,
+                    tabindex: "-1",
+                    legend { "{presentation.label}" }
+                    {help}
+                    div { class: "schemaform-presence-actions",
+                        if let Some(value) = incompatible_value {
+                            output { "data-incompatible-value": "", "{value}" }
+                        }
+                        for affordance in presence {
+                            {crate::builtin_affordance_button(affordance)}
+                        }
+                    }
+                    {context.items}
+                    if let Some(append) = context.append {
+                        {crate::builtin_affordance_button(append)}
+                    }
+                    {context.announcement}
+                    {findings}
+                }
+            }
+        }
+
+        fn collection_item(&self, context: CollectionItemContext) -> Element {
+            let actions = [
+                context.insert_before,
+                context.move_up,
+                context.move_down,
+                context.remove,
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+            dioxus::prelude::rsx! {
+                {context.children}
+                for affordance in actions {
+                    {crate::builtin_affordance_button(affordance)}
+                }
+            }
+        }
+    }
+
     /// The structure renderers a bound form renders its non-control nodes and shell through.
     ///
     /// Each slot holds one renderer for one structural node kind; an unset slot is the built-in,
@@ -2036,6 +2273,7 @@ pub mod render {
     #[derive(Clone)]
     pub struct StructureRenderers {
         shell: Arc<dyn ShellRenderer>,
+        collection: Arc<dyn CollectionRenderer>,
     }
 
     impl Default for StructureRenderers {
@@ -2043,6 +2281,7 @@ pub mod render {
         fn default() -> Self {
             Self {
                 shell: Arc::new(BuiltinShell),
+                collection: Arc::new(BuiltinCollection),
             }
         }
     }
@@ -2054,9 +2293,25 @@ pub mod render {
             self
         }
 
+        /// Replaces the collection renderer.
+        pub fn with_collection(mut self, renderer: impl CollectionRenderer) -> Self {
+            self.collection = Arc::new(renderer);
+            self
+        }
+
         /// Renders the form shell through the configured [`ShellRenderer`].
         pub(crate) fn render_shell(&self, context: ShellContext) -> Element {
             self.shell.shell(context)
+        }
+
+        /// Renders one homogeneous array through the configured [`CollectionRenderer`].
+        pub(crate) fn render_collection(&self, context: CollectionContext) -> Element {
+            self.collection.collection(context)
+        }
+
+        /// Renders one array item through the configured [`CollectionRenderer`].
+        pub(crate) fn render_collection_item(&self, context: CollectionItemContext) -> Element {
+            self.collection.collection_item(context)
         }
     }
 
@@ -3103,6 +3358,9 @@ pub mod render {
         pub(crate) element_id: String,
         pub(crate) item_label: Option<schemaform::ui::v1::TextReference>,
         pub(crate) template: BoundTemplateNode,
+        /// Prepared extension values for the array's UI-schema element, handed to the collection
+        /// renderer. Decorators are applied around the array by [`decorate_bound_node`].
+        pub(crate) extensions: PreparedExtensions,
     }
 
     #[derive(Clone, PartialEq)]
@@ -3252,6 +3510,10 @@ pub mod render {
                 element_id: format!("schemaform-{bound_form_id}-array-{index}"),
                 item_label: definition.item_label_reference().cloned(),
                 template,
+                extensions: prepared_extensions
+                    .get(&definition.id())
+                    .cloned()
+                    .unwrap_or_default(),
             });
             return Some(decorate_bound_node(
                 bound,
@@ -5873,13 +6135,17 @@ fn instantiate_array_template_children(
 ///
 /// `projection` must already be localized through [`localize_node_text`]. Stable finding ids are
 /// prefixed by `element_id`, so the same node rendered under a different element id yields
-/// distinct ids. `presence` is the node's current presence affordances; only scalar controls
-/// compute them today (see [`scalar_presence_affordances`]), containers pass an empty list.
+/// distinct ids. `presence` is the node's current presence affordances: scalar controls compute
+/// them with [`scalar_presence_affordances`], homogeneous arrays in [`HomogeneousArray`], other
+/// containers pass an empty list. `incompatible_value` is the serialized value shown beside a
+/// replace affordance ([`incompatible_value`] for controls, [`container_incompatible_value`] for
+/// containers).
 fn node_presentation(
     form: &render::BoundForm,
     projection: &handle::NodeProjection,
     element_id: &str,
     presence: Vec<render::Affordance>,
+    incompatible_value: Option<String>,
 ) -> render::NodePresentation {
     let mut findings =
         validation_descriptors(form, projection, &format!("{element_id}-local-validation"));
@@ -5912,6 +6178,7 @@ fn node_presentation(
         help,
         findings,
         presence,
+        incompatible_value,
     )
 }
 
@@ -5921,10 +6188,74 @@ struct HomogeneousArrayProps {
     array: render::BoundArray,
 }
 
+/// Where focus goes after a collection mutation, resolved against the DOM once the mutation has
+/// rendered.
 #[derive(Clone)]
 enum ArrayFocusRequest {
+    /// The first element in the list that exists in the document.
     Element(Vec<String>),
-    Row(String),
+    /// An item by its id stem `S` ([`array_item_input_id`]): the item root `#S` if it is
+    /// focusable, else the first focusable element inside it, else the first focusable element
+    /// inside the adapter's wrapper `#S-row`. Trying the item root first keeps focus after an
+    /// insert, append, or remove on the item's control regardless of where a collection renderer
+    /// places its own buttons.
+    Item(String),
+}
+
+/// The signals every collection affordance needs to announce a change and move focus.
+///
+/// Signals are `Copy`, so one bundle is captured by value into each `use_callback` closure in the
+/// array component and its item hosts.
+#[derive(Clone, Copy, PartialEq)]
+struct ArrayFeedback {
+    announcement: Signal<(u64, Option<ArrayAnnouncement>)>,
+    pending_announcement: Signal<Option<(u64, ArrayAnnouncement)>>,
+    pending_focus_target: Signal<Option<ArrayFocusRequest>>,
+}
+
+impl ArrayFeedback {
+    fn announce(self, event: ArrayAnnouncement) {
+        set_array_announcement(self.announcement, self.pending_announcement, event);
+    }
+
+    fn focus(mut self, request: ArrayFocusRequest) {
+        self.pending_focus_target.set(Some(request));
+    }
+}
+
+/// Renders one affordance as the built-in does, for scalar presence, container presence, and
+/// collection operations alike.
+///
+/// Each button carries the affordance id, one marker attribute for its operation
+/// (`data-set-value`, `data-set-null`, `data-remove-value`, `data-replace-value`,
+/// `data-materialize`, `data-append-item`, `data-insert-item-before`, `data-move-item-up`,
+/// `data-move-item-down`, `data-remove-item`), and the positional accessible name when the
+/// affordance has one. rsx attribute names are literal, so each marker is an `Option` attribute.
+fn builtin_affordance_button(affordance: render::Affordance) -> Element {
+    use render::AffordanceKind;
+
+    let kind = affordance.kind;
+    let marker = |expected: AffordanceKind| (kind == expected).then_some("");
+    rsx! {
+        button {
+            key: "{affordance.id}",
+            id: affordance.id.clone(),
+            r#type: "button",
+            "data-set-value": marker(AffordanceKind::Set),
+            "data-set-null": marker(AffordanceKind::SetNull),
+            "data-remove-value": marker(AffordanceKind::RemoveValue),
+            "data-replace-value": marker(AffordanceKind::Replace),
+            "data-materialize": marker(AffordanceKind::Materialize),
+            "data-append-item": marker(AffordanceKind::Append),
+            "data-insert-item-before": marker(AffordanceKind::InsertBefore),
+            "data-move-item-up": marker(AffordanceKind::MoveUp),
+            "data-move-item-down": marker(AffordanceKind::MoveDown),
+            "data-remove-item": marker(AffordanceKind::RemoveItem),
+            "aria-label": affordance.accessible_name.clone(),
+            onclick: move |_| affordance.invoke.call(()),
+            "{affordance.label}"
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -5978,10 +6309,112 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
         render::RenderNodeKind::Collection,
         &props.array.element_id,
     );
-    let Ok(Some(reader)) = props.form.handle().node(props.array.identity) else {
-        return rsx! {};
+    // Hooks run before the availability guards below so the hook order is identical on every
+    // render, including renders where the node has already been removed or disposed.
+    let reader = props
+        .form
+        .handle()
+        .node(props.array.identity)
+        .ok()
+        .flatten();
+    let projection = reader
+        .as_ref()
+        .and_then(|reader| reader.read().ok().flatten());
+    let operation_errors = dioxus_core::try_consume_context::<OperationErrorHandler>();
+    let announcement = use_signal(|| (0_u64, None::<ArrayAnnouncement>));
+    let mut pending_announcement = use_signal(|| None::<(u64, ArrayAnnouncement)>);
+    let mut focus_target = use_signal(|| None::<ArrayFocusRequest>);
+    let mut pending_focus_target = use_signal(|| None::<ArrayFocusRequest>);
+    let feedback = ArrayFeedback {
+        announcement,
+        pending_announcement,
+        pending_focus_target,
     };
-    let Ok(Some(mut projection)) = reader.read() else {
+    use_effect(move || {
+        let pending = *pending_announcement.read();
+        if let Some(pending) = pending {
+            pending_announcement.write().take();
+            let mut announcement = announcement;
+            announcement.set((pending.0, Some(pending.1)));
+        }
+    });
+    use_effect(move || {
+        let pending = pending_focus_target.read().clone();
+        if let Some(pending) = pending {
+            pending_focus_target.write().take();
+            focus_target.set(Some(pending));
+        }
+    });
+    use_effect(move || {
+        let target = focus_target.read().clone();
+        if let Some(target) = target {
+            focus_array_target(&target);
+            focus_target.write().take();
+        }
+    });
+
+    // Container presence and append are a fixed set per array, so their callbacks are hook-stable
+    // here; the per-item affordances live in `CollectionItemHost`, one scope per item.
+    let element_id = props.array.element_id.clone();
+    let actions = reader.as_ref().map(handle::NodeReader::actions);
+    let collection = reader.as_ref().map(handle::NodeReader::collection_actions);
+    let seed = projection
+        .as_ref()
+        .and_then(|projection| projection.creation_seed.clone());
+    /// One container presence operation; `None` when its precondition (a seed) is absent.
+    type ContainerOperation = fn(
+        &handle::ControlActions,
+        Option<&Value>,
+    )
+        -> Option<Result<schemaform::Transition, handle::HandleError>>;
+    let container_callback = |operation: ContainerOperation, event: ArrayAnnouncement| {
+        let actions = actions.clone();
+        let seed = seed.clone();
+        let error_route = operation_errors.clone();
+        let element_id = element_id.clone();
+        use_callback(move |()| {
+            if let Some(actions) = &actions
+                && let Some(result) = operation(actions, seed.as_ref())
+                && report_operation(&error_route, result)
+            {
+                feedback.focus(ArrayFocusRequest::Element(vec![element_id.clone()]));
+                feedback.announce(event);
+            }
+        })
+    };
+    let materialize = container_callback(
+        |actions, _| Some(actions.materialize()),
+        ArrayAnnouncement::Materialized,
+    );
+    let replace = container_callback(
+        |actions, seed| seed.map(|value| actions.replace_value(value.clone())),
+        ArrayAnnouncement::Replaced,
+    );
+    let remove_value = container_callback(
+        |actions, _| Some(actions.remove_value()),
+        ArrayAnnouncement::Cleared,
+    );
+    let append = {
+        let collection = collection.clone();
+        let reader = reader.clone();
+        let error_route = operation_errors.clone();
+        let element_id = element_id.clone();
+        use_callback(move |()| {
+            let (Some(collection), Some(reader)) = (&collection, &reader) else {
+                return;
+            };
+            let before = array_children(reader);
+            if report_operation(&error_route, collection.append()) {
+                let after = array_children(reader);
+                focus_new_item(feedback, &element_id, &before, &after);
+                feedback.announce(ArrayAnnouncement::Added {
+                    position: after.len(),
+                });
+            }
+        })
+    };
+
+    let Some(mut projection) = projection else {
         return rsx! {};
     };
     localize_node_text(&props.form, &mut projection);
@@ -5998,128 +6431,83 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
                 },
             )
         });
-    let insert_before_label = localize_builtin(
+
+    let operations = projection.allowed_operations;
+    let presence = container_presence_affordances(
         &props.form,
-        BuiltinMessage::ArrayInsertBefore {
-            item_label: item_label.clone(),
-        },
-    );
-    let move_up_label = localize_builtin(
-        &props.form,
-        BuiltinMessage::ArrayMoveUp {
-            item_label: item_label.clone(),
-        },
-    );
-    let move_down_label = localize_builtin(
-        &props.form,
-        BuiltinMessage::ArrayMoveDown {
-            item_label: item_label.clone(),
-        },
-    );
-    let remove_label = localize_builtin(
-        &props.form,
-        BuiltinMessage::ArrayRemove {
-            item_label: item_label.clone(),
-        },
-    );
-    let add_label = localize_builtin(
-        &props.form,
-        BuiltinMessage::ArrayAdd {
-            item_label: item_label.clone(),
-        },
-    );
-    let collection = reader.collection_actions();
-    let operation_errors = dioxus_core::try_consume_context::<OperationErrorHandler>();
-    let can_remove = projection.allowed_operations.can_remove_item();
-    let can_insert = projection.allowed_operations.can_append_item();
-    let can_move = projection.allowed_operations.can_move_item();
-    let mut announcement = use_signal(|| (0_u64, None::<ArrayAnnouncement>));
-    let mut pending_announcement = use_signal(|| None::<(u64, ArrayAnnouncement)>);
-    use_effect(move || {
-        let pending = *pending_announcement.read();
-        if let Some(pending) = pending {
-            pending_announcement.write().take();
-            announcement.set((pending.0, Some(pending.1)));
-        }
-    });
-    let mut focus_target = use_signal(|| None::<ArrayFocusRequest>);
-    let mut pending_focus_target = use_signal(|| None::<ArrayFocusRequest>);
-    use_effect(move || {
-        let pending = pending_focus_target.read().clone();
-        if let Some(pending) = pending {
-            pending_focus_target.write().take();
-            focus_target.set(Some(pending));
-        }
-    });
-    use_effect(move || {
-        let target = focus_target.read().clone();
-        if let Some(target) = target {
-            focus_array_target(&target);
-            focus_target.write().take();
-        }
-    });
-    let presence_element_id = props.array.element_id.clone();
-    let presence_success: ContainerPresenceSuccess = Rc::new(move |change| {
-        let mut pending_focus = pending_focus_target;
-        pending_focus.set(Some(ArrayFocusRequest::Element(vec![
-            presence_element_id.clone(),
-        ])));
-        let event = match change {
-            ContainerPresenceChange::Materialized => ArrayAnnouncement::Materialized,
-            ContainerPresenceChange::Replaced => ArrayAnnouncement::Replaced,
-            ContainerPresenceChange::Removed => ArrayAnnouncement::Cleared,
-        };
-        set_array_announcement(announcement, pending_announcement, event);
-    });
-    let presence_actions = container_presence_actions(
-        &props.form,
-        reader.actions(),
         &projection,
-        Some(presence_success),
+        &element_id,
+        ContainerPresenceCallbacks {
+            materialize,
+            replace,
+            remove_value,
+        },
     );
     let presentation = node_presentation(
         &props.form,
         &projection,
-        &props.array.element_id,
-        Vec::new(),
+        &element_id,
+        presence,
+        container_incompatible_value(&projection),
     );
-    let described_by = presentation.described_by();
-    let invalid = presentation.invalid;
-    let help = presentation.present_help();
-    let presented_findings = presentation.present_findings();
-    let mut items = Vec::new();
-    for identity in projection.children.iter().copied() {
-        let Ok(Some(item_reader)) = props.form.handle().node(identity) else {
-            continue;
-        };
-        let Ok(Some(item)) = item_reader.read() else {
-            continue;
-        };
-        let Some(item_identity) = item.item else {
-            continue;
-        };
-        let Some(node) = instantiate_array_template(
+
+    let append_id = format!("{element_id}-append");
+    let append = operations.can_append_item().then(|| render::Affordance {
+        kind: render::AffordanceKind::Append,
+        label: localize_builtin(
             &props.form,
-            &props.array.template,
-            identity,
-            &props.array.element_id,
-        ) else {
-            continue;
-        };
-        let row_id = array_item_input_id(&props.array.element_id, identity);
-        items.push((item_identity, row_id, node));
-    }
-    let append_id = format!("{}-append", props.array.element_id);
-    let rendered_items = items
-        .into_iter()
-        .enumerate()
-        .map(|(index, (item, row_id, node))| (item, row_id, node, index))
+            BuiltinMessage::ArrayAdd {
+                item_label: item_label.clone(),
+            },
+        ),
+        id: append_id.clone(),
+        accessible_name: None,
+        invoke: append,
+    });
+
+    // One keyed host scope per item, keyed by instance identity: DOM identity follows the item
+    // as it moves regardless of what the renderer emits, and each item's affordance callbacks are
+    // hook-stable inside their own scope.
+    let item_identities = projection
+        .children
+        .iter()
+        .copied()
+        .filter_map(|identity| {
+            let item = props
+                .form
+                .handle()
+                .node(identity)
+                .ok()??
+                .read()
+                .ok()??
+                .item?;
+            Some((identity, item))
+        })
         .collect::<Vec<_>>();
-    let item_count = rendered_items.len();
-    let append = collection.clone();
-    let append_errors = operation_errors.clone();
-    let append_reader = reader.clone();
-    let append_element_id = props.array.element_id.clone();
+    let count = item_identities.len();
+    let gates = ItemGates {
+        can_insert: operations.can_append_item(),
+        can_move: operations.can_move_item(),
+        can_remove: operations.can_remove_item(),
+    };
+    let items = rsx! {
+        for (index, (identity, item)) in item_identities.into_iter().enumerate() {
+            CollectionItemHost {
+                key: "{array_item_input_id(&element_id, identity)}",
+                form: props.form.clone(),
+                array: props.array.clone(),
+                identity,
+                item,
+                position: index + 1,
+                count,
+                item_label: item_label.clone(),
+                gates,
+                append_id: append_id.clone(),
+                feedback,
+            }
+        }
+    };
+
     let (announcement_sequence, announcement_event) = *announcement.read();
     let announcement_text = announcement_event
         .map(|event| {
@@ -6129,285 +6517,305 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
             )
         })
         .unwrap_or_default();
+    let announcement = rsx! {
+        div {
+            "data-array-status": "",
+            "data-announcement-sequence": "{announcement_sequence}",
+            role: "status",
+            "aria-live": "polite",
+            "aria-atomic": "true",
+            "{announcement_text}"
+        }
+    };
+
+    props
+        .form
+        .inner
+        .structure
+        .render_collection(render::CollectionContext {
+            presentation,
+            item_label,
+            count,
+            items,
+            append,
+            announcement,
+            extensions: props.array.extensions.clone(),
+        })
+}
+
+/// The array's current item identities, or empty when the node is not readable.
+fn array_children(reader: &handle::NodeReader) -> Vec<schemaform::InstanceIdentity> {
+    reader
+        .read()
+        .ok()
+        .flatten()
+        .map(|view| view.children)
+        .unwrap_or_default()
+}
+
+/// Requests focus on the one item present in `after` but not in `before`, if any.
+///
+/// Append and insert both create exactly one item; the core assigns its identity, so the new item
+/// is found by difference rather than by position.
+fn focus_new_item(
+    feedback: ArrayFeedback,
+    array_element_id: &str,
+    before: &[schemaform::InstanceIdentity],
+    after: &[schemaform::InstanceIdentity],
+) {
+    if let Some(identity) = after.iter().find(|identity| !before.contains(identity)) {
+        feedback.focus(ArrayFocusRequest::Item(array_item_input_id(
+            array_element_id,
+            *identity,
+        )));
+    }
+}
+
+/// The id of the adapter-owned wrapper around the item whose root carries `stem`.
+fn array_item_row_id(stem: &str) -> String {
+    format!("{stem}-row")
+}
+
+/// Which item operations the collection currently allows, as the core reports them.
+///
+/// The core gates insertion and appending together (`can_append_item`), so `can_insert` is that
+/// gate; first/last position gating for moves is applied per item by the host.
+#[derive(Clone, Copy, PartialEq)]
+struct ItemGates {
+    can_insert: bool,
+    can_move: bool,
+    can_remove: bool,
+}
+
+#[derive(Props, Clone, PartialEq)]
+struct CollectionItemHostProps {
+    form: render::BoundForm,
+    array: render::BoundArray,
+    identity: schemaform::InstanceIdentity,
+    item: schemaform::ItemIdentity,
+    position: usize,
+    count: usize,
+    item_label: String,
+    gates: ItemGates,
+    append_id: String,
+    feedback: ArrayFeedback,
+}
+
+/// The adapter-owned host for one array item.
+///
+/// It owns the keyed scope, the row wrapper carrying the adapter's row id, and the four item
+/// affordances. The affordances are `use_callback`s: `Callback::new` registers with the scope
+/// owner and is freed only when the scope drops, so building them per render in the array
+/// component would accumulate N×4 callbacks until unmount; one scope per item with a fixed hook
+/// count keeps them stable and bounded. The renderer's `collection_item` output is placed inside
+/// the wrapper.
+#[allow(non_snake_case)]
+fn CollectionItemHost(props: CollectionItemHostProps) -> Element {
+    let element_id = props.array.element_id.clone();
+    let reader = props
+        .form
+        .handle()
+        .node(props.array.identity)
+        .ok()
+        .flatten();
+    let collection = reader.as_ref().map(handle::NodeReader::collection_actions);
+    let operation_errors = dioxus_core::try_consume_context::<OperationErrorHandler>();
+    let feedback = props.feedback;
+    let item = props.item;
+    let position = props.position;
+    let stem = array_item_input_id(&element_id, props.identity);
+
+    let insert_before = {
+        let collection = collection.clone();
+        let reader = reader.clone();
+        let error_route = operation_errors.clone();
+        let element_id = element_id.clone();
+        use_callback(move |()| {
+            let (Some(collection), Some(reader)) = (&collection, &reader) else {
+                return;
+            };
+            let before = array_children(reader);
+            if report_operation(&error_route, collection.insert_before(item)) {
+                focus_new_item(feedback, &element_id, &before, &array_children(reader));
+                feedback.announce(ArrayAnnouncement::Inserted { position });
+            }
+        })
+    };
+    let move_up = {
+        let collection = collection.clone();
+        let error_route = operation_errors.clone();
+        let stem = stem.clone();
+        use_callback(move |()| {
+            let Some(collection) = &collection else {
+                return;
+            };
+            if report_operation(&error_route, collection.move_up(item)) {
+                feedback.focus(ArrayFocusRequest::Element(vec![
+                    format!("{stem}-move-up"),
+                    format!("{stem}-move-down"),
+                    array_item_row_id(&stem),
+                ]));
+                feedback.announce(ArrayAnnouncement::MovedUp {
+                    position: position - 1,
+                });
+            }
+        })
+    };
+    let move_down = {
+        let collection = collection.clone();
+        let error_route = operation_errors.clone();
+        let stem = stem.clone();
+        use_callback(move |()| {
+            let Some(collection) = &collection else {
+                return;
+            };
+            if report_operation(&error_route, collection.move_down(item)) {
+                feedback.focus(ArrayFocusRequest::Element(vec![
+                    format!("{stem}-move-down"),
+                    format!("{stem}-move-up"),
+                    array_item_row_id(&stem),
+                ]));
+                feedback.announce(ArrayAnnouncement::MovedDown {
+                    position: position + 1,
+                });
+            }
+        })
+    };
+    let remove = {
+        let collection = collection.clone();
+        let reader = reader.clone();
+        let handle = props.form.handle().clone();
+        let error_route = operation_errors.clone();
+        let element_id = element_id.clone();
+        let append_id = props.append_id.clone();
+        use_callback(move |()| {
+            let (Some(collection), Some(reader)) = (&collection, &reader) else {
+                return;
+            };
+            let children = array_children(reader);
+            let target_index = children.iter().position(|identity| {
+                handle
+                    .node(*identity)
+                    .ok()
+                    .flatten()
+                    .and_then(|node| node.read().ok().flatten())
+                    .is_some_and(|view| view.item == Some(item))
+            });
+            let next_focus = target_index
+                .and_then(|index| {
+                    children
+                        .get(index + 1)
+                        .or_else(|| index.checked_sub(1).and_then(|index| children.get(index)))
+                })
+                .map(|identity| {
+                    ArrayFocusRequest::Item(array_item_input_id(&element_id, *identity))
+                })
+                .unwrap_or_else(|| ArrayFocusRequest::Element(vec![append_id.clone()]));
+            if report_operation(&error_route, collection.remove(item)) {
+                feedback.focus(next_focus);
+                feedback.announce(ArrayAnnouncement::Removed {
+                    position: target_index.map_or(0, |index| index + 1),
+                });
+            }
+        })
+    };
+
+    let Some(node) = instantiate_array_template(
+        &props.form,
+        &props.array.template,
+        props.identity,
+        &element_id,
+    ) else {
+        return rsx! {};
+    };
+
+    let item_label = props.item_label.clone();
+    let affordance = |kind: render::AffordanceKind,
+                      suffix: &str,
+                      label: BuiltinMessage,
+                      accessible_name: BuiltinMessage,
+                      invoke: Callback<()>| render::Affordance {
+        kind,
+        label: localize_builtin(&props.form, label),
+        id: format!("{stem}-{suffix}"),
+        accessible_name: Some(localize_builtin(&props.form, accessible_name)),
+        invoke,
+    };
+    let context = render::CollectionItemContext {
+        row_id: array_item_row_id(&stem),
+        position,
+        count: props.count,
+        item_label: item_label.clone(),
+        children: rsx! {
+            BoundNode {
+                form: props.form.clone(),
+                node,
+            }
+        },
+        insert_before: props.gates.can_insert.then(|| {
+            affordance(
+                render::AffordanceKind::InsertBefore,
+                "insert-before",
+                BuiltinMessage::ArrayInsertBefore {
+                    item_label: item_label.clone(),
+                },
+                BuiltinMessage::ArrayInsertBeforeAt {
+                    item_label: item_label.clone(),
+                    position,
+                },
+                insert_before,
+            )
+        }),
+        move_up: (props.gates.can_move && position > 1).then(|| {
+            affordance(
+                render::AffordanceKind::MoveUp,
+                "move-up",
+                BuiltinMessage::ArrayMoveUp {
+                    item_label: item_label.clone(),
+                },
+                BuiltinMessage::ArrayMoveUpAt {
+                    item_label: item_label.clone(),
+                    position,
+                },
+                move_up,
+            )
+        }),
+        move_down: (props.gates.can_move && position < props.count).then(|| {
+            affordance(
+                render::AffordanceKind::MoveDown,
+                "move-down",
+                BuiltinMessage::ArrayMoveDown {
+                    item_label: item_label.clone(),
+                },
+                BuiltinMessage::ArrayMoveDownAt {
+                    item_label: item_label.clone(),
+                    position,
+                },
+                move_down,
+            )
+        }),
+        remove: props.gates.can_remove.then(|| {
+            affordance(
+                render::AffordanceKind::RemoveItem,
+                "remove",
+                BuiltinMessage::ArrayRemove {
+                    item_label: item_label.clone(),
+                },
+                BuiltinMessage::ArrayRemoveAt {
+                    item_label: item_label.clone(),
+                    position,
+                },
+                remove,
+            )
+        }),
+    };
 
     rsx! {
-        fieldset {
-            id: props.array.element_id,
-            class: "schemaform-group schemaform-array",
-            "data-schemaform-array": "",
-            "aria-invalid": invalid,
-            "aria-describedby": described_by,
-            tabindex: "-1",
-            legend { "{projection.label}" }
-            {help}
-            {presence_actions}
-            for (item, row_id, node, index) in rendered_items {
-                div {
-                    key: "{row_id}",
-                    id: "{row_id}-row",
-                    class: "schemaform-array-item",
-                    "data-array-item": "",
-                    BoundNode {
-                        form: props.form.clone(),
-                        node,
-                    }
-                    if can_insert {
-                        button {
-                            id: "{row_id}-insert-before",
-                            r#type: "button",
-                            "data-insert-item-before": "",
-                            "aria-label": localize_builtin(
-                                &props.form,
-                                BuiltinMessage::ArrayInsertBeforeAt {
-                                    item_label: item_label.clone(),
-                                    position: index + 1,
-                                },
-                            ),
-                            onclick: {
-                                let collection = collection.clone();
-                                let reader = reader.clone();
-                                let element_id = props.array.element_id.clone();
-                                let operation_errors = operation_errors.clone();
-                                move |_| {
-                                    let before = reader
-                                        .read()
-                                        .ok()
-                                        .flatten()
-                                        .map(|view| view.children)
-                                        .unwrap_or_default();
-                                    if report_operation(
-                                        &operation_errors,
-                                        collection.insert_before(item),
-                                    ) {
-                                        if let Some(children) = reader
-                                            .read()
-                                            .ok()
-                                            .flatten()
-                                            .map(|view| view.children)
-                                            && let Some(inserted) = children
-                                                .iter()
-                                                .find(|identity| !before.contains(identity))
-                                        {
-                                            pending_focus_target.set(Some(ArrayFocusRequest::Row(format!(
-                                                "{}-row",
-                                                array_item_input_id(&element_id, *inserted)
-                                            ))));
-                                        }
-                                        set_array_announcement(
-                                            announcement,
-                                            pending_announcement,
-                                            ArrayAnnouncement::Inserted {
-                                                position: index + 1,
-                                            },
-                                        );
-                                    }
-                                }
-                            },
-                            "{insert_before_label}"
-                        }
-                    }
-                    if can_move && index > 0 {
-                        button {
-                            id: "{row_id}-move-up",
-                            r#type: "button",
-                            "data-move-item-up": "",
-                            "aria-label": localize_builtin(
-                                &props.form,
-                                BuiltinMessage::ArrayMoveUpAt {
-                                    item_label: item_label.clone(),
-                                    position: index + 1,
-                                },
-                            ),
-                            onclick: {
-                                let collection = collection.clone();
-                                let row_id = row_id.clone();
-                                let operation_errors = operation_errors.clone();
-                                move |_| {
-                                    if report_operation(
-                                        &operation_errors,
-                                        collection.move_up(item),
-                                    ) {
-                                        pending_focus_target.set(Some(ArrayFocusRequest::Element(vec![
-                                            format!("{row_id}-move-up"),
-                                            format!("{row_id}-move-down"),
-                                            format!("{row_id}-row"),
-                                        ])));
-                                        set_array_announcement(
-                                            announcement,
-                                            pending_announcement,
-                                            ArrayAnnouncement::MovedUp { position: index },
-                                        );
-                                    }
-                                }
-                            },
-                            "{move_up_label}"
-                        }
-                    }
-                    if can_move && index + 1 < item_count {
-                        button {
-                            id: "{row_id}-move-down",
-                            r#type: "button",
-                            "data-move-item-down": "",
-                            "aria-label": localize_builtin(
-                                &props.form,
-                                BuiltinMessage::ArrayMoveDownAt {
-                                    item_label: item_label.clone(),
-                                    position: index + 1,
-                                },
-                            ),
-                            onclick: {
-                                let collection = collection.clone();
-                                let row_id = row_id.clone();
-                                let operation_errors = operation_errors.clone();
-                                move |_| {
-                                    if report_operation(
-                                        &operation_errors,
-                                        collection.move_down(item),
-                                    ) {
-                                        pending_focus_target.set(Some(ArrayFocusRequest::Element(vec![
-                                            format!("{row_id}-move-down"),
-                                            format!("{row_id}-move-up"),
-                                            format!("{row_id}-row"),
-                                        ])));
-                                        set_array_announcement(
-                                            announcement,
-                                            pending_announcement,
-                                            ArrayAnnouncement::MovedDown {
-                                                position: index + 2,
-                                            },
-                                        );
-                                    }
-                                }
-                            },
-                            "{move_down_label}"
-                        }
-                    }
-                    if can_remove {
-                        button {
-                            id: "{row_id}-remove",
-                            r#type: "button",
-                            "data-remove-item": "",
-                            "aria-label": localize_builtin(
-                                &props.form,
-                                BuiltinMessage::ArrayRemoveAt {
-                                    item_label: item_label.clone(),
-                                    position: index + 1,
-                                },
-                            ),
-                            onclick: {
-                                let collection = collection.clone();
-                                let reader = reader.clone();
-                                let handle = props.form.handle().clone();
-                                let element_id = props.array.element_id.clone();
-                                let append_id = append_id.clone();
-                                let operation_errors = operation_errors.clone();
-                                move |_| {
-                                    let children = reader
-                                        .read()
-                                        .ok()
-                                        .flatten()
-                                        .map(|view| view.children)
-                                        .unwrap_or_default();
-                                    let target_index = children.iter().position(|identity| {
-                                        handle
-                                            .node(*identity)
-                                            .ok()
-                                            .flatten()
-                                            .and_then(|node| node.read().ok().flatten())
-                                            .is_some_and(|view| view.item == Some(item))
-                                    });
-                                    let next_focus = target_index
-                                        .and_then(|index| {
-                                            children
-                                                .get(index + 1)
-                                                .or_else(|| {
-                                                    index.checked_sub(1).and_then(|index| {
-                                                        children.get(index)
-                                                    })
-                                                })
-                                        })
-                                        .map(|identity| {
-                                            ArrayFocusRequest::Row(format!(
-                                                "{}-row",
-                                                array_item_input_id(&element_id, *identity)
-                                            ))
-                                        })
-                                        .unwrap_or_else(|| {
-                                            ArrayFocusRequest::Element(vec![append_id.clone()])
-                                        });
-                                    if report_operation(
-                                        &operation_errors,
-                                        collection.remove(item),
-                                    ) {
-                                        pending_focus_target.set(Some(next_focus));
-                                        set_array_announcement(
-                                            announcement,
-                                            pending_announcement,
-                                            ArrayAnnouncement::Removed {
-                                                position: target_index
-                                                    .map_or(0, |index| index + 1),
-                                            },
-                                        );
-                                    }
-                                }
-                            },
-                            "{remove_label}"
-                        }
-                    }
-                }
-            }
-            if projection.allowed_operations.can_append_item() {
-                button {
-                    id: append_id,
-                    r#type: "button",
-                    "data-append-item": "",
-                    onclick: move |_| {
-                        let before = append_reader
-                            .read()
-                            .ok()
-                            .flatten()
-                            .map(|view| view.children)
-                            .unwrap_or_default();
-                        if report_operation(&append_errors, append.append()) {
-                            if let Some(identity) = append_reader
-                                .read()
-                                .ok()
-                                .flatten()
-                                .and_then(|view| {
-                                    view.children
-                                        .into_iter()
-                                        .find(|identity| !before.contains(identity))
-                                })
-                            {
-                                pending_focus_target.set(Some(ArrayFocusRequest::Row(format!(
-                                    "{}-row",
-                                    array_item_input_id(&append_element_id, identity)
-                                ))));
-                            }
-                            let position = append_reader
-                                .read()
-                                .ok()
-                                .flatten()
-                                .map_or(0, |view| view.children.len());
-                            set_array_announcement(
-                                announcement,
-                                pending_announcement,
-                                ArrayAnnouncement::Added { position },
-                            );
-                        }
-                    },
-                    "{add_label}"
-                }
-            }
-            div {
-                "data-array-status": "",
-                "data-announcement-sequence": "{announcement_sequence}",
-                role: "status",
-                "aria-live": "polite",
-                "aria-atomic": "true",
-                "{announcement_text}"
-            }
-            {presented_findings}
+        div {
+            id: array_item_row_id(&stem),
+            class: "schemaform-array-item",
+            "data-array-item": "",
+            {props.form.inner.structure.render_collection_item(context)}
         }
     }
 }
@@ -6432,8 +6840,8 @@ fn focus_array_target(target: &ArrayFocusRequest) {
         ArrayFocusRequest::Element(targets) => {
             let _ = targets;
         }
-        ArrayFocusRequest::Row(row) => {
-            let _ = row;
+        ArrayFocusRequest::Item(stem) => {
+            let _ = stem;
         }
     }
 
@@ -6441,25 +6849,28 @@ fn focus_array_target(target: &ArrayFocusRequest) {
     {
         use wasm_bindgen::JsCast;
 
+        const FOCUSABLE: &str = "input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
+
         let Some(document) = web_sys::window().and_then(|window| window.document()) else {
             return;
         };
+        let as_html = |element: web_sys::Element| element.dyn_into::<web_sys::HtmlElement>().ok();
+        let first_focusable_inside = |id: &str| {
+            document
+                .get_element_by_id(id)
+                .and_then(|element| element.query_selector(FOCUSABLE).ok().flatten())
+                .and_then(as_html)
+        };
         let target = match target {
-            ArrayFocusRequest::Element(targets) => targets.iter().find_map(|target| {
-                document
-                    .get_element_by_id(target)
-                    .and_then(|element| element.dyn_into::<web_sys::HtmlElement>().ok())
-            }),
-            ArrayFocusRequest::Row(row) => document
-                .get_element_by_id(row)
-                .and_then(|row| {
-                    row.query_selector(
-                        "input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])",
-                    )
-                    .ok()
-                    .flatten()
-                })
-                .and_then(|element| element.dyn_into::<web_sys::HtmlElement>().ok()),
+            ArrayFocusRequest::Element(targets) => targets
+                .iter()
+                .find_map(|target| document.get_element_by_id(target).and_then(as_html)),
+            ArrayFocusRequest::Item(stem) => document
+                .get_element_by_id(stem)
+                .filter(|root| root.matches(FOCUSABLE).unwrap_or(false))
+                .and_then(as_html)
+                .or_else(|| first_focusable_inside(stem))
+                .or_else(|| first_focusable_inside(&array_item_row_id(stem))),
         };
         if let Some(target) = target {
             let _ = target.focus();
@@ -6479,20 +6890,15 @@ struct FixedObjectGroupProps {
     group: render::BoundGroup,
 }
 
-#[derive(Clone, Copy)]
-enum ContainerPresenceChange {
-    Materialized,
-    Replaced,
-    Removed,
-}
-
-type ContainerPresenceSuccess = Rc<dyn Fn(ContainerPresenceChange)>;
-
+/// Renders the built-in presence buttons for a fixed-object group.
+///
+/// Only [`FixedObjectGroup`] uses this: homogeneous arrays hand their container presence out as
+/// affordances on [`render::NodePresentation::presence`]. When a `FixedObjectRenderer` seam lands,
+/// fixed objects move to affordances the same way and this helper is deleted.
 fn container_presence_actions(
     form: &render::BoundForm,
     actions: handle::ControlActions,
     projection: &handle::NodeProjection,
-    on_success: Option<ContainerPresenceSuccess>,
 ) -> Element {
     let materialize_actions = actions.clone();
     let replace_actions = actions.clone();
@@ -6502,13 +6908,7 @@ fn container_presence_actions(
     let materialize_errors = operation_errors.clone();
     let replace_errors = operation_errors.clone();
     let remove_errors = operation_errors;
-    let materialize_success = on_success.clone();
-    let replace_success = on_success.clone();
-    let remove_success = on_success;
-    let incompatible_value = (projection.allowed_operations.can_replace_value()
-        && !projection.write_only)
-        .then(|| projection.current_data.as_ref().map(Value::to_string))
-        .flatten();
+    let incompatible_value = container_incompatible_value(projection);
     let add_label = localize_builtin(
         form,
         BuiltinMessage::PresenceAdd {
@@ -6538,12 +6938,7 @@ fn container_presence_actions(
                     r#type: "button",
                     "data-materialize": "",
                     onclick: move |_| {
-                        if report_operation(
-                            &materialize_errors,
-                            materialize_actions.materialize(),
-                        ) && let Some(on_success) = &materialize_success {
-                            on_success(ContainerPresenceChange::Materialized);
-                        }
+                        report_operation(&materialize_errors, materialize_actions.materialize());
                     },
                     "{add_label}"
                 }
@@ -6555,12 +6950,10 @@ fn container_presence_actions(
                     r#type: "button",
                     "data-replace-value": "",
                     onclick: move |_| {
-                        if report_operation(
+                        report_operation(
                             &replace_errors,
                             replace_actions.replace_value(replacement.clone()),
-                        ) && let Some(on_success) = &replace_success {
-                            on_success(ContainerPresenceChange::Replaced);
-                        }
+                        );
                     },
                     "{replace_label}"
                 }
@@ -6570,11 +6963,7 @@ fn container_presence_actions(
                     r#type: "button",
                     "data-remove-value": "",
                     onclick: move |_| {
-                        if report_operation(&remove_errors, remove_actions.remove_value())
-                            && let Some(on_success) = &remove_success
-                        {
-                            on_success(ContainerPresenceChange::Removed);
-                        }
+                        report_operation(&remove_errors, remove_actions.remove_value());
                     },
                     "{remove_label}"
                 }
@@ -6599,13 +6988,13 @@ fn FixedObjectGroup(props: FixedObjectGroupProps) -> Element {
         return rsx! {};
     };
     localize_node_text(&props.form, &mut projection);
-    let presence_actions =
-        container_presence_actions(&props.form, reader.actions(), &projection, None);
+    let presence_actions = container_presence_actions(&props.form, reader.actions(), &projection);
     let presentation = node_presentation(
         &props.form,
         &projection,
         &props.group.element_id,
         Vec::new(),
+        container_incompatible_value(&projection),
     );
     let described_by = presentation.described_by();
     let invalid = presentation.invalid;
@@ -6675,6 +7064,7 @@ fn UnsupportedRegion(props: UnsupportedRegionProps) -> Element {
         &projection,
         &props.region.element_id,
         Vec::new(),
+        None,
     );
     let described_by = presentation.described_by();
     let help = presentation.present_help();
@@ -7283,31 +7673,68 @@ fn scalar_presence_affordances(
     presence
 }
 
-/// Renders the built-in presence buttons for one scalar control from its affordances.
-///
-/// Each button carries the affordance's id and one marker attribute for its operation
-/// (`data-set-value`, `data-set-null`, `data-remove-value`, `data-replace-value`) and invokes the
-/// affordance. rsx attribute names are literal, so each marker is an `Option` attribute.
-fn scalar_presence_actions(presence: &[render::Affordance]) -> Element {
-    use render::AffordanceKind;
+/// The hook-stable callbacks behind a container's presence affordances.
+struct ContainerPresenceCallbacks {
+    materialize: Callback<()>,
+    replace: Callback<()>,
+    remove_value: Callback<()>,
+}
 
+/// Computes the presence affordances the core allows for one container right now.
+///
+/// This is the container counterpart of [`scalar_presence_affordances`]: materialize and remove
+/// value exactly when the core allows them; replace only while the core allows replacement and a
+/// creation seed exists. The homogeneous array hands the list out through its presentation;
+/// [`container_presence_actions`] still renders the same rules inline for fixed-object groups.
+fn container_presence_affordances(
+    form: &render::BoundForm,
+    projection: &handle::NodeProjection,
+    element_id: &str,
+    callbacks: ContainerPresenceCallbacks,
+) -> Vec<render::Affordance> {
+    use render::{Affordance, AffordanceKind};
+
+    let operations = projection.allowed_operations;
+    let has_seed = projection.creation_seed.is_some();
+    let label = || projection.label.clone();
+    let mut presence = Vec::new();
+    if operations.can_materialize() {
+        presence.push(Affordance {
+            kind: AffordanceKind::Materialize,
+            label: localize_builtin(form, BuiltinMessage::PresenceAdd { label: label() }),
+            id: format!("{element_id}-materialize"),
+            accessible_name: None,
+            invoke: callbacks.materialize,
+        });
+    }
+    if operations.can_replace_value() && has_seed {
+        presence.push(Affordance {
+            kind: AffordanceKind::Replace,
+            label: localize_builtin(form, BuiltinMessage::PresenceReplace { label: label() }),
+            id: format!("{element_id}-replace-value"),
+            accessible_name: None,
+            invoke: callbacks.replace,
+        });
+    }
+    if operations.can_remove_value() {
+        presence.push(Affordance {
+            kind: AffordanceKind::RemoveValue,
+            label: localize_builtin(form, BuiltinMessage::PresenceRemove { label: label() }),
+            id: format!("{element_id}-remove-value"),
+            accessible_name: None,
+            invoke: callbacks.remove_value,
+        });
+    }
+    presence
+}
+
+/// Renders the built-in presence buttons for one scalar control from its affordances.
+fn scalar_presence_actions(presence: &[render::Affordance]) -> Element {
     let buttons = presence.to_vec();
     rsx! {
         div { class: "schemaform-presence-actions",
             for affordance in buttons {
-                button {
-                    key: "{affordance.id}",
-                    id: affordance.id.clone(),
-                    r#type: "button",
-                    "data-set-value": (affordance.kind == AffordanceKind::Set).then_some(""),
-                    "data-set-null": (affordance.kind == AffordanceKind::SetNull).then_some(""),
-                    "data-remove-value": (affordance.kind == AffordanceKind::RemoveValue)
-                        .then_some(""),
-                    "data-replace-value": (affordance.kind == AffordanceKind::Replace)
-                        .then_some(""),
-                    onclick: move |_| affordance.invoke.call(()),
-                    "{affordance.label}"
-                }
+                {builtin_affordance_button(affordance)}
             }
         }
     }
@@ -7358,8 +7785,13 @@ fn ControlHost(props: ControlHostProps) -> Element {
         &props.control.input_id,
         presence_callbacks,
     );
-    let presentation =
-        node_presentation(&props.form, &projection, &props.control.input_id, presence);
+    let presentation = node_presentation(
+        &props.form,
+        &projection,
+        &props.control.input_id,
+        presence,
+        incompatible_value(&projection),
+    );
     let facets = control_facets(&props.form, &props.control, &projection);
     let context = render::ControlRenderContext::new(
         reader,
@@ -7392,6 +7824,16 @@ fn incompatible_value(projection: &handle::NodeProjection) -> Option<String> {
                 .map(Value::to_string)
                 .unwrap_or_default()
         })
+}
+
+/// The value shown beside a container's replace affordance while its data is replaceable.
+///
+/// Containers have no value state; the core allows replacement exactly when the current data is
+/// not the container shape the data schema expects, so replaceability alone selects the value.
+fn container_incompatible_value(projection: &handle::NodeProjection) -> Option<String> {
+    (projection.allowed_operations.can_replace_value() && !projection.write_only)
+        .then(|| projection.current_data.as_ref().map(Value::to_string))
+        .flatten()
 }
 
 #[derive(Props, Clone, PartialEq)]
@@ -7521,7 +7963,7 @@ fn BuiltinTextControl(props: BuiltinControlProps) -> Element {
     let write_only = facets.write_only;
     let required = facets.required;
     let label = chrome.label(chrome.widget_label(write_only));
-    let incompatible_value = incompatible_value(&projection);
+    let incompatible_value = context.presentation().incompatible_value.clone();
     rsx! {
         div {
             class: "schemaform-control",
@@ -7617,7 +8059,7 @@ fn BuiltinBooleanControl(props: BuiltinControlProps) -> Element {
         };
     }
     let checked = edit.checked.cloned().unwrap_or(false);
-    let incompatible_value = incompatible_value(&projection);
+    let incompatible_value = context.presentation().incompatible_value.clone();
     // The checkbox's label follows the widget, unlike every other built-in kind.
     let label = chrome.label(chrome.label.clone());
     rsx! {
@@ -7843,8 +8285,9 @@ pub use handle::{
     FormReader, HandleError, HandleTransactionError, NodeProjection, NodeReader, use_form,
 };
 pub use render::{
-    Affordance, AffordanceKind, BindError, BindFinding, BoundForm, BuiltinControlRenderer,
-    BuiltinShell, ControlFacets, ControlKind, ControlMatcher, ControlRegistry,
+    Affordance, AffordanceKind, BindError, BindFinding, BoundForm, BuiltinCollection,
+    BuiltinControlRenderer, BuiltinShell, CollectionContext, CollectionItemContext,
+    CollectionRenderer, ControlFacets, ControlKind, ControlMatcher, ControlRegistry,
     ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
     ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter, Help, Localizer,
     NodePresentation, PreparedExtension, PreparedExtensions, RenderConfiguration, ShellContext,

@@ -90,20 +90,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and binding reports the additive `BindFinding::NoMatchingRenderer
   { definition_node }` for every control no registration accepts.
 - `NodePresentation::presence` lists the presence affordances the core allows
-  for a scalar control right now, and `Affordance` (`kind`, localized `label`,
-  the DOM `id` the triggering element must carry, optional `accessible_name`,
-  `invoke`) performs the operation and reports failures to
-  `SchemaForm::on_error` itself. Set is offered only while the value is missing
-  or null and a creation seed exists, replace only while the core allows
-  replacement and a seed exists, set null and remove value whenever the core
-  allows them. `AffordanceKind` is non-exhaustive (`Set`, `SetNull`,
-  `RemoveValue`, `Replace`, and `Submit` today) so later renderer seams can add
-  collection affordances. `accessible_name` is `Some` only when the accessible
-  name must differ from the visible label, as a positional item action's will;
-  every affordance shipped so far carries `None`. The built-in control renders
-  its presence buttons from the same list, so a custom renderer receives
-  exactly the operations the built-in would offer; those buttons now carry the
-  affordance id.
+  for a node right now, and `Affordance` (`kind`, localized `label`, the DOM
+  `id` the triggering element must carry, optional `accessible_name`, `invoke`)
+  performs the operation and reports failures to `SchemaForm::on_error` itself.
+  For a scalar control, set is offered only while the value is missing or null
+  and a creation seed exists, replace only while the core allows replacement
+  and a seed exists, set null and remove value whenever the core allows them;
+  for a homogeneous array, materialize, replace, and remove value follow the
+  same seed rules and additionally announce and focus the array when invoked.
+  `AffordanceKind` is non-exhaustive (`Set`, `SetNull`, `RemoveValue`,
+  `Replace`, `Materialize`, `Append`, `InsertBefore`, `MoveUp`, `MoveDown`,
+  `RemoveItem`, and `Submit`). `accessible_name` is `Some` only when the
+  accessible name must differ from the visible label: the four item affordances
+  carry the positional variant (`Insert Tags item before position 2`), every
+  other affordance carries `None`. The built-in control and array render their
+  buttons from the same lists, so a custom renderer receives exactly the
+  operations the built-in would offer; the built-in presence buttons now carry
+  the affordance id, including the array's container presence buttons
+  (`{element_id}-materialize`, `-replace-value`, `-remove-value`), which had
+  none.
+- `NodePresentation::incompatible_value` is the serialized current value while
+  the node cannot edit it but the core allows replacement, as the built-in shows
+  beside its replace button: `Some` for a scalar control whose value is
+  incompatible (or null where null is not accepted) while text input is
+  rejected, and for a container whose value is replaceable, unless the node is
+  write-only. The built-in controls and array read it from the presentation.
 - `ShellRenderer`, the first structure renderer seam, lets a host replace the
   form shell: where the finding summary sits, how the body is framed, and what
   triggers submission. `shell(ShellContext { form_id, summary, body, submit })`
@@ -120,10 +131,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   submit still focuses the summary and a ready submit still yields a
   submission snapshot either way. `BuiltinShell` is the public built-in
   (summary, body, then a `type="submit"` button carrying the affordance id).
+- `CollectionRenderer` lets a host replace the chrome of a homogeneous array
+  and of its items (rows, add/insert/remove/move buttons, empty state) while the
+  adapter keeps ownership of item identity, keying, focus after a mutation, and
+  live-region announcements. `collection(CollectionContext { presentation,
+  item_label, count, items, append, announcement, extensions })` renders the
+  array: `presentation` carries the container presence affordances and
+  `incompatible_value`, `item_label` is the localized singular item noun,
+  `count` the number of items (the only way to render an empty state, since
+  `items` is one opaque pre-keyed element), `append` the `Append` affordance
+  (`{element_id}-append`) while appending is allowed, and `announcement` the
+  adapter-owned live region, which must be placed. `collection_item(
+  CollectionItemContext { row_id, position, count, item_label, children,
+  insert_before, move_up, move_down, remove })` is called from an adapter-owned
+  keyed per-item host (key = instance identity) inside a wrapper `div` carrying
+  `row_id` and `data-array-item`; `children` is the instantiated item template
+  and must be placed; each item affordance is `Some` exactly while the core
+  allows it, `move_up`/`move_down` additionally `None` for the first/last item.
+  Item affordance ids are the item root's id followed by `-insert-before`,
+  `-move-up`, `-move-down`, `-remove`; the adapter reserves `row_id`, the item
+  root's id, and the affordance ids, and renderers use `row_id` only as a prefix
+  for their own ids. Invoking an affordance performs the operation, reports
+  failures to `on_error`, announces, and moves focus. `collection` and
+  `collection_item` are not called together (the collection re-renders after
+  every announcement while item hosts memoize on their props), so a renderer
+  that needs per-item state renders a child component; both contexts are
+  `PartialEq`. `BuiltinCollection` is the public built-in and reproduces the
+  previous array DOM, so every existing array behaviour is unchanged under it.
 - `StructureRenderers` bundles one renderer per structural slot with private
-  per-trait storage; `Default` is every built-in and `with_shell(impl
-  ShellRenderer)` replaces the shell. `RenderConfigurationBuilder::structure`
-  installs a bundle. There is deliberately no supertrait over the slots, so
+  per-trait storage; `Default` is every built-in, `with_shell(impl
+  ShellRenderer)` replaces the shell, and `with_collection(impl
+  CollectionRenderer)` replaces the collection.
+  `RenderConfigurationBuilder::structure` installs a bundle. There is
+  deliberately no supertrait over the slots, so
   adding a slot later is additive for every existing renderer. Structure
   renderers are fixed at `RenderConfiguration::bind` and are not
   signal-swappable like presenters and the localizer:
@@ -140,7 +180,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   extensions), so a context can be passed as a prop to a child component
   without Dioxus memoization showing stale state. `Affordance` compares by
   `kind`, `label`, `id`, and `accessible_name`; its `invoke` callback is
-  hook-stable and excluded. `ShellContext` is `PartialEq` for the same reason.
+  hook-stable and excluded. `ShellContext`, `CollectionContext`, and
+  `CollectionItemContext` are `PartialEq` for the same reason.
 - `ControlKind` is public: the widget family the adapter derives from a
   definition node (`String`, `Number`, `Integer`, `Boolean`, `Choice`,
   `Constant`; non-exhaustive).
@@ -191,6 +232,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to the summary projection; the body re-renders only when the bound form
   changes, whereas previously a summary change re-diffed the root node list as
   well. Each node's own subscription is unchanged.
+- The homogeneous array renders through the collection seam: the adapter
+  computes a `CollectionContext`, hosts each item in its own keyed scope with
+  hook-stable affordance callbacks, and hands both to the configured
+  `CollectionRenderer` (`BuiltinCollection` by default). Focus after an insert,
+  append, or remove now targets the item's root element first (the item itself
+  if focusable, else the first focusable element inside it) and only then falls
+  back to the first focusable element inside the row wrapper. Under the
+  built-in, which renders children before buttons, this lands where it always
+  did; under a renderer that puts its buttons before the children it lands on
+  the item's control rather than on the first button.
 
 ## [0.1.0] - 2026-08-03
 

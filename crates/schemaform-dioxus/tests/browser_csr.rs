@@ -22,10 +22,11 @@ use schemaform::{
     },
 };
 use schemaform_dioxus::{
-    ControlMatcher, ControlRegistry, ControlRenderContext, ControlRenderer, ExtensionHandler,
-    ExtensionOccurrence, ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter,
-    FormHandle, HandleError, HandleTransactionError, Localizer, PreparedExtension,
-    RenderConfiguration, RenderEvent, RenderNodeKind, RenderObservation, RenderObserver,
+    CollectionContext, CollectionItemContext, CollectionRenderer, ControlMatcher, ControlRegistry,
+    ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
+    ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter, FormHandle,
+    HandleError, HandleTransactionError, Localizer, PreparedExtension, RenderConfiguration,
+    RenderEvent, RenderNodeKind, RenderObservation, RenderObserver,
     SchemaForm as RequiredSchemaForm, ShellContext, ShellRenderer, StructureRenderers,
     render::{BindFinding, FindingCollectionContext},
     use_form,
@@ -997,6 +998,136 @@ fn custom_shell_test_app(props: TestAppProps) -> Element {
         .build()
         .bind(&form)
         .expect("the built-in control should bind under a custom shell");
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+    let errors = props.errors.clone();
+
+    rsx! {
+        SchemaForm {
+            form: bound,
+            on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
+            on_error: move |error| errors.borrow_mut().push(error),
+        }
+    }
+}
+
+/// A collection renderer with none of the built-in's chrome: a `section` instead of a
+/// `fieldset`, a heading instead of a legend, an explicit empty state, the live region wrapped in
+/// a visually hidden element, and item actions rendered *before* the item's children. Buttons
+/// carry only their affordance id and accessible name, never the built-in's `data-*` markers, so
+/// identity, focus and announcements have to come from the adapter's contract alone.
+struct TestCollection;
+
+fn test_affordance_button(affordance: schemaform_dioxus::Affordance) -> Element {
+    rsx! {
+        button {
+            key: "{affordance.id}",
+            id: affordance.id.clone(),
+            r#type: "button",
+            "data-test-affordance": format!("{:?}", affordance.kind),
+            "aria-label": affordance.accessible_name.clone(),
+            onclick: move |_| affordance.invoke.call(()),
+            "{affordance.label}"
+        }
+    }
+}
+
+impl CollectionRenderer for TestCollection {
+    fn collection(&self, context: CollectionContext) -> Element {
+        let presentation = context.presentation;
+        let element_id = presentation.element_id.clone();
+        let described_by = presentation.described_by();
+        let help = presentation.present_help();
+        let findings = presentation.present_findings();
+        let presence = presentation.presence.clone();
+        let incompatible_value = presentation.incompatible_value.clone();
+        rsx! {
+            section {
+                id: element_id.clone(),
+                "data-test-collection": "",
+                "data-test-count": "{context.count}",
+                tabindex: "-1",
+                "aria-labelledby": "{element_id}-title",
+                "aria-invalid": presentation.invalid,
+                "aria-describedby": described_by,
+                h2 { id: "{element_id}-title", "{presentation.label}" }
+                {help}
+                div { "data-test-collection-presence": "",
+                    if let Some(value) = incompatible_value {
+                        output { "data-test-incompatible": "", "{value}" }
+                    }
+                    for affordance in presence {
+                        {test_affordance_button(affordance)}
+                    }
+                }
+                div { class: "visually-hidden", {context.announcement} }
+                if context.count == 0 {
+                    p { "data-test-empty": "", "{context.item_label}: none" }
+                }
+                ol { "data-test-items": "", {context.items} }
+                if let Some(append) = context.append {
+                    {test_affordance_button(append)}
+                }
+                {findings}
+            }
+        }
+    }
+
+    fn collection_item(&self, context: CollectionItemContext) -> Element {
+        let actions = [
+            context.move_up,
+            context.move_down,
+            context.insert_before,
+            context.remove,
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+        let title_id = format!("{}-title", context.row_id);
+        rsx! {
+            li { "data-test-item": "", "aria-labelledby": title_id.clone(),
+                header {
+                    span { id: title_id, "{context.item_label} {context.position}/{context.count}" }
+                    for affordance in actions {
+                        {test_affordance_button(affordance)}
+                    }
+                }
+                {context.children}
+            }
+        }
+    }
+}
+
+fn custom_collection_test_app(props: TestAppProps) -> Element {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "tags": {
+                "type": "array",
+                "title": "Tags",
+                "default": ["seed"],
+                "maxItems": 3,
+                "items": {
+                    "type": "string",
+                    "title": "Tag",
+                    "default": "valid",
+                    "minLength": 4
+                }
+            }
+        }
+    }))
+    .expect("the custom-collection data schema should compile");
+    let form = use_form(definition, json!({ "tags": ["same", "same"] }))
+        .expect("the custom-collection form should be created");
+    let bound = RenderConfiguration::builder()
+        .structure(StructureRenderers::default().with_collection(TestCollection))
+        .build()
+        .bind(&form)
+        .expect("the built-in item control should bind under a custom collection");
     props
         .handle
         .borrow_mut()
@@ -9256,6 +9387,346 @@ async fn custom_shell_renderer_keeps_submission_and_summary_focus_behaviour() {
     poll_dom(|| (form_handle.reader().form_data().ok()? == json!({ "name": "Lin" })).then_some(()))
         .await;
     assert_eq!(snapshot.form_data(), &grace_data);
+    assert!(errors.borrow().is_empty());
+
+    root.remove();
+}
+
+/// Finds the element with `id`, failing with the id in the message.
+fn element_by_id(id: &str) -> web_sys::HtmlElement {
+    web_sys::window()
+        .expect("the browser test should run in a window")
+        .document()
+        .expect("the browser test should have a document")
+        .get_element_by_id(id)
+        .unwrap_or_else(|| panic!("the element #{id} should exist"))
+        .dyn_into()
+        .expect("the element should be an HTML element")
+}
+
+fn maybe_element_by_id(id: &str) -> Option<web_sys::Element> {
+    web_sys::window()?.document()?.get_element_by_id(id)
+}
+
+async fn wait_for_focus_on(id: &str, operation: &str) {
+    for _ in 0..200 {
+        let focused = web_sys::window()
+            .and_then(|window| window.document())
+            .and_then(|document| document.active_element());
+        if focused.as_ref().is_some_and(|focused| focused.id() == id) {
+            return;
+        }
+        next_microtask().await;
+    }
+    let actual = web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|document| document.active_element())
+        .map(|focused| focused.id())
+        .unwrap_or_default();
+    panic!("{operation} focused #{actual}, expected #{id}");
+}
+
+async fn wait_for_announcement(status: &web_sys::Element, expected: &str) {
+    let expected = expected.to_owned();
+    poll_dom(|| (status.text_content()? == expected).then_some(())).await;
+}
+
+#[wasm_bindgen_test]
+async fn custom_collection_renderer_keeps_identity_focus_announcements_and_presence_repair() {
+    let (
+        MountedTestApp {
+            root, form_handle, ..
+        },
+        errors,
+    ) = mount_test_app_with_errors(custom_collection_test_app).await;
+    accessibility_checkpoint(
+        "array-custom-collection",
+        "custom_collection_renderer_keeps_identity_focus_announcements_and_presence_repair",
+        &root,
+    )
+    .await;
+    let collection = poll_dom(|| {
+        root.query_selector("section[data-test-collection]")
+            .expect("the collection selector should be valid")
+    })
+    .await;
+    let element_id = collection.id();
+    assert!(
+        root.query_selector("fieldset[data-schemaform-array]")
+            .expect("the built-in selector should be valid")
+            .is_none(),
+        "the built-in collection chrome must not render under a custom collection renderer"
+    );
+    assert!(
+        root.query_selector(
+            "[data-append-item], [data-insert-item-before], [data-move-item-up], [data-move-item-down], [data-remove-item], [data-materialize], [data-remove-value]"
+        )
+        .expect("the marker selector should be valid")
+        .is_none(),
+        "the test renderer emits no built-in markers, so every button below is found by affordance id"
+    );
+    assert_eq!(
+        collection.get_attribute("data-test-count").as_deref(),
+        Some("2")
+    );
+    assert_eq!(
+        collection
+            .query_selector("h2")
+            .unwrap()
+            .unwrap()
+            .text_content()
+            .as_deref(),
+        Some("Tags")
+    );
+    assert_described_by_resolves(&collection);
+
+    // The adapter owns the keyed row wrapper; the renderer's item output sits inside it and
+    // uses `row_id` only as a prefix.
+    let first = input_with_binding(&root, "/tags/0");
+    let second = input_with_binding(&root, "/tags/1");
+    let first_id = first.id();
+    let second_id = second.id();
+    let rows = collection.query_selector_all("[data-array-item]").unwrap();
+    assert_eq!(rows.length(), 2);
+    let first_row: web_sys::Element = rows.get(0).unwrap().dyn_into().unwrap();
+    assert_eq!(first_row.id(), format!("{first_id}-row"));
+    let first_item = first_row
+        .first_element_child()
+        .expect("the row wrapper contains the renderer's item");
+    assert!(first_item.has_attribute("data-test-item"));
+    assert_eq!(
+        first_item.get_attribute("aria-labelledby").as_deref(),
+        Some(format!("{first_id}-row-title").as_str())
+    );
+    assert_eq!(
+        element_by_id(&format!("{first_id}-row-title"))
+            .text_content()
+            .as_deref(),
+        Some("Tags item 1/2")
+    );
+    // The renderer put its buttons before the children.
+    let first_actions = first_item.query_selector_all("header > button").unwrap();
+    assert!(first_actions.length() >= 3);
+    assert!(
+        first_item
+            .query_selector("header ~ * input")
+            .unwrap()
+            .is_some(),
+        "the item's input follows the renderer's header of action buttons"
+    );
+    assert!(maybe_element_by_id(&format!("{first_id}-move-up")).is_none());
+    assert!(maybe_element_by_id(&format!("{second_id}-move-down")).is_none());
+
+    // The adapter-owned live region is present even though the renderer wrapped it.
+    let status = collection
+        .query_selector(".visually-hidden > [data-array-status]")
+        .unwrap()
+        .expect("the renderer placed the adapter's live region inside its wrapper");
+    assert_eq!(status.get_attribute("role").as_deref(), Some("status"));
+    assert_eq!(status.get_attribute("aria-live").as_deref(), Some("polite"));
+    assert_eq!(status.get_attribute("aria-atomic").as_deref(), Some("true"));
+
+    // Insert before the second item: the new input receives focus even though the renderer's
+    // buttons precede it in DOM order.
+    let insert = element_by_id(&format!("{second_id}-insert-before"));
+    assert_eq!(
+        insert.text_content().as_deref(),
+        Some("Insert Tags item before")
+    );
+    assert_eq!(
+        insert.get_attribute("aria-label").as_deref(),
+        Some("Insert Tags item before position 2")
+    );
+    assert_eq!(
+        insert.get_attribute("data-test-affordance").as_deref(),
+        Some("InsertBefore")
+    );
+    insert.focus().unwrap();
+    insert.click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()? == json!({ "tags": ["same", "valid", "same"] }))
+            .then_some(())
+    })
+    .await;
+    let inserted = poll_dom(|| {
+        let inputs = collection.query_selector_all("input").ok()?;
+        (inputs.length() == 3).then(|| input_with_binding(&root, "/tags/1"))
+    })
+    .await;
+    let inserted_id = inserted.id();
+    assert_ne!(inserted_id, first_id);
+    assert_ne!(inserted_id, second_id);
+    wait_for_focus_on(&inserted_id, "insert before").await;
+    wait_for_announcement(&status, "Tags item inserted at position 2.").await;
+    assert!(first.is_same_node(Some(&input_with_binding(&root, "/tags/0"))));
+    assert!(second.is_same_node(Some(&input_with_binding(&root, "/tags/2"))));
+    assert_eq!(
+        collection.get_attribute("data-test-count").as_deref(),
+        Some("3")
+    );
+    assert_eq!(
+        element_by_id(&format!("{second_id}-row-title"))
+            .text_content()
+            .as_deref(),
+        Some("Tags item 3/3")
+    );
+
+    // Move the first item down: it keeps its DOM node and focus lands on its move-down button.
+    let move_down = element_by_id(&format!("{first_id}-move-down"));
+    assert_eq!(
+        move_down.get_attribute("aria-label").as_deref(),
+        Some("Move Tags item at position 1 down")
+    );
+    move_down.focus().unwrap();
+    move_down.click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()? == json!({ "tags": ["valid", "same", "same"] }))
+            .then_some(())
+    })
+    .await;
+    wait_for_focus_on(&format!("{first_id}-move-down"), "move down").await;
+    wait_for_announcement(&status, "Tags item moved down to position 2.").await;
+    assert!(first.is_same_node(Some(&input_with_binding(&root, "/tags/1"))));
+    assert!(inserted.is_same_node(Some(&input_with_binding(&root, "/tags/0"))));
+
+    // Move it back up: no move-up button remains for the first item, so focus falls back to
+    // its move-down button.
+    let move_up = element_by_id(&format!("{first_id}-move-up"));
+    move_up.focus().unwrap();
+    move_up.click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()? == json!({ "tags": ["same", "valid", "same"] }))
+            .then_some(())
+    })
+    .await;
+    wait_for_focus_on(&format!("{first_id}-move-down"), "move up").await;
+    wait_for_announcement(&status, "Tags item moved up to position 1.").await;
+    assert!(maybe_element_by_id(&format!("{first_id}-move-up")).is_none());
+
+    // Remove the inserted item: focus moves to the next item's input.
+    let remove = element_by_id(&format!("{inserted_id}-remove"));
+    assert_eq!(
+        remove.get_attribute("aria-label").as_deref(),
+        Some("Remove Tags item at position 2")
+    );
+    remove.focus().unwrap();
+    remove.click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()? == json!({ "tags": ["same", "same"] }))
+            .then_some(())
+    })
+    .await;
+    wait_for_focus_on(&second_id, "remove").await;
+    wait_for_announcement(&status, "Tags item removed from position 2.").await;
+    assert!(second.is_same_node(Some(&input_with_binding(&root, "/tags/1"))));
+    assert!(maybe_element_by_id(&inserted_id).is_none());
+
+    // Append: the new input receives focus and the append affordance disappears at maxItems.
+    let append = element_by_id(&format!("{element_id}-append"));
+    assert_eq!(append.text_content().as_deref(), Some("Add Tags item"));
+    assert_eq!(
+        append.get_attribute("data-test-affordance").as_deref(),
+        Some("Append")
+    );
+    append.focus().unwrap();
+    append.click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()? == json!({ "tags": ["same", "same", "valid"] }))
+            .then_some(())
+    })
+    .await;
+    let appended = poll_dom(|| {
+        let inputs = collection.query_selector_all("input").ok()?;
+        (inputs.length() == 3).then(|| input_with_binding(&root, "/tags/2"))
+    })
+    .await;
+    wait_for_focus_on(&appended.id(), "append").await;
+    wait_for_announcement(&status, "Tags item added at position 3.").await;
+    poll_dom(|| {
+        maybe_element_by_id(&format!("{element_id}-append"))
+            .is_none()
+            .then_some(())
+    })
+    .await;
+    assert!(first.is_same_node(Some(&input_with_binding(&root, "/tags/0"))));
+    assert!(second.is_same_node(Some(&input_with_binding(&root, "/tags/1"))));
+
+    // Presence repair through the presentation's affordances: remove the optional array (the
+    // renderer shows its empty state), materialize it, then replace incompatible data. Each
+    // operation focuses the renderer's root and announces.
+    let remove_value = element_by_id(&format!("{element_id}-remove-value"));
+    assert_eq!(remove_value.text_content().as_deref(), Some("Remove Tags"));
+    remove_value.click();
+    poll_dom(|| (form_handle.reader().form_data().ok()? == json!({})).then_some(())).await;
+    wait_for_focus_on(&element_id, "remove value").await;
+    wait_for_announcement(&status, "Tags removed.").await;
+    poll_dom(|| {
+        collection
+            .query_selector("[data-test-empty]")
+            .expect("the empty-state selector should be valid")
+    })
+    .await;
+    assert_eq!(
+        collection.get_attribute("data-test-count").as_deref(),
+        Some("0")
+    );
+    assert!(maybe_element_by_id(&format!("{element_id}-remove-value")).is_none());
+
+    let materialize = element_by_id(&format!("{element_id}-materialize"));
+    assert_eq!(materialize.text_content().as_deref(), Some("Add Tags"));
+    materialize.click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()? == json!({ "tags": ["seed"] })).then_some(())
+    })
+    .await;
+    wait_for_focus_on(&element_id, "materialize").await;
+    wait_for_announcement(&status, "Tags added.").await;
+    poll_dom(|| {
+        collection
+            .query_selector("[data-test-empty]")
+            .ok()?
+            .is_none()
+            .then_some(())
+    })
+    .await;
+
+    form_handle
+        .try_transact(|draft| {
+            draft.set(&JsonPointer::parse("/tags").unwrap(), json!("legacy"));
+            Ok::<_, ()>(())
+        })
+        .expect("the host should install incompatible array data");
+    let incompatible = poll_dom(|| {
+        collection
+            .query_selector("[data-test-incompatible]")
+            .expect("the incompatible-value selector should be valid")
+    })
+    .await;
+    assert_eq!(incompatible.text_content().as_deref(), Some("\"legacy\""));
+    let replace = element_by_id(&format!("{element_id}-replace-value"));
+    assert_eq!(replace.text_content().as_deref(), Some("Replace Tags"));
+    replace.click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()? == json!({ "tags": ["seed"] })).then_some(())
+    })
+    .await;
+    wait_for_focus_on(&element_id, "replace").await;
+    wait_for_announcement(&status, "Tags replaced.").await;
+
+    // Reset restores the baseline items with their original DOM ids: keying by instance identity
+    // is the adapter's, not the renderer's.
+    form_handle
+        .reset()
+        .expect("the collection form should reset without a borrow conflict");
+    poll_dom(|| {
+        if form_handle.reader().form_data().ok()? != json!({ "tags": ["same", "same"] }) {
+            return None;
+        }
+        let first = maybe_input_with_binding(&root, "/tags/0")?;
+        let second = maybe_input_with_binding(&root, "/tags/1")?;
+        (first.id() == first_id && second.id() == second_id).then_some(())
+    })
+    .await;
     assert!(errors.borrow().is_empty());
 
     root.remove();
