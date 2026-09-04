@@ -1,5 +1,9 @@
 @import "tailwindcss" source(none);
 
+/* The daisyUI theme for the built-in renderer's `schemaform-*` class hooks. A Tailwind partial,
+ * so its `@apply` rules resolve against the daisyUI plugin below. */
+@import "./src/forms.css";
+
 @source "./**/*.rs";
 
 @plugin "daisyui" {
@@ -50,5 +54,9 @@
 @layer components {
   .dxc-editor {
     --dxc-editor-caret: var(--fg, currentColor);
+  }
+
+  .schema-editor .dxc-editor {
+    min-height: 28rem;
   }
 }

@@ -1,220 +1,259 @@
-.schemaform {
-  display: grid;
-  gap: 1rem;
-}
+/* daisyUI theme for the built-in renderer's `schemaform-*` class hooks.
+ *
+ * `schemaform-dioxus` renders unstyled semantic HTML; this file dresses it in daisyUI by applying
+ * daisyUI's component classes (`fieldset`, `input`, `checkbox`, `btn`, `alert`, ...) to the class
+ * hooks and data markers the built-in renderer emits. It is a Tailwind partial imported by the
+ * site stylesheet, so `@apply` resolves against the daisyUI plugin and every colour follows the
+ * active `data-theme`.
+ *
+ * Hand-written rules are limited to what the hooks cannot express through a class:
+ *
+ * - daisyUI scopes `tab` and `tabs-border` to the literal `.tabs > .tab` pair, which `@apply`
+ *   cannot re-target, so the tab buttons transcribe those rules onto daisyUI's own variables.
+ * - The checkbox control lays its widget out beside its label.
+ * - A form inside `[data-schemaform-unstyled]` opts out of the theme entirely and gets the
+ *   browser's form-control defaults back, which Tailwind's preflight otherwise resets.
+ *
+ * Every inline measurement is logical, so the theme mirrors under `dir="rtl"` with no extra
+ * rules.
+ */
 
-.schemaform-stack,
-.schemaform-tab-panel {
-  display: grid;
-  gap: 1rem;
-}
+@layer components {
+  .schemaform:where(:not([data-schemaform-unstyled] *)) {
+    @apply grid gap-4 text-sm;
 
-.schemaform-grid {
-  gap: 1rem;
-}
+    /* Layouts. The grid's columns come from the stylesheet the built-in emits per form. */
+    .schemaform-stack,
+    .schemaform-tabs,
+    .schemaform-tab-panel {
+      @apply grid gap-4;
+    }
 
-.schemaform-group {
-  display: grid;
-  gap: 0.9rem;
-  min-width: 0;
-  padding: 1rem;
-  border: 1px solid color-mix(in oklab, currentColor 16%, transparent);
-  border-radius: 0.9rem;
-}
+    .schemaform-grid {
+      @apply gap-4;
+    }
 
-.schemaform-group > legend {
-  padding-inline: 0.35rem;
-  font-weight: 650;
-}
+    .schemaform-grid-cell {
+      @apply min-w-0;
+    }
 
-.schemaform-control {
-  display: grid;
-  gap: 0.4rem;
-  min-width: 0;
-}
+    .schemaform-text {
+      @apply leading-6 text-base-content/70;
+    }
 
-.schemaform-control > label,
-.schemaform-array > legend {
-  font-size: 0.875rem;
-  font-weight: 600;
-}
+    /* Fixed-object groups, authored groups, and arrays are fieldsets. */
+    .schemaform-group {
+      @apply fieldset min-w-0 gap-4 rounded-box border border-base-300 bg-base-100 p-4 text-sm;
+    }
 
-.schemaform-control > input:not([type="checkbox"]),
-.schemaform-control > select {
-  width: 100%;
-  min-height: 2.75rem;
-  padding: 0.65rem 0.8rem;
-  border: 1px solid color-mix(in oklab, currentColor 22%, transparent);
-  border-radius: 0.7rem;
-  background: color-mix(in oklab, Canvas 94%, currentColor 6%);
-}
+    .schemaform-group > legend {
+      @apply fieldset-legend text-sm;
+    }
 
-.schemaform-control:has(> input[type="checkbox"]) {
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  column-gap: 0.65rem;
-}
+    /* Controls mirror the registry's `Field`: a grid holding the label, the widget, and the
+     * parts under it. */
+    .schemaform-control {
+      @apply grid min-w-0 gap-2;
+    }
 
-.schemaform-control:has(> input[type="checkbox"]) > :not(input):not(label) {
-  grid-column: 1 / -1;
-}
+    .schemaform-control > input:not([type="checkbox"]) {
+      @apply input w-full;
+    }
 
-.schemaform-control:has(> input[type="checkbox"]) > label {
-  width: fit-content;
-  cursor: pointer;
-}
+    .schemaform-control > input:not([type="checkbox"])[aria-invalid="true"] {
+      @apply input-error;
+    }
 
-.schemaform-control > input[type="checkbox"] {
-  display: inline-grid;
-  width: 1.5rem;
-  height: 1.5rem;
-  flex-shrink: 0;
-  cursor: pointer;
-  appearance: none;
-  place-content: center;
-  border: 1px solid color-mix(in oklab, currentColor 24%, transparent);
-  border-radius: 0.45rem;
-  background: transparent;
-  color: var(--color-primary-content);
-  box-shadow: 0 1px color-mix(in oklab, currentColor 10%, transparent) inset;
-  transition:
-    background-color 150ms ease,
-    border-color 150ms ease,
-    box-shadow 150ms ease;
-}
+    .schemaform-control > select {
+      @apply select w-full;
+    }
 
-.schemaform-control > input[type="checkbox"]::before {
-  width: 0.4rem;
-  height: 0.7rem;
-  content: "";
-  border: solid currentColor;
-  border-width: 0 2px 2px 0;
-  opacity: 0;
-  transform: translateY(-0.08rem) rotate(45deg) scale(0.6);
-  transition:
-    opacity 100ms ease,
-    transform 150ms ease;
-}
+    .schemaform-control > select[aria-invalid="true"] {
+      @apply select-error;
+    }
 
-.schemaform-control > input[type="checkbox"]:hover:not(:disabled) {
-  border-color: var(--color-primary);
-}
+    .schemaform-control > input[type="checkbox"] {
+      @apply checkbox;
+    }
 
-.schemaform-control > input[type="checkbox"]:checked {
-  border-color: var(--color-primary);
-  background: var(--color-primary);
-  box-shadow: 0 1px color-mix(in oklab, white 20%, transparent) inset;
-}
+    .schemaform-control > input[type="checkbox"][aria-invalid="true"] {
+      @apply checkbox-error;
+    }
 
-.schemaform-control > input[type="checkbox"]:checked::before {
-  opacity: 1;
-  transform: translateY(-0.08rem) rotate(45deg) scale(1);
-}
+    .schemaform-control > output[data-read-only] {
+      @apply min-w-0 py-2;
+    }
 
-.schemaform-control > input[type="checkbox"]:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
+    /* The checkbox sits beside its label; everything else in the control spans the row. */
+    .schemaform-control:has(> input[type="checkbox"]) {
+      @apply grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5;
+    }
 
-.schemaform-control > input[type="checkbox"][aria-invalid="true"] {
-  border-color: var(--color-error);
-}
+    .schemaform-control:has(> input[type="checkbox"]) > :not(input, label) {
+      @apply col-span-full;
+    }
 
-.schemaform-control > input[type="checkbox"]:disabled {
-  cursor: not-allowed;
-  opacity: 0.35;
-}
+    .schemaform-control:has(> input[type="checkbox"]) > label {
+      @apply w-fit cursor-pointer;
+    }
 
-.schemaform-help,
-.schemaform-text {
-  color: color-mix(in oklab, currentColor 65%, transparent);
-  font-size: 0.82rem;
-  line-height: 1.45;
-}
+    /* Labels, help, and the incompatible-value readout mirror the registry's label and
+     * description parts, wrapping where daisyUI's `label` would not; findings mirror its error
+     * part. A finding that does not block submission is advisory. */
+    .schemaform-control > label,
+    .schemaform-help,
+    :is(.schemaform-control, .schemaform-presence-actions) > output[data-incompatible-value] {
+      @apply label min-w-0 whitespace-normal;
+    }
 
-.schemaform-finding {
-  color: var(--color-error);
-  font-size: 0.82rem;
-}
+    :is(.schemaform-control, .schemaform-presence-actions) > output[data-incompatible-value] {
+      @apply text-warning;
+    }
 
-/* Built-in buttons only: daisyUI buttons rendered by custom renderers keep
- * their own `btn` styling. */
-.schemaform button:not(.btn) {
-  width: fit-content;
-  min-height: 2.25rem;
-  padding: 0.45rem 0.8rem;
-  border: 1px solid color-mix(in oklab, currentColor 22%, transparent);
-  border-radius: 0.65rem;
-  font-weight: 600;
-}
+    .schemaform-finding {
+      @apply min-w-0 text-error;
+    }
 
-.schemaform > button[type="submit"] {
-  border-color: var(--color-primary);
-  background: var(--color-primary);
-  color: var(--color-primary-content);
-}
+    .schemaform-finding[data-blocking="false"] {
+      @apply text-warning;
+    }
 
-.schemaform-presence-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
-}
+    /* The finding summary is an alert once it has something to say, each finding a button that
+     * reveals and focuses its target; an unsupported region explains itself in place. An alert
+     * lays its children out in columns, so both stack theirs instead. */
+    [data-finding-summary]:has(.schemaform-finding),
+    .schemaform-unsupported {
+      @apply alert flex flex-col items-stretch gap-1 alert-soft;
+    }
 
-.schemaform-array-item {
-  display: grid;
-  gap: 0.75rem;
-  padding: 0.9rem;
-  border: 1px dashed color-mix(in oklab, currentColor 24%, transparent);
-  border-radius: 0.75rem;
-}
+    [data-finding-summary]:has(.schemaform-finding) {
+      @apply alert-error;
+    }
 
-.schemaform-tabs [role="tablist"] {
-  display: flex;
-  align-items: end;
-  gap: 0;
-  width: 100%;
-  margin-top: 0.25rem;
-  margin-bottom: 1.25rem;
-  border-bottom: 1px solid color-mix(in oklab, currentColor 16%, transparent);
-}
+    .schemaform-unsupported {
+      @apply alert-warning;
+    }
 
-.schemaform .schemaform-tab {
-  min-height: 2.5rem;
-  margin-bottom: -1px;
-  padding: 0.6rem 1rem;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0.65rem 0.65rem 0 0;
-  background: transparent;
-  color: color-mix(in oklab, currentColor 62%, transparent);
-  font-weight: 600;
-  transition:
-    color 150ms ease,
-    background-color 150ms ease,
-    border-color 150ms ease;
-}
+    .schemaform-finding > button {
+      @apply link text-start;
+    }
 
-.schemaform .schemaform-tab:hover {
-  background: color-mix(in oklab, currentColor 6%, transparent);
-  color: inherit;
-}
+    /* Buttons. Presence operations, array item operations, and append are small buttons and
+     * submit is the primary one. The selectors name the built-in's wrappers and markers, so a
+     * widget a custom renderer builds on a `button` (the registry's checkbox, radio item, and
+     * select trigger) is never touched. */
+    .schemaform-presence-actions > button,
+    .schemaform-array-item > button,
+    [data-append-item],
+    & > button[type="submit"] {
+      @apply btn w-fit;
+    }
 
-.schemaform-tab[aria-selected="true"] {
-  background: color-mix(in oklab, var(--color-primary) 8%, transparent);
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
-}
+    .schemaform-presence-actions > button,
+    .schemaform-array-item > button,
+    [data-append-item] {
+      @apply btn-sm;
+    }
 
-.schemaform .schemaform-tab:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
+    & > button[type="submit"] {
+      @apply btn-primary;
+    }
 
-.schemaform-grid-cell {
-  min-width: 0;
-}
+    .schemaform-presence-actions {
+      @apply flex flex-wrap gap-2 empty:hidden;
+    }
 
-.schema-editor .dxc-editor {
-  min-height: 28rem;
+    /* Array items are cards: the item's node first, its operations in a row below. A fixed
+     * object as the item flattens into the card rather than nesting a second border. */
+    .schemaform-array-item {
+      @apply flex flex-wrap items-center gap-2 rounded-box border border-base-300 bg-base-100 p-4;
+    }
+
+    .schemaform-array-item > :not(button) {
+      @apply basis-full;
+    }
+
+    .schemaform-array-item > button {
+      @apply btn-ghost;
+    }
+
+    .schemaform-array-item > .schemaform-group {
+      @apply border-0 bg-transparent p-0;
+    }
+
+    [data-append-item] {
+      @apply btn-outline;
+    }
+
+    [data-array-status] {
+      @apply text-xs text-base-content/60 empty:hidden;
+    }
+
+    /* Tabs. `tabs` applies to the tablist; `tabs-border` and `tab` are scoped to `.tabs > .tab`
+     * in daisyUI, so the tab button transcribes them onto the same variables. */
+    .schemaform-tabs > [role="tablist"] {
+      @apply tabs;
+    }
+
+    .schemaform-tab {
+      --tab-p: calc(var(--spacing) * 3);
+      position: relative;
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      height: var(--tab-height);
+      padding-inline: var(--tab-p);
+      border-radius: var(--radius-field);
+      color: color-mix(in oklab, var(--color-base-content) 50%, transparent);
+      font-size: 0.875rem;
+      text-align: center;
+      cursor: pointer;
+      user-select: none;
+      appearance: none;
+    }
+
+    .schemaform-tab::before {
+      content: "";
+      position: absolute;
+      inset-inline-start: var(--tab-p);
+      bottom: 0;
+      width: calc(100% - var(--tab-p) * 2);
+      height: 3px;
+      border-radius: var(--radius-field);
+      background-color: transparent;
+      transition: background-color 0.2s ease;
+    }
+
+    .schemaform-tab:hover,
+    .schemaform-tab[aria-selected="true"] {
+      color: var(--color-base-content);
+    }
+
+    .schemaform-tab[aria-selected="true"]::before {
+      background-color: currentColor;
+    }
+
+    .schemaform-tab:focus {
+      outline-style: none;
+    }
+
+    .schemaform-tab:focus-visible {
+      outline: 2px solid currentColor;
+      outline-offset: -5px;
+    }
+  }
+
+  /* The comparison page: the built-in output with no theme. Tailwind's preflight resets the
+   * browser's own form-control styling site-wide; revert exactly those properties so the
+   * untouched built-in renders as a browser shows it. */
+  [data-schemaform-unstyled] .schemaform :is(fieldset, legend, button, input, select) {
+    margin: revert;
+    padding: revert;
+    border: revert;
+    border-radius: revert;
+    background-color: revert;
+    font: revert;
+    color: revert;
+  }
 }

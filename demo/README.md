@@ -32,11 +32,18 @@ with `cargo test` from this directory; the Dagger pipeline runs them as the
   `schemaform_daisyui`, the daisyUI control renderer built on them (see its
   README). They are committed; CI never runs `dx components add`.
 - `style.css` is the Tailwind and daisyUI input that `npm run build` compiles
-  into `assets/style.css`; `src/forms.css` styles the built-in renderer's
-  `schemaform-*` class hooks.
+  into `assets/style.css`. It imports `src/forms.css`, the daisyUI theme for
+  the built-in renderer's `schemaform-*` class hooks: daisyUI's component
+  classes applied to the hooks with `@apply`, plus the few rules a class cannot
+  express (the tab buttons, the checkbox row, and the opt-out a form inside
+  `[data-schemaform-unstyled]` uses to render with no theme).
 
 The gallery covers generated controls compiled from a data schema, homogeneous
 arrays with stable item identity, authored UI schemas with layouts and tabs,
 validation and submission outcomes, a form whose every control is
-daisyUI-rendered through a custom control renderer, and a playground for
-editing a data schema and UI schema side by side with the rendered form.
+daisyUI-rendered through a custom control renderer with the built-in structure
+themed through its class hooks (in both site themes, with a right-to-left
+variant and an unstyled built-in comparison of the same definition and
+baseline), and a
+playground for editing a data schema and UI schema side by side with the
+rendered form.

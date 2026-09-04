@@ -2,6 +2,7 @@
 
 pub mod arrays;
 pub mod daisyui;
+pub mod daisyui_builtin;
 pub mod editor;
 pub mod generated;
 pub mod minimal;

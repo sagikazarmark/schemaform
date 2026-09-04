@@ -5,34 +5,148 @@ use serde_json::json;
 
 use crate::components::{StatusLine, schemaform_daisyui};
 
-/// The authored presentation: every control in data-schema order, except that the billing
-/// cycle asks for the `daisyui:radio` widget and the region for `daisyui:select`. Every other
-/// choice is the default native select.
+/// The authored presentation: four tabs over the account. The identity group lays its controls
+/// out on a grid, the billing cycle asks for the `daisyui:radio` widget and the region for
+/// `daisyui:select`, and every other node is generated from the data schema in place: the billing
+/// address as a fixed object with its presence operations, the team and tags as homogeneous
+/// arrays with their item chrome.
 const UI_SCHEMA: &str = r#"{
   "version": 1,
   "root": {
-    "type": "stack",
+    "type": "tabs",
     "value": {
-      "children": [
+      "panels": [
         {
-          "type": "auto",
-          "value": {
-            "binding": { "origin": "root", "pointer": "" },
-            "properties": { "exclude": ["billing_cycle", "region"] }
+          "title": { "fallback": "Profile" },
+          "child": {
+            "type": "stack",
+            "value": {
+              "children": [
+                {
+                  "type": "group",
+                  "value": {
+                    "title": { "fallback": "Identity" },
+                    "child": {
+                      "type": "grid",
+                      "value": {
+                        "cells": [
+                          {
+                            "compact_span": 12,
+                            "wide_span": 6,
+                            "child": {
+                              "type": "control",
+                              "value": { "binding": { "origin": "root", "pointer": "/name" } }
+                            }
+                          },
+                          {
+                            "compact_span": 12,
+                            "wide_span": 6,
+                            "child": {
+                              "type": "control",
+                              "value": { "binding": { "origin": "root", "pointer": "/nickname" } }
+                            }
+                          },
+                          {
+                            "compact_span": 12,
+                            "wide_span": 6,
+                            "child": {
+                              "type": "control",
+                              "value": { "binding": { "origin": "root", "pointer": "/age" } }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "auto",
+                  "value": {
+                    "binding": { "origin": "root", "pointer": "" },
+                    "properties": {
+                      "include": ["active", "newsletter", "account_type", "customer_id"],
+                      "order": [
+                        { "property": "active" },
+                        { "property": "newsletter" },
+                        { "property": "account_type" },
+                        { "property": "customer_id" }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
           }
         },
         {
-          "type": "control",
-          "value": {
-            "binding": { "origin": "root", "pointer": "/billing_cycle" },
-            "widget": "daisyui:radio"
+          "title": { "fallback": "Billing" },
+          "child": {
+            "type": "stack",
+            "value": {
+              "children": [
+                {
+                  "type": "auto",
+                  "value": {
+                    "binding": { "origin": "root", "pointer": "" },
+                    "properties": { "include": ["plan"] }
+                  }
+                },
+                {
+                  "type": "control",
+                  "value": {
+                    "binding": { "origin": "root", "pointer": "/billing_cycle" },
+                    "widget": "daisyui:radio"
+                  }
+                },
+                {
+                  "type": "control",
+                  "value": {
+                    "binding": { "origin": "root", "pointer": "/region" },
+                    "widget": "daisyui:select"
+                  }
+                },
+                {
+                  "type": "auto",
+                  "value": {
+                    "binding": { "origin": "root", "pointer": "" },
+                    "properties": {
+                      "include": ["price", "billing_address"],
+                      "order": [{ "property": "price" }, { "property": "billing_address" }]
+                    }
+                  }
+                }
+              ]
+            }
           }
         },
         {
-          "type": "control",
-          "value": {
-            "binding": { "origin": "root", "pointer": "/region" },
-            "widget": "daisyui:select"
+          "title": { "fallback": "Security" },
+          "child": {
+            "type": "auto",
+            "value": {
+              "binding": { "origin": "root", "pointer": "" },
+              "properties": {
+                "include": ["two_factor", "recovery_channel", "access_token"],
+                "order": [
+                  { "property": "two_factor" },
+                  { "property": "recovery_channel" },
+                  { "property": "access_token" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": { "fallback": "Team" },
+          "child": {
+            "type": "auto",
+            "value": {
+              "binding": { "origin": "root", "pointer": "" },
+              "properties": {
+                "include": ["team", "tags"],
+                "order": [{ "property": "team" }, { "property": "tags" }]
+              }
+            }
           }
         }
       ]
@@ -40,35 +154,42 @@ const UI_SCHEMA: &str = r#"{
   }
 }"#;
 
+/// The writing direction the example renders in.
+///
+/// The direction is an attribute on the wrapper around the form, not a property of the definition
+/// or the form data: the RTL variant is the same form with its chrome mirrored.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum WritingDirection {
+    #[default]
+    Ltr,
+    Rtl,
+}
+
+impl WritingDirection {
+    /// The value of the HTML `dir` attribute for this direction.
+    pub fn as_attribute(self) -> &'static str {
+        match self {
+            Self::Ltr => "ltr",
+            Self::Rtl => "rtl",
+        }
+    }
+}
+
 /// A form bound through the daisyUI control registry: every control kind is a daisyUI field.
 /// Strings, numbers, and integers are `Input`s; a non-nullable boolean is a native checkbox, a
 /// nullable one the registry `Checkbox` with null as indeterminate, a write-only one a
 /// replacement select; choices are a native select, a radio group, or the compound select as the
-/// UI schema asks; constants are read-only output. Only the layout and the submit button come
-/// from the built-ins.
+/// UI schema asks; constants are read-only output.
+///
+/// The structure around the controls — tabs, the authored group, the grid, the fixed object and
+/// its presence operations, the arrays and their item chrome, the finding summary, and the
+/// submit button — is the built-in renderer's, styled with daisyUI classes through its
+/// `schemaform-*` class hooks by the demo stylesheet.
 #[component]
-pub fn DaisyuiControlsExample() -> Element {
+pub fn DaisyuiFormExample(#[props(default)] direction: WritingDirection) -> Element {
     let definition = use_hook(definition);
-    let form = use_form(
-        definition,
-        json!({
-            "name": "Ada",
-            "age": 36,
-            "price": 19.5,
-            "active": true,
-            "newsletter": null,
-            "two_factor": true,
-            "plan": "team",
-            "billing_cycle": "yearly",
-            "region": "eu",
-            "recovery_channel": "email",
-            "nickname": null,
-            "account_type": "standard",
-            "customer_id": "cus_1843",
-            "access_token": "not-rendered"
-        }),
-    )
-    .expect("the daisyUI example form should be created");
+    let form = use_form(definition, baseline_form_data())
+        .expect("the daisyUI example form should be created");
     let bound_form = form.clone();
     let bound = use_hook(move || {
         RenderConfiguration::builder()
@@ -81,20 +202,11 @@ pub fn DaisyuiControlsExample() -> Element {
     let reset_form = form.clone();
 
     rsx! {
-        div { class: "space-y-4",
+        div { class: "space-y-4", dir: direction.as_attribute(),
             SchemaForm {
                 form: bound,
                 on_submit: move |snapshot: schemaform::SubmissionSnapshot| {
-                    let mut displayed = snapshot.form_data().clone();
-                    for secret in ["access_token", "two_factor", "recovery_channel"] {
-                        if let Some(value) = displayed.get_mut(secret) {
-                            *value = serde_json::Value::String("[redacted]".to_owned());
-                        }
-                    }
-                    submitted.set(
-                        serde_json::to_string_pretty(&displayed)
-                            .expect("form data should serialize"),
-                    );
+                    submitted.set(redacted_submission_text(snapshot.form_data()));
                 },
                 on_error: move |error| eprintln!("form operation failed: {error}"),
             }
@@ -113,7 +225,52 @@ pub fn DaisyuiControlsExample() -> Element {
     }
 }
 
-fn definition() -> FormDefinition {
+/// The submitted form data as the page displays it: pretty-printed JSON with the write-only
+/// values redacted, so a secret never shows up on the page.
+pub fn redacted_submission_text(form_data: &serde_json::Value) -> String {
+    let mut displayed = form_data.clone();
+    for secret in ["access_token", "two_factor", "recovery_channel"] {
+        if let Some(value) = displayed.get_mut(secret) {
+            *value = serde_json::Value::String("[redacted]".to_owned());
+        }
+    }
+    serde_json::to_string_pretty(&displayed).expect("form data should serialize")
+}
+
+/// The baseline form data. The billing address is present so its group renders with a remove
+/// operation; the arrays start with two items each so every item operation has a target.
+pub fn baseline_form_data() -> serde_json::Value {
+    json!({
+        "name": "Ada",
+        "nickname": null,
+        "age": 36,
+        "active": true,
+        "newsletter": null,
+        "account_type": "standard",
+        "customer_id": "cus_1843",
+        "plan": "team",
+        "billing_cycle": "yearly",
+        "region": "eu",
+        "price": 19.5,
+        "billing_address": {
+            "street": "12 Analytical Row",
+            "city": "London",
+            "postal_code": "N1 9GU"
+        },
+        "two_factor": true,
+        "recovery_channel": "email",
+        "access_token": "not-rendered",
+        "team": [
+            { "name": "Ada", "role": "engineering" },
+            { "name": "Lin", "role": "design" }
+        ],
+        "tags": ["rust", "dioxus"]
+    })
+}
+
+/// The compiled data schema and UI schema. Shared with the built-in comparison page, which
+/// renders exactly this definition and baseline through the built-in renderer.
+pub fn definition() -> FormDefinition {
     let ui_schema = parse_ui_schema_v1(UI_SCHEMA.as_bytes(), &CompilationProfile::default())
         .expect("the daisyUI example UI schema should parse");
     FormDefinition::compiler(json!({
@@ -121,8 +278,8 @@ fn definition() -> FormDefinition {
         "type": "object",
         "additionalProperties": false,
         "required": [
-            "name", "age", "price", "active", "two_factor", "plan", "region",
-            "recovery_channel", "account_type"
+            "name", "age", "active", "account_type", "plan", "region", "price",
+            "two_factor", "recovery_channel", "team", "tags"
         ],
         "properties": {
             "name": {
@@ -131,16 +288,14 @@ fn definition() -> FormDefinition {
                 "description": "At least three characters.",
                 "minLength": 3
             },
+            "nickname": {
+                "type": ["string", "null"],
+                "title": "Nickname"
+            },
             "age": {
                 "type": "integer",
                 "title": "Age",
                 "minimum": 18
-            },
-            "price": {
-                "type": "number",
-                "title": "Monthly price",
-                "description": "In euros, decimals allowed.",
-                "minimum": 0
             },
             "active": {
                 "type": "boolean",
@@ -151,10 +306,14 @@ fn definition() -> FormDefinition {
                 "title": "Product newsletter",
                 "description": "Null means the account holder has not decided yet."
             },
-            "two_factor": {
-                "type": "boolean",
-                "title": "Two-factor authentication",
-                "writeOnly": true
+            "account_type": {
+                "title": "Account type",
+                "const": "standard"
+            },
+            "customer_id": {
+                "type": "string",
+                "title": "Customer ID",
+                "readOnly": true
             },
             "plan": {
                 "title": "Plan",
@@ -170,28 +329,71 @@ fn definition() -> FormDefinition {
                 "title": "Data region",
                 "enum": ["eu", "us", "apac"]
             },
+            "price": {
+                "type": "number",
+                "title": "Monthly price",
+                "description": "In euros, decimals allowed.",
+                "minimum": 0
+            },
+            "billing_address": {
+                "type": "object",
+                "title": "Billing address",
+                "description": "Optional. Remove it to bill the account holder directly.",
+                "additionalProperties": false,
+                "required": ["street", "city"],
+                "properties": {
+                    "street": { "type": "string", "title": "Street", "minLength": 1 },
+                    "city": { "type": "string", "title": "City", "minLength": 1 },
+                    "postal_code": { "type": "string", "title": "Postal code" }
+                }
+            },
+            "two_factor": {
+                "type": "boolean",
+                "title": "Two-factor authentication",
+                "writeOnly": true
+            },
             "recovery_channel": {
                 "title": "Recovery channel",
                 "enum": ["email", "sms"],
                 "writeOnly": true
             },
-            "nickname": {
-                "type": ["string", "null"],
-                "title": "Nickname"
-            },
-            "account_type": {
-                "title": "Account type",
-                "const": "standard"
-            },
-            "customer_id": {
-                "type": "string",
-                "title": "Customer ID",
-                "readOnly": true
-            },
             "access_token": {
                 "type": "string",
                 "title": "Access token",
                 "writeOnly": true
+            },
+            "team": {
+                "type": "array",
+                "title": "Team members",
+                "minItems": 1,
+                "maxItems": 4,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "role"],
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "title": "Name",
+                            "default": "New teammate"
+                        },
+                        "role": {
+                            "title": "Role",
+                            "enum": ["engineering", "design", "operations"],
+                            "default": "engineering"
+                        }
+                    }
+                }
+            },
+            "tags": {
+                "type": "array",
+                "title": "Tags",
+                "minItems": 1,
+                "maxItems": 5,
+                "items": {
+                    "type": "string",
+                    "default": "new-tag"
+                }
             }
         }
     }))
@@ -204,6 +406,21 @@ fn definition() -> FormDefinition {
 mod tests {
     use dioxus::core::{NoOpMutations, VirtualDom};
 
+    use super::{DaisyuiFormExample, DaisyuiFormExampleProps, WritingDirection};
+
+    /// Mounts the example as the browser would and returns the markup it settles on.
+    fn render(direction: WritingDirection) -> String {
+        let mut dom =
+            VirtualDom::new_with_props(DaisyuiFormExample, DaisyuiFormExampleProps { direction });
+        dom.rebuild_in_place();
+        for _ in 0..4 {
+            dom.render_immediate(&mut NoOpMutations);
+        }
+        let html = dioxus_ssr::render(&dom);
+        assert!(!html.contains("Encountered panic"), "{html}");
+        html
+    }
+
     #[test]
     fn example_schemas_compile() {
         super::definition();
@@ -213,14 +430,8 @@ mod tests {
     /// their widgets; a bind failure would surface as a rendered panic rather than a form.
     #[test]
     fn the_example_form_binds_and_renders_every_widget() {
-        let mut dom = VirtualDom::new(super::DaisyuiControlsExample);
-        dom.rebuild_in_place();
-        for _ in 0..4 {
-            dom.render_immediate(&mut NoOpMutations);
-        }
-        let html = dioxus_ssr::render(&dom);
+        let html = render(WritingDirection::default());
 
-        assert!(!html.contains("Encountered panic"), "{html}");
         assert!(html.contains("role=\"radiogroup\""), "{html}");
         assert!(html.contains("aria-haspopup=\"listbox\""), "{html}");
         assert!(html.contains("role=\"checkbox\""), "{html}");
@@ -230,5 +441,48 @@ mod tests {
             "{html}"
         );
         assert!(!html.contains("class=\"schemaform-control\""), "{html}");
+    }
+
+    /// Every structural node the daisyUI stylesheet themes through the built-in class hooks is
+    /// on the page: tabs, an authored group, a fixed object with a presence operation, arrays
+    /// with their item chrome, the finding summary, and the submit button.
+    #[test]
+    fn the_example_form_renders_every_themed_built_in_structure() {
+        let html = render(WritingDirection::default());
+
+        assert!(html.contains("class=\"schemaform-tabs\""), "{html}");
+        assert!(html.contains("role=\"tablist\""), "{html}");
+        assert!(
+            html.contains("class=\"schemaform-group schemaform-authored-group\""),
+            "{html}"
+        );
+        assert!(
+            html.contains("class=\"schemaform-group schemaform-fixed-object\""),
+            "{html}"
+        );
+        assert!(html.contains("data-remove-value"), "{html}");
+        assert!(
+            html.contains("class=\"schemaform-group schemaform-array\""),
+            "{html}"
+        );
+        assert!(html.contains("data-append-item"), "{html}");
+        assert!(html.contains("data-move-item-down"), "{html}");
+        assert!(html.contains("data-finding-summary"), "{html}");
+        assert!(html.contains("type=\"submit\""), "{html}");
+        // The generated regions follow the authored order, not the data schema's key order.
+        assert!(
+            html.find("<legend>Team members</legend>") < html.find("<legend>Tags</legend>"),
+            "{html}"
+        );
+    }
+
+    /// The direction lives on the example's wrapper, so the RTL variant mirrors the daisyUI
+    /// chrome without touching the definition, the form data, or the registry.
+    #[test]
+    fn the_direction_is_set_on_the_form_wrapper() {
+        let ltr = render(WritingDirection::Ltr);
+        assert!(ltr.contains("dir=\"ltr\""), "{ltr}");
+        assert!(!ltr.contains("dir=\"rtl\""), "{ltr}");
+        assert!(render(WritingDirection::Rtl).contains("dir=\"rtl\""));
     }
 }

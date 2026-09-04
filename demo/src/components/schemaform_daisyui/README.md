@@ -7,7 +7,10 @@ with a native checkbox or the registry's `Checkbox`; choices with
 `NativeSelect`, `RadioGroup`, or `Select`; constants as read-only output; and
 presence operations as its `Button`. A whole form's controls are therefore
 daisyUI-rendered, and only the structural nodes — layouts, groups, tabs,
-arrays, the form shell — still come from the adapter's built-in renderer.
+arrays, the form shell — still come from the adapter's built-in renderer. The
+demo styles those through the adapter's `schemaform-*` class hooks with daisyUI
+classes in its own stylesheet (`demo/src/forms.css`); that theme is the demo's,
+not this component's, and moves to structure renderers once those seams ship.
 
 ## Browser CSR only
 

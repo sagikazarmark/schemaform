@@ -5,8 +5,9 @@ use dioxus::prelude::*;
 use crate::components::{DemoFooter, DemoHeader, Sidebar, SidebarNavLink, SidebarNavSection};
 use crate::pages::*;
 
+/// The site stylesheet: Tailwind, daisyUI, and the daisyUI theme for the built-in renderer's
+/// class hooks (`src/forms.css`), compiled together by `npm run build`.
 const STYLE: Asset = asset!("assets/style.css");
-const FORM_STYLE: Asset = asset!("/src/forms.css");
 
 #[derive(Routable, Clone, PartialEq, Debug)]
 pub enum Route {
@@ -21,6 +22,10 @@ pub enum Route {
     Presentation {},
     #[route("/daisyui")]
     Daisyui {},
+    #[route("/daisyui/rtl")]
+    DaisyuiRtl {},
+    #[route("/daisyui/builtin")]
+    DaisyuiBuiltin {},
     #[route("/playground")]
     Playground {},
     #[route("/:..segments")]
@@ -31,7 +36,6 @@ pub enum Route {
 pub fn App() -> Element {
     rsx! {
         document::Stylesheet { href: STYLE }
-        document::Stylesheet { href: FORM_STYLE }
         Router::<Route> {}
     }
 }
@@ -62,7 +66,9 @@ fn DemoLayout() -> Element {
                         SidebarNavLink { route: Route::Presentation {}, label: "Authored UI schema" }
                     }
                     SidebarNavSection { label: "Renderers",
-                        SidebarNavLink { route: Route::Daisyui {}, label: "daisyUI controls" }
+                        SidebarNavLink { route: Route::Daisyui {}, label: "daisyUI form" }
+                        SidebarNavLink { route: Route::DaisyuiRtl {}, label: "daisyUI form, RTL" }
+                        SidebarNavLink { route: Route::DaisyuiBuiltin {}, label: "Unstyled built-in" }
                     }
                     SidebarNavSection { label: "Explore",
                         SidebarNavLink { route: Route::Playground {}, label: "Schema playground" }

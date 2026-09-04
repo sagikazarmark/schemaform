@@ -22,8 +22,8 @@ pub fn Home() -> Element {
             Route::Presentation {},
         ),
         (
-            "daisyUI controls",
-            "Render every control kind with a component library through a custom control renderer.",
+            "daisyUI form",
+            "Render every control with a component library through a custom control renderer, theme the built-in structure through its class hooks, and compare with the unstyled built-in.",
             Route::Daisyui {},
         ),
         (
