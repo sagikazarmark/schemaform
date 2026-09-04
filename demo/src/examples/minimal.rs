@@ -1,19 +1,24 @@
 use dioxus::prelude::*;
 use schemaform::FormDefinition;
-use schemaform_dioxus::{SchemaForm, RenderConfiguration, use_form};
+use schemaform_dioxus::{RenderConfiguration, SchemaForm, use_form};
 use serde_json::json;
 
-use crate::components::StatusLine;
+use crate::components::{StatusLine, schemaform_daisyui};
 
 /// The basic path compiles one trusted data schema, creates form state from
-/// canonical JSON data, and binds the built-in Dioxus renderers.
+/// canonical JSON data, and binds the built-in control renderers. The form
+/// shell and the finding summary are the demo's daisyUI component's, so the
+/// submit button and the summary alert match the rest of the gallery.
 #[component]
 pub fn MinimalExample() -> Element {
     let definition = use_hook(definition);
     let form = use_form(definition, json!({ "name": "Ada" })).expect("the form should be created");
     let bound_form = form.clone();
     let bound = use_hook(move || {
-        RenderConfiguration::default()
+        RenderConfiguration::builder()
+            .structure(schemaform_daisyui::structure())
+            .summary_presenter(schemaform_daisyui::findings())
+            .build()
             .bind(&bound_form)
             .expect("the built-in string control should bind")
     });

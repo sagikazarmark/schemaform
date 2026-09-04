@@ -26,7 +26,7 @@ pub fn DaisyuiBuiltin() -> Element {
                 InlineCode { "ControlRegistry::with_builtins()" }
                 ", extended so the two daisyUI widget symbols the UI schema names resolve to the built-in control renderer. The "
                 InlineCode { "data-schemaform-unstyled" }
-                " wrapper opts the form out of the demo's daisyUI theme, which otherwise styles the built-in class hooks site-wide, and restores the browser's own form-control defaults that Tailwind's preflight resets. The tabs, groups, arrays, finding summary, and submit button are the same built-in code path as on the daisyUI page, so tab keyboard navigation, focus after array mutations, live-region announcements, and summary focus-to-target behave identically; only the controls differ, here the adapter's own."
+                " wrapper opts the form out of the demo's daisyUI theme, which otherwise styles the built-in class hooks site-wide, and restores the browser's own form-control defaults that Tailwind's preflight resets. The tabs and groups are the same built-in code path as on the daisyUI page; the arrays, the shell, and the finding summary are the built-in renderers the daisyUI page replaces through the structure and presenter seams. Item identity, focus after array mutations, live-region announcements, and summary focus-to-target are the adapter's on both pages, so they behave identically; what differs is who renders the chrome."
             },
             demo: rsx! { BuiltinComparisonExample {} },
             code: rsx! {

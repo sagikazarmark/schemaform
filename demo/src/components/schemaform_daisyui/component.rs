@@ -9,12 +9,14 @@ use schemaform::{
 };
 use schemaform_dioxus::{
     BuiltinControlRenderer, ControlKind, ControlMatcher, ControlRegistry, ControlRenderContext,
-    ControlRenderer, render::BUILTIN_CONTROL_PRIORITY,
+    ControlRenderer, StructureRenderers, render::BUILTIN_CONTROL_PRIORITY,
 };
 
 use super::boolean::BooleanControl;
 use super::choice::{NativeSelectControl, RadioGroupControl, SelectControl};
+use super::collection::DaisyuiCollection;
 use super::constant::ConstantControl;
+use super::shell::DaisyuiShell;
 use super::text::TextControl;
 
 /// Matcher priority at which [`controls`] registers [`DaisyuiControlRenderer`].
@@ -59,6 +61,18 @@ pub fn controls() -> ControlRegistry {
 /// The registry key for one of this component's widget symbols.
 fn widget_symbol(symbol: &str) -> WidgetSymbol {
     WidgetSymbol::parse(symbol).expect("the daisyUI widget symbols are non-empty")
+}
+
+/// The structure renderers this component ships: the daisyUI form shell and homogeneous-array
+/// collection.
+///
+/// Every slot the component does not implement stays the built-in, so a form bound with this
+/// bundle degrades to the adapter's accessible unstyled output for those node kinds rather than
+/// losing a region.
+pub fn structure() -> StructureRenderers {
+    StructureRenderers::default()
+        .with_shell(DaisyuiShell)
+        .with_collection(DaisyuiCollection)
 }
 
 /// Accepts exactly the definition nodes [`DaisyuiControlRenderer`] presents itself: those the
@@ -136,28 +150,15 @@ impl ControlRenderer for DaisyuiControlRenderer {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, rc::Rc};
-
-    use dioxus::core::{NoOpMutations, VirtualDom};
     use dioxus::prelude::*;
-    use schemaform::{
-        CompilationProfile, FormDefinition, InstanceIdentity, json::parse_ui_schema_v1,
-    };
-    use schemaform_dioxus::{FormHandle, RenderConfiguration, SchemaForm, use_form};
+    use schemaform::{CompilationProfile, FormDefinition, json::parse_ui_schema_v1};
+    use schemaform_dioxus::{RenderConfiguration, SchemaForm, use_form};
     use serde_json::json;
 
     use super::controls;
-
-    #[derive(Clone, Props)]
-    struct GalleryAppProps {
-        handle: Rc<RefCell<Option<FormHandle>>>,
-    }
-
-    impl PartialEq for GalleryAppProps {
-        fn eq(&self, other: &Self) -> bool {
-            Rc::ptr_eq(&self.handle, &other.handle)
-        }
-    }
+    use crate::components::schemaform_daisyui::test_support::{
+        RenderedForm, TestAppProps, assert_aria_references_resolve, tags,
+    };
 
     /// The authored presentation: every control in data-schema order, except that the billing
     /// cycle asks for the radio widget and the region for the compound select.
@@ -193,7 +194,7 @@ mod tests {
       }
     }"#;
 
-    fn gallery_app(props: GalleryAppProps) -> Element {
+    fn gallery_app(props: TestAppProps) -> Element {
         let definition = use_hook(|| {
             let ui_schema =
                 parse_ui_schema_v1(UI_SCHEMA.as_bytes(), &CompilationProfile::default())
@@ -286,241 +287,14 @@ mod tests {
         }
     }
 
-    /// The rendered form: the form handle plus the markup, observed as a browser would see it.
-    struct RenderedGallery {
-        dom: VirtualDom,
-        handle: FormHandle,
-    }
-
-    impl RenderedGallery {
-        fn mount() -> Self {
-            let handle = Rc::new(RefCell::new(None));
-            let mut dom = VirtualDom::new_with_props(
-                gallery_app,
-                GalleryAppProps {
-                    handle: handle.clone(),
-                },
-            );
-            dom.rebuild_in_place();
-            let handle = handle
-                .borrow()
-                .clone()
-                .expect("the gallery app should expose its form handle");
-            let mut rendered = Self { dom, handle };
-            rendered.settle();
-            rendered
-        }
-
-        /// Field parts register their ids while they render and `Field` syncs metadata in an
-        /// effect, so the control's ARIA references land on the renders that follow.
-        fn settle(&mut self) {
-            for _ in 0..4 {
-                self.dom.render_immediate(&mut NoOpMutations);
-            }
-        }
-
-        fn html(&self) -> String {
-            dioxus_ssr::render(&self.dom)
-        }
-
-        /// The first tag `accept` accepts, in document order.
-        fn find(&self, accept: impl Fn(&Tag) -> bool) -> Option<Tag> {
-            tags(&self.html()).into_iter().find(accept)
-        }
-
-        /// Every tag `accept` accepts, in document order.
-        fn find_all(&self, accept: impl Fn(&Tag) -> bool) -> Vec<Tag> {
-            tags(&self.html()).into_iter().filter(accept).collect()
-        }
-
-        /// The text of the element that `aria-labelledby` of the element with `id` references.
-        fn labelled_by_text(&self, id: &str) -> String {
-            let label_id = self
-                .find(|tag| tag.attribute("id") == Some(id))
-                .and_then(|tag| tag.attribute("aria-labelledby").map(str::to_owned))
-                .unwrap_or_else(|| panic!("{id} should be labelled"));
-            let html = self.html();
-            let start = html
-                .find(&format!("id=\"{label_id}\""))
-                .unwrap_or_else(|| panic!("the label {label_id} should exist"));
-            let rest = &html[start..];
-            let text_start = rest.find('>').expect("the label tag should close") + 1;
-            let text_end = rest.find('<').expect("the label should close");
-            rest[text_start..text_end].to_owned()
-        }
-
-        /// The `(value, text, selected)` of every option of the select named `name`, in order.
-        fn options(&self, name: &str) -> Vec<(String, String, bool)> {
-            let html = self.html();
-            let start = html
-                .find(&format!("name=\"{name}\""))
-                .unwrap_or_else(|| panic!("a select named {name} should be rendered:\n{html}"));
-            let select = &html[start..];
-            let end = select
-                .find("</select>")
-                .unwrap_or_else(|| panic!("the select named {name} should close:\n{html}"));
-            let select = &select[..end];
-            let mut options = Vec::new();
-            let mut rest = select;
-            while let Some(start) = rest.find("<option") {
-                rest = &rest[start..];
-                let tag_end = rest.find('>').expect("an option tag should close");
-                let tag = tags(&rest[..=tag_end])
-                    .pop()
-                    .expect("an option tag should parse");
-                rest = &rest[tag_end + 1..];
-                let text_end = rest.find("</option>").expect("an option should close");
-                options.push((
-                    tag.attribute("value").unwrap_or_default().to_owned(),
-                    rest[..text_end].trim().to_owned(),
-                    tag.attribute("selected") == Some("true"),
-                ));
-                rest = &rest[text_end..];
-            }
-            options
-        }
-
-        /// The attributes of the first tag whose `name` attribute is `name`.
-        fn control(&self, name: &str) -> Tag {
-            let html = self.html();
-            tags(&html)
-                .into_iter()
-                .find(|tag| tag.attribute("name") == Some(name))
-                .unwrap_or_else(|| panic!("a control named {name} should be rendered:\n{html}"))
-        }
-
-        /// The DOM id the adapter assigned to the control bound at `name`.
-        fn control_id(&self, name: &str) -> String {
-            self.control(name)
-                .attribute("id")
-                .unwrap_or_else(|| panic!("the control named {name} should carry an id"))
-                .to_owned()
-        }
-
-        /// The instance identity of the control bound at `name`, for driving it through the
-        /// form handle the way a host would.
-        fn control_identity(&self, name: &str) -> InstanceIdentity {
-            let root = self
-                .handle
-                .reader()
-                .read()
-                .expect("the form should be readable")
-                .root;
-            let mut pending = vec![root];
-            while let Some(identity) = pending.pop() {
-                let projection = self
-                    .handle
-                    .node(identity)
-                    .expect("the form should be readable")
-                    .expect("the node should exist")
-                    .read()
-                    .expect("the node should be readable")
-                    .expect("the node should remain present");
-                if projection
-                    .binding
-                    .as_ref()
-                    .is_some_and(|pointer| pointer.as_str() == name)
-                {
-                    return identity;
-                }
-                pending.extend(projection.children);
-            }
-            panic!("a control bound at {name} should exist");
-        }
-    }
-
-    /// One start tag from the rendered markup.
-    #[derive(Debug)]
-    struct Tag {
-        element: String,
-        attributes: Vec<(String, String)>,
-    }
-
-    impl Tag {
-        fn attribute(&self, name: &str) -> Option<&str> {
-            self.attributes
-                .iter()
-                .find(|(key, _)| key == name)
-                .map(|(_, value)| value.as_str())
-        }
-
-        fn classes(&self) -> Vec<&str> {
-            self.attribute("class")
-                .map(|class| class.split_whitespace().collect())
-                .unwrap_or_default()
-        }
-    }
-
-    /// Every start tag in `html`, with its attributes. Dioxus SSR writes text values in double
-    /// quotes with the quote character escaped, so a quote always ends such a value, and writes
-    /// boolean values bare (`required=true`).
-    fn tags(html: &str) -> Vec<Tag> {
-        let mut tags = Vec::new();
-        let mut rest = html;
-        while let Some(start) = rest.find('<') {
-            rest = &rest[start + 1..];
-            if rest.starts_with('/') || rest.starts_with('!') {
-                continue;
-            }
-            let end = rest.find('>').expect("a start tag should close");
-            let (tag, after) = rest.split_at(end);
-            rest = &after[1..];
-            let tag = tag.trim_end_matches('/');
-            let mut parts = tag.splitn(2, char::is_whitespace);
-            let element = parts.next().unwrap_or_default().to_owned();
-            let attributes = parts.next().map(attributes).unwrap_or_default();
-            tags.push(Tag {
-                element,
-                attributes,
-            });
-        }
-        tags
-    }
-
-    fn attributes(mut source: &str) -> Vec<(String, String)> {
-        let mut attributes = Vec::new();
-        loop {
-            source = source.trim_start();
-            if source.is_empty() {
-                return attributes;
-            }
-            let name_end = source
-                .find(|character: char| character == '=' || character.is_whitespace())
-                .unwrap_or(source.len());
-            let name = source[..name_end].to_owned();
-            source = &source[name_end..];
-            let Some(after_equals) = source.strip_prefix('=') else {
-                attributes.push((name, String::new()));
-                continue;
-            };
-            let (value, after_value) = match after_equals.strip_prefix('"') {
-                Some(quoted) => {
-                    let end = quoted.find('"').expect("a quoted value should close");
-                    (&quoted[..end], &quoted[end + 1..])
-                }
-                None => {
-                    let end = after_equals
-                        .find(char::is_whitespace)
-                        .unwrap_or(after_equals.len());
-                    after_equals.split_at(end)
-                }
-            };
-            attributes.push((name, value.to_owned()));
-            source = after_value;
-        }
-    }
-
-    /// Every id in `html`.
-    fn ids(html: &str) -> Vec<String> {
-        tags(html)
-            .iter()
-            .filter_map(|tag| tag.attribute("id").map(str::to_owned))
-            .collect()
+    /// The gallery form, mounted and settled.
+    fn mount() -> RenderedForm {
+        RenderedForm::mount(gallery_app)
     }
 
     #[test]
     fn string_number_and_integer_controls_render_as_daisyui_inputs() {
-        let rendered = RenderedGallery::mount();
+        let rendered = mount();
 
         for (name, inputmode) in [
             ("/name", "text"),
@@ -541,7 +315,7 @@ mod tests {
 
     #[test]
     fn a_non_nullable_boolean_is_a_native_checkbox_with_the_daisyui_class() {
-        let rendered = RenderedGallery::mount();
+        let rendered = mount();
 
         let active = rendered.control("/active");
         assert_eq!(active.element, "input");
@@ -561,7 +335,7 @@ mod tests {
 
     #[test]
     fn a_nullable_boolean_is_the_registry_checkbox_showing_null_as_indeterminate() {
-        let mut rendered = RenderedGallery::mount();
+        let mut rendered = mount();
 
         let newsletter = rendered.control("/newsletter");
         assert_eq!(newsletter.element, "button");
@@ -576,12 +350,7 @@ mod tests {
             Some(rendered.control_id("/newsletter"))
         );
 
-        let actions = rendered
-            .handle
-            .node(rendered.control_identity("/newsletter"))
-            .expect("the form should be readable")
-            .expect("newsletter should exist")
-            .actions();
+        let actions = rendered.actions_at("/newsletter");
         actions
             .set_value(json!(true))
             .expect("the boolean should be set");
@@ -595,7 +364,7 @@ mod tests {
 
     #[test]
     fn a_write_only_boolean_is_a_replacement_select_that_never_shows_its_value() {
-        let rendered = RenderedGallery::mount();
+        let rendered = mount();
 
         let mfa = rendered.control("/mfa");
         assert_eq!(mfa.element, "select");
@@ -620,7 +389,7 @@ mod tests {
 
     #[test]
     fn a_choice_is_a_daisyui_native_select_over_opaque_identities_with_the_null_option() {
-        let mut rendered = RenderedGallery::mount();
+        let mut rendered = mount();
 
         let plan = rendered.control("/plan");
         assert_eq!(plan.element, "select");
@@ -657,12 +426,7 @@ mod tests {
         );
         assert_eq!(plan.attribute("value"), options[3].0.as_str().into());
 
-        let actions = rendered
-            .handle
-            .node(rendered.control_identity("/plan"))
-            .expect("the form should be readable")
-            .expect("plan should exist")
-            .actions();
+        let actions = rendered.actions_at("/plan");
         actions.set_null().expect("the choice should accept null");
         rendered.settle();
 
@@ -677,7 +441,7 @@ mod tests {
 
     #[test]
     fn a_write_only_choice_shows_the_replacement_placeholder_and_no_selection() {
-        let rendered = RenderedGallery::mount();
+        let rendered = mount();
 
         let recovery = rendered.control("/recovery");
         assert_eq!(recovery.element, "select");
@@ -699,8 +463,7 @@ mod tests {
 
     #[test]
     fn the_radio_widget_symbol_selects_a_daisyui_radio_group_with_one_item_per_option() {
-        let mut rendered = RenderedGallery::mount();
-        let billing = rendered.control_identity("/billing");
+        let mut rendered = mount();
 
         let group = rendered
             .find(|tag| tag.attribute("role") == Some("radiogroup"))
@@ -747,11 +510,7 @@ mod tests {
         assert_eq!(participants.len(), 3);
 
         rendered
-            .handle
-            .node(billing)
-            .expect("the form should be readable")
-            .expect("billing should exist")
-            .actions()
+            .actions_at("/billing")
             .set_null()
             .expect("billing should accept null");
         rendered.settle();
@@ -774,7 +533,7 @@ mod tests {
 
     #[test]
     fn a_constant_is_read_only_output_with_its_presence_affordances() {
-        let rendered = RenderedGallery::mount();
+        let rendered = mount();
 
         let tier = rendered.control("/tier");
         assert_eq!(tier.element, "output");
@@ -800,7 +559,7 @@ mod tests {
 
     #[test]
     fn the_select_widget_symbol_selects_the_daisyui_compound_select() {
-        let mut rendered = RenderedGallery::mount();
+        let mut rendered = mount();
 
         let trigger = rendered.control("/region");
         assert_eq!(trigger.element, "button");
@@ -819,13 +578,7 @@ mod tests {
             "the trigger should show the selected option's label"
         );
 
-        let region = rendered.control_identity("/region");
-        let actions = rendered
-            .handle
-            .node(region)
-            .expect("the form should be readable")
-            .expect("region should exist")
-            .actions();
+        let actions = rendered.actions_at("/region");
         actions
             .set_value(json!("us"))
             .expect("region should accept us");
@@ -840,7 +593,7 @@ mod tests {
 
     #[test]
     fn a_write_only_control_uses_the_password_type_and_the_replacement_label() {
-        let rendered = RenderedGallery::mount();
+        let rendered = mount();
 
         let secret = rendered.control("/secret");
         assert_eq!(secret.attribute("type"), Some("password"));
@@ -851,7 +604,7 @@ mod tests {
 
     #[test]
     fn a_read_only_control_renders_as_output_rather_than_an_editable_input() {
-        let rendered = RenderedGallery::mount();
+        let rendered = mount();
 
         let reference = rendered.control("/reference");
         assert_eq!(reference.element, "output");
@@ -864,21 +617,15 @@ mod tests {
 
     #[test]
     fn help_is_described_by_and_every_aria_reference_resolves_to_an_element() {
-        let mut rendered = RenderedGallery::mount();
+        let mut rendered = mount();
         // Surface an error so `aria-errormessage` is emitted too.
-        let quantity = rendered
-            .handle
-            .node(rendered.control_identity("/quantity"))
-            .expect("the form should be readable")
-            .expect("quantity should exist")
-            .actions();
+        let quantity = rendered.actions_at("/quantity");
         quantity
             .input_text("-")
             .expect("the parse blocker should be recorded");
         rendered.settle();
 
         let html = rendered.html();
-        let ids = ids(&html);
         let name = rendered.control("/name");
         assert!(
             name.attribute("aria-describedby")
@@ -896,33 +643,12 @@ mod tests {
                 .is_some()
         );
 
-        let mut references = 0;
-        for tag in tags(&html) {
-            for attribute in [
-                "aria-describedby",
-                "aria-errormessage",
-                "aria-labelledby",
-                "for",
-            ] {
-                for id in tag
-                    .attribute(attribute)
-                    .into_iter()
-                    .flat_map(str::split_whitespace)
-                {
-                    references += 1;
-                    assert!(
-                        ids.iter().any(|candidate| candidate == id),
-                        "{attribute}={id} should resolve"
-                    );
-                }
-            }
-        }
-        assert!(references > 0);
+        assert!(assert_aria_references_resolve(&html) > 0);
     }
 
     #[test]
     fn presence_affordances_render_as_daisyui_buttons_carrying_their_ids() {
-        let rendered = RenderedGallery::mount();
+        let rendered = mount();
         let nickname = rendered.control_id("/nickname");
 
         let buttons = tags(&rendered.html())

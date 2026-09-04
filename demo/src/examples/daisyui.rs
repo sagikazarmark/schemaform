@@ -175,16 +175,18 @@ impl WritingDirection {
     }
 }
 
-/// A form bound through the daisyUI control registry: every control kind is a daisyUI field.
-/// Strings, numbers, and integers are `Input`s; a non-nullable boolean is a native checkbox, a
-/// nullable one the registry `Checkbox` with null as indeterminate, a write-only one a
-/// replacement select; choices are a native select, a radio group, or the compound select as the
-/// UI schema asks; constants are read-only output.
+/// A form bound through every seam the daisyUI component fills. Its control registry makes every
+/// control kind a daisyUI field: strings, numbers, and integers are `Input`s; a non-nullable
+/// boolean is a native checkbox, a nullable one the registry `Checkbox` with null as
+/// indeterminate, a write-only one a replacement select; choices are a native select, a radio
+/// group, or the compound select as the UI schema asks; constants are read-only output. Its
+/// structure bundle renders the arrays as collections of item cards with joined action buttons
+/// and the form shell with a primary submit button, and its finding presenter frames the summary
+/// as an alert.
 ///
-/// The structure around the controls — tabs, the authored group, the grid, the fixed object and
-/// its presence operations, the arrays and their item chrome, the finding summary, and the
-/// submit button — is the built-in renderer's, styled with daisyUI classes through its
-/// `schemaform-*` class hooks by the demo stylesheet.
+/// The structure no seam exists for yet — tabs, the authored group, the grid, the fixed object
+/// and its presence operations — is the built-in renderer's, styled with daisyUI classes through
+/// its `schemaform-*` class hooks by the demo stylesheet.
 #[component]
 pub fn DaisyuiFormExample(#[props(default)] direction: WritingDirection) -> Element {
     let definition = use_hook(definition);
@@ -194,6 +196,9 @@ pub fn DaisyuiFormExample(#[props(default)] direction: WritingDirection) -> Elem
     let bound = use_hook(move || {
         RenderConfiguration::builder()
             .controls(schemaform_daisyui::controls())
+            .structure(schemaform_daisyui::structure())
+            .summary_presenter(schemaform_daisyui::findings())
+            .local_presenter(schemaform_daisyui::findings())
             .build()
             .bind(&bound_form)
             .expect("the daisyUI registry should bind every control")
@@ -443,11 +448,13 @@ mod tests {
         assert!(!html.contains("class=\"schemaform-control\""), "{html}");
     }
 
-    /// Every structural node the daisyUI stylesheet themes through the built-in class hooks is
-    /// on the page: tabs, an authored group, a fixed object with a presence operation, arrays
-    /// with their item chrome, the finding summary, and the submit button.
+    /// The structure the component renders through the adapter's seams is on the page: the arrays
+    /// as daisyUI collections with card items and joined action buttons, the submit button as a
+    /// primary daisyUI button, and the finding summary placed by the shell; none of the built-in
+    /// array chrome remains. The tabs, the authored group, and the fixed object are still the
+    /// built-in renderer's, themed through their class hooks.
     #[test]
-    fn the_example_form_renders_every_themed_built_in_structure() {
+    fn the_example_form_renders_daisyui_arrays_and_shell_around_themed_built_in_structure() {
         let html = render(WritingDirection::default());
 
         assert!(html.contains("class=\"schemaform-tabs\""), "{html}");
@@ -461,17 +468,36 @@ mod tests {
             "{html}"
         );
         assert!(html.contains("data-remove-value"), "{html}");
-        assert!(
-            html.contains("class=\"schemaform-group schemaform-array\""),
-            "{html}"
-        );
-        assert!(html.contains("data-append-item"), "{html}");
-        assert!(html.contains("data-move-item-down"), "{html}");
+
+        assert!(html.contains("data-schemaform-daisyui=\"shell\""), "{html}");
         assert!(html.contains("data-finding-summary"), "{html}");
         assert!(html.contains("type=\"submit\""), "{html}");
+        assert!(html.contains("btn-primary"), "{html}");
+        assert_eq!(
+            html.matches("data-schemaform-daisyui=\"collection\"")
+                .count(),
+            2,
+            "{html}"
+        );
+        assert_eq!(
+            html.matches("data-schemaform-daisyui=\"collection-item\"")
+                .count(),
+            4,
+            "two team members and two tags: {html}"
+        );
+        assert!(
+            html.contains("aria-label=\"Move Team members item at position 1 down\""),
+            "{html}"
+        );
+        assert!(
+            !html.contains("schemaform-group schemaform-array"),
+            "{html}"
+        );
+        assert!(!html.contains("data-append-item"), "{html}");
+        assert!(!html.contains("data-move-item-down"), "{html}");
         // The generated regions follow the authored order, not the data schema's key order.
         assert!(
-            html.find("<legend>Team members</legend>") < html.find("<legend>Tags</legend>"),
+            html.find(">Team members</legend>") < html.find(">Tags</legend>"),
             "{html}"
         );
     }

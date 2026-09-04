@@ -13,7 +13,7 @@ pub fn Home() -> Element {
         ),
         (
             "Homogeneous arrays",
-            "Add, remove, and reorder scalar or fixed-object items with stable item identity.",
+            "Add, remove, and reorder scalar or fixed-object items with stable item identity, in daisyUI cards rendered through the collection seam.",
             Route::Arrays {},
         ),
         (
@@ -23,7 +23,7 @@ pub fn Home() -> Element {
         ),
         (
             "daisyUI form",
-            "Render every control with a component library through a custom control renderer, theme the built-in structure through its class hooks, and compare with the unstyled built-in.",
+            "Render every control, the arrays, the shell, and the finding summary with a component library through the renderer seams, and compare with the unstyled built-in.",
             Route::Daisyui {},
         ),
         (

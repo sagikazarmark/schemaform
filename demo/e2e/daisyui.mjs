@@ -1,6 +1,8 @@
-// Drives the demo's daisyUI page in a real browser: runs axe-core at named
-// checkpoints in the light and dark themes, and verifies finding-summary
-// focus-to-target and presence repair on the daisyUI-rendered controls.
+// Drives the demo's daisyUI-rendered pages in a real browser: runs axe-core at
+// named checkpoints in the light and dark themes, verifies finding-summary
+// focus-to-target and presence repair on the daisyUI-rendered controls of the
+// daisyUI form, and add, insert, move, and remove with their focus and
+// announcements on the daisyUI-rendered arrays of the arrays page.
 //
 //   node daisyui.mjs --site <built demo directory>   # serves the bundle itself
 //   node daisyui.mjs --url http://127.0.0.1:8080     # against a running server
@@ -119,10 +121,24 @@ function control(page, pointer) {
   return form(page).locator(`input[name="${pointer}"]`);
 }
 
-// The presence affordance a control renders, found by its localized label
-// (the affordance ids depend on bind order, the labels do not).
-function affordance(page, label) {
-  return form(page).getByRole("button", { name: label, exact: true });
+// An affordance rendered as a button, found by its accessible name (the
+// affordance ids depend on bind order, the names do not): a presence or append
+// affordance by its localized label, an item affordance by its positional
+// accessible name, which the collection renderer puts in `aria-label`.
+function affordance(page, name) {
+  return form(page).getByRole("button", { name, exact: true });
+}
+
+// The daisyUI collection for the array titled `label`: a fieldset named by its
+// legend. Item cards are groups too, but named `{item} {position}`.
+function collection(page, label) {
+  return form(page).getByRole("group", { name: label, exact: true });
+}
+
+// Waits for the collection's adapter-owned live region to announce `text`.
+async function expectAnnouncement(page, label, text) {
+  const status = collection(page, label).locator("[data-array-status]");
+  await eventually(`"${text}" to be announced`, async () => (await status.textContent()) === text);
 }
 
 // The presence affordances the core currently allows for a control, by label:
@@ -149,8 +165,10 @@ async function selectTab(page, name) {
   );
 }
 
-// The focused element, reduced to what the scenario asserts on: a control's
-// binding (`name`) or the finding summary.
+// The focused element, reduced to what the scenarios assert on: a control's
+// binding (`name`), the finding summary, an affordance button's accessible
+// name (`label`), and the binding of the first control in the item card the
+// element sits in (`card`).
 async function activeElement(page) {
   return page.evaluate(() => {
     const active = document.activeElement;
@@ -161,6 +179,12 @@ async function activeElement(page) {
       tag: active.tagName.toLowerCase(),
       name: active.getAttribute("name"),
       summary: active.hasAttribute("data-finding-summary"),
+      label: active.getAttribute("aria-label"),
+      card:
+        active
+          .closest('[data-schemaform-daisyui="collection-item"]')
+          ?.querySelector("input, select")
+          ?.getAttribute("name") ?? null,
     };
   });
 }
@@ -177,8 +201,10 @@ async function openPage(page, baseUrl, route, theme) {
 
 // --- One theme's run --------------------------------------------------------
 
-// The scenario in one theme: a fresh browser context, the checkpoints it
-// passed through, and everything the browser said along the way.
+// The scenarios in one theme: a fresh browser context, the checkpoints they
+// passed through, and everything the browser said along the way. Each scenario
+// runs to completion or failure on its own, so a failure on one page does not
+// hide the other page's checkpoints.
 class ThemeRun {
   constructor({ browser, baseUrl, theme, out }) {
     this.browser = browser;
@@ -188,7 +214,7 @@ class ThemeRun {
     this.checkpoints = [];
     this.browserLog = [];
     this.pageErrors = [];
-    this.failure = null;
+    this.failures = [];
   }
 
   async open() {
@@ -245,7 +271,9 @@ class ThemeRun {
     }
   }
 
-  async scenario() {
+  // The daisyUI form: registry widgets through the control renderer, arrays
+  // and shell through the structure bundle, the summary through the presenter.
+  async daisyuiScenario() {
     const { page, baseUrl } = this;
 
     await openPage(page, baseUrl, "/daisyui", this.theme);
@@ -261,7 +289,7 @@ class ThemeRun {
       "the display name to be marked invalid",
       async () => (await name.getAttribute("aria-invalid")) === "true",
     );
-    const findings = form(page).locator("[data-finding-summary] .schemaform-finding");
+    const findings = form(page).locator("[data-finding-summary] [data-finding]");
     await eventually("the finding summary to list the finding", async () => (await findings.count()) === 1);
     await this.checkpoint("profile-invalid-name");
 
@@ -327,15 +355,104 @@ class ThemeRun {
     await this.checkpoint("rtl-profile");
   }
 
+  // The arrays page: two homogeneous arrays rendered through the daisyUI
+  // collection renderer. The renderer only places the affordances; item
+  // identity, focus after each mutation, and the live-region announcements are
+  // the adapter's, so the scenario asserts all three through the daisyUI chrome.
+  async arraysScenario() {
+    const { page, baseUrl } = this;
+
+    await openPage(page, baseUrl, "/arrays", this.theme);
+    assert((await collection(page, "Tags").count()) === 1, "the Tags collection should be a labelled group");
+    assert((await collection(page, "Team members").count()) === 1, "the Team members collection should be a labelled group");
+    await this.checkpoint("arrays");
+
+    // Insert before the first tag: the new item is seeded from the schema
+    // default, takes focus, and the insertion is announced.
+    await affordance(page, "Insert Tags item before position 1").click();
+    await eventually("the inserted tag to receive focus", async () => {
+      const active = await activeElement(page);
+      return active?.tag === "input" && active.name === "/tags/0";
+    });
+    assert((await control(page, "/tags/0").inputValue()) === "new-tag", "the inserted tag should carry the schema default");
+    assert((await control(page, "/tags/1").inputValue()) === "rust", "the former first tag should follow the inserted one");
+    await expectAnnouncement(page, "Tags", "Tags item inserted at position 1.");
+    await this.checkpoint("arrays-inserted");
+
+    // Move it down: the item keeps its value, focus stays on its move-down
+    // button in the moved row, and the move is announced.
+    await affordance(page, "Move Tags item at position 1 down").click();
+    await eventually("the moved tag to sit at position 2", async () => (await control(page, "/tags/1").inputValue()) === "new-tag");
+    await eventually(
+      "focus to stay on the moved item's move-down button",
+      async () => (await activeElement(page))?.label === "Move Tags item at position 2 down",
+    );
+    await expectAnnouncement(page, "Tags", "Tags item moved down to position 2.");
+
+    // Remove it: focus moves to the next item's control.
+    await affordance(page, "Remove Tags item at position 2").click();
+    await eventually("the next tag to receive focus", async () => {
+      const active = await activeElement(page);
+      return active?.tag === "input" && active.name === "/tags/1";
+    });
+    assert((await control(page, "/tags/1").inputValue()) === "dioxus", "the next tag should be the one that followed the removed item");
+    await expectAnnouncement(page, "Tags", "Tags item removed from position 2.");
+
+    // Append a team member: a new card whose object item is seeded empty (its
+    // members offer "Set …"), with focus in the card and the addition announced.
+    await affordance(page, "Add Team members item").click();
+    await eventually("the new team card to be rendered", async () => (await control(page, "/team/2/name").count()) === 1);
+    await eventually("focus to land in the new team card", async () => (await activeElement(page))?.card === "/team/2/name");
+    await eventually(
+      "the empty member's name to offer its set affordance",
+      async () => (await affordance(page, "Set Name").count()) === 1,
+    );
+    await expectAnnouncement(page, "Team members", "Team members item added at position 3.");
+    await this.checkpoint("arrays-mutated");
+
+    // Empty the tags: the collection shows its empty state in place of the
+    // cards, the removal is announced, and append is still offered.
+    await affordance(page, "Remove Tags item at position 1").click();
+    await eventually("a single tag to remain", async () => (await control(page, "/tags/1").count()) === 0);
+    await affordance(page, "Remove Tags item at position 1").click();
+    const emptyState = collection(page, "Tags").locator('[data-schemaform-daisyui="collection-empty"]');
+    await eventually("the empty state to appear", async () => (await emptyState.count()) === 1);
+    assert((await emptyState.textContent()) === "Nothing here yet.", "the empty state should say so");
+    assert((await control(page, "/tags/0").count()) === 0, "no tag card should remain");
+    await expectAnnouncement(page, "Tags", "Tags item removed from position 1.");
+    assert((await affordance(page, "Add Tags item").count()) === 1, "append should still be offered");
+    await this.checkpoint("arrays-empty");
+
+    // minItems: once one team member remains, the core withdraws removal and
+    // the renderer no longer places a remove button for it.
+    await affordance(page, "Remove Team members item at position 3").click();
+    await eventually("two members to remain", async () => (await control(page, "/team/2/name").count()) === 0);
+    await affordance(page, "Remove Team members item at position 2").click();
+    await eventually("one member to remain", async () => (await control(page, "/team/1/name").count()) === 0);
+    await eventually(
+      "removal to be withdrawn at minItems",
+      async () => (await form(page).getByRole("button", { name: /^Remove Team members item/ }).count()) === 0,
+    );
+    await this.checkpoint("arrays-min-items");
+  }
+
   async run() {
     process.stdout.write(`${this.theme} theme\n`);
     await this.open();
     try {
-      await this.scenario();
-    } catch (error) {
-      this.failure = error instanceof AssertionFailure ? error.message : (error.stack ?? String(error));
-      process.stdout.write(`  ${this.theme}: FAILED: ${this.failure}\n`);
-      await this.page.screenshot({ path: path.join(this.dir, "failure.png"), fullPage: true }).catch(() => {});
+      for (const [name, scenario] of [
+        ["daisyui", () => this.daisyuiScenario()],
+        ["arrays", () => this.arraysScenario()],
+      ]) {
+        try {
+          await scenario();
+        } catch (error) {
+          const failure = error instanceof AssertionFailure ? error.message : (error.stack ?? String(error));
+          this.failures.push({ scenario: name, failure });
+          process.stdout.write(`  ${this.theme}/${name}: FAILED: ${failure}\n`);
+          await this.page.screenshot({ path: path.join(this.dir, `${name}-failure.png`), fullPage: true }).catch(() => {});
+        }
+      }
     } finally {
       fs.writeFileSync(
         path.join(this.dir, "browser.log"),
@@ -345,7 +462,7 @@ class ThemeRun {
     }
     return {
       theme: this.theme,
-      failure: this.failure,
+      failures: this.failures,
       pageErrors: this.pageErrors,
       checkpoints: this.checkpoints,
     };
@@ -391,7 +508,7 @@ async function main() {
 
   const checkpoints = results.flatMap(({ checkpoints }) => checkpoints);
   const violations = checkpoints.reduce((sum, { violations }) => sum + violations.length, 0);
-  const failures = results.filter(({ failure }) => failure !== null);
+  const failures = results.flatMap(({ failures }) => failures);
   const pageErrors = results.flatMap(({ pageErrors }) => pageErrors);
   process.stdout.write(
     `\n${checkpoints.length} checkpoints across ${results.length} themes: ${violations} violation(s), ${failures.length} failed scenario(s), ${pageErrors.length} page error(s)\n`,

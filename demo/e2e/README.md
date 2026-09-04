@@ -1,13 +1,16 @@
-# Playwright + axe for the daisyUI page
+# Playwright + axe for the daisyUI pages
 
-A browser check for the demo's daisyUI page: Playwright drives `/daisyui` and
-`/daisyui/rtl` in the light and dark themes, runs [axe-core] at named
-checkpoints, and verifies the two behaviours a custom control renderer is most
-likely to break: finding-summary focus-to-target and presence repair.
+A browser check for the demo's daisyUI-rendered pages: Playwright drives
+`/daisyui`, `/daisyui/rtl`, and `/arrays` in the light and dark themes, runs
+[axe-core] at named checkpoints, and verifies the behaviours a custom renderer
+is most likely to break: finding-summary focus-to-target and presence repair on
+the controls, and focus after each mutation and its live-region announcement on
+the arrays.
 
-It exists because the daisyUI controls are not the built-in renderer. The
-adapter's own browser suite covers the built-in; this is the automated
-accessibility coverage for a renderer that owns its whole presentation.
+It exists because the daisyUI controls, arrays, shell, and finding summary are
+not the built-in renderers. The adapter's own browser suite covers the
+built-ins; this is the automated accessibility coverage for renderers that own
+their whole presentation.
 
 ## What it checks
 
@@ -24,11 +27,17 @@ Per theme, in order, with an axe run at each checkpoint:
 | `presence-set-null`    | "Set Nickname to null": null again, set and remove offered.                                                  |
 | `presence-remove`      | "Remove Nickname": the value is gone, set and set-null offered. Set again afterwards.                        |
 | `security`             | Security tab: write-only boolean, choice, and string.                                                        |
-| `team`                 | Team tab: homogeneous arrays of fixed objects and strings.                                                   |
+| `team`                 | Team tab: homogeneous arrays of fixed objects and strings as daisyUI collections.                            |
 | `rtl-profile`          | `/daisyui/rtl` as loaded.                                                                                    |
+| `arrays`               | `/arrays` as loaded: the Tags and Team members collections as labelled groups of item cards.                 |
+| `arrays-inserted`      | "Insert Tags item before position 1" clicked: the seeded tag has focus and the insertion is announced.       |
+| `arrays-mutated`       | The inserted tag moved down (focus stays on its move-down button) and removed (focus moves to the next tag), then a team member appended (focus in the new card); each announced. |
+| `arrays-empty`         | Every tag removed: the empty state stands in for the cards, the removal is announced, append is still offered. |
+| `arrays-min-items`     | Team members reduced to one: the core withdraws removal and no remove button remains.                        |
 
 Axe runs over the example region (`[role="region"][aria-label="Example demo"]`:
-the form, its reset button, and its status line) with axe's default rule set,
+the form, its reset button where the page has one, and its status line) with
+axe's default rule set,
 and every checkpoint must report zero violations. The gallery shell around the
 region is shared by every demo page and is not the subject of this check.
 
@@ -37,8 +46,10 @@ The theme is selected the way the site does it, through `localStorage`
 pointer is parked and CSS transitions are awaited, so a hover left by the last
 click is not measured mid-fade.
 
-The check fails (exit code 1) on any violation, any failed step, or any
-uncaught page error.
+The daisyUI form and the arrays page run as separate scenarios within a theme,
+so a failure on one page does not hide the other page's checkpoints. The check
+fails (exit code 1) on any violation, any failed step, or any uncaught page
+error.
 
 ## Running it
 

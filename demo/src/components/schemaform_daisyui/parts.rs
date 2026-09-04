@@ -150,6 +150,9 @@ pub(super) fn incompatible_description(
 }
 
 /// The presence affordances, rendered as daisyUI buttons carrying the ids the adapter expects.
+///
+/// Presence affordances carry no accessible name today; should one arrive, it names the button
+/// as the adapter intends.
 pub(super) fn presence_affordances(presence: &[Affordance]) -> Element {
     let presence = presence.to_vec();
     rsx! {
@@ -161,11 +164,29 @@ pub(super) fn presence_affordances(presence: &[Affordance]) -> Element {
                         id: affordance.id.clone(),
                         r#type: "button",
                         size: ButtonSize::Sm,
+                        "aria-label": affordance.accessible_name.clone(),
                         onclick: move |_| affordance.invoke.call(()),
                         "{affordance.label}"
                     }
                 }
             }
+        }
+    }
+}
+
+/// A decorative Heroicons outline icon: `path` is the icon's path data, `class` sizes it. Hidden
+/// from assistive technology, so the element it decorates must carry its own name.
+pub(super) fn icon(path: &'static str, class: &'static str) -> Element {
+    rsx! {
+        svg {
+            class,
+            "aria-hidden": "true",
+            xmlns: "http://www.w3.org/2000/svg",
+            fill: "none",
+            view_box: "0 0 24 24",
+            stroke_width: "1.5",
+            stroke: "currentColor",
+            path { stroke_linecap: "round", stroke_linejoin: "round", d: path }
         }
     }
 }

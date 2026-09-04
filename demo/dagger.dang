@@ -72,9 +72,10 @@ type Demo {
   """
   Run the demo's native tests.
 
-  The gallery's example data schemas and the `schemaform_daisyui` mapping tests
-  (binding round trips, the errors/invalid partition, renderer selection) run
-  here; the wasm bundle above never executes them.
+  The gallery's example data schemas and the `schemaform_daisyui` tests (binding
+  round trips, the errors/invalid partition, renderer selection, and the
+  collection, shell, and finding-presenter markup) run here; the wasm bundle
+  above never executes them.
   """
   test: String! @check {
     self
@@ -95,13 +96,15 @@ type Demo {
   }
 
   """
-  Drive the daisyUI page of the built demo in a browser and hold it to zero axe violations.
+  Drive the daisyUI-rendered pages of the built demo in a browser and hold them to zero axe violations.
 
-  Playwright opens the bundle `build` produces, walks `/daisyui` through named
-  checkpoints in the light and dark themes (and the RTL variant) running axe-core
-  at each, and exercises finding-summary focus-to-target and presence repair on
-  the daisyUI-rendered controls. The browser image is the one matching the
-  Playwright version `e2e/package.json` pins. See `e2e/README.md`.
+  Playwright opens the bundle `build` produces, walks `/daisyui` (and the RTL
+  variant) and `/arrays` through named checkpoints in the light and dark themes
+  running axe-core at each, exercises finding-summary focus-to-target and
+  presence repair on the daisyUI-rendered controls, and add, insert, move, and
+  remove with their focus and announcements on the daisyUI-rendered arrays. The
+  browser image is the one matching the Playwright version `e2e/package.json`
+  pins. See `e2e/README.md`.
   """
   accessibility: String! @check {
     Dagger

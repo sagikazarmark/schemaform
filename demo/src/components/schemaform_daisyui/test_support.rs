@@ -1,0 +1,454 @@
+//! The native test harness the component's tests share: a form mounted in a `VirtualDom` and
+//! observed through its server-rendered markup, as a browser would see it, plus a start-tag parser
+//! over that markup.
+
+use std::{cell::RefCell, rc::Rc};
+
+use dioxus::core::{NoOpMutations, ScopeId, VirtualDom};
+use dioxus::prelude::*;
+use schemaform::{FormDefinition, InstanceIdentity};
+use schemaform_dioxus::{
+    CollectionActions, ControlActions, FormHandle, RenderConfiguration, SchemaForm, use_form,
+};
+use serde_json::json;
+
+use super::{controls, findings, structure};
+
+/// A form with the two array shapes the collection renderer presents — string items and
+/// fixed-object items — plus a validated string, bound through every daisyUI seam this component
+/// exports: the control registry, the structure bundle, and the finding presenter in both slots.
+///
+/// `name` has a `minLength`, so leaving it too short provokes a summary finding. `tags` is
+/// optional with a seed default and no `minItems`, so the container presence operations have a
+/// target, it can be emptied, and `maxItems` withdraws append. `team` is required with
+/// `minItems`, so its sole item cannot be removed and emptying it from the host provokes an
+/// array-level finding.
+pub(super) fn arrays_app(props: TestAppProps) -> Element {
+    let definition = use_hook(|| {
+        FormDefinition::compile(json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "team"],
+            "properties": {
+                "name": { "type": "string", "title": "Name", "minLength": 2 },
+                "tags": {
+                    "type": "array",
+                    "title": "Tags",
+                    "description": "Keywords for the badge.",
+                    "default": ["seed"],
+                    "maxItems": 3,
+                    "items": { "type": "string", "title": "Tag", "default": "fresh" }
+                },
+                "team": {
+                    "type": "array",
+                    "title": "Team",
+                    "minItems": 1,
+                    "maxItems": 2,
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["name"],
+                        "properties": {
+                            "name": { "type": "string", "title": "Member", "default": "New member" }
+                        }
+                    }
+                }
+            }
+        }))
+        .expect("the arrays data schema should compile")
+    });
+    let form = use_form(
+        definition,
+        json!({
+            "name": "Ada",
+            "tags": ["rust", "dioxus"],
+            "team": [{ "name": "Ada" }]
+        }),
+    )
+    .expect("the arrays form should be created");
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+    let bound = use_hook(move || {
+        RenderConfiguration::builder()
+            .controls(controls())
+            .structure(structure())
+            .summary_presenter(findings())
+            .local_presenter(findings())
+            .build()
+            .bind(&form)
+            .expect("the daisyUI seams should bind the arrays form")
+    });
+    rsx! {
+        SchemaForm { form: bound, on_submit: move |_| {} }
+    }
+}
+
+/// Props of a test application: a slot the application fills with its form handle on first
+/// render, so a test can drive the form the way a host would.
+#[derive(Clone, Props)]
+pub(super) struct TestAppProps {
+    pub(super) handle: Rc<RefCell<Option<FormHandle>>>,
+}
+
+impl PartialEq for TestAppProps {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.handle, &other.handle)
+    }
+}
+
+/// The rendered form: the form handle plus the markup, observed as a browser would see it.
+pub(super) struct RenderedForm {
+    dom: VirtualDom,
+    pub(super) handle: FormHandle,
+}
+
+impl RenderedForm {
+    /// Mounts `app` and settles it.
+    pub(super) fn mount(app: fn(TestAppProps) -> Element) -> Self {
+        let handle = Rc::new(RefCell::new(None));
+        let mut dom = VirtualDom::new_with_props(
+            app,
+            TestAppProps {
+                handle: handle.clone(),
+            },
+        );
+        dom.rebuild_in_place();
+        let handle = handle
+            .borrow()
+            .clone()
+            .expect("the test app should expose its form handle");
+        let mut rendered = Self { dom, handle };
+        rendered.settle();
+        rendered
+    }
+
+    /// Field parts register their ids while they render and `Field` syncs metadata in an
+    /// effect, so the control's ARIA references land on the renders that follow.
+    pub(super) fn settle(&mut self) {
+        for _ in 0..4 {
+            self.dom.render_immediate(&mut NoOpMutations);
+        }
+    }
+
+    pub(super) fn html(&self) -> String {
+        dioxus_ssr::render(&self.dom)
+    }
+
+    /// Runs `operation` inside the Dioxus runtime, the way an event handler would, then settles
+    /// the DOM. Collection operations announce through adapter-owned signals and so need the
+    /// runtime; scalar control actions do not.
+    pub(super) fn drive<R>(&mut self, operation: impl FnOnce() -> R) -> R {
+        let result = self.dom.in_scope(ScopeId::ROOT, operation);
+        self.settle();
+        result
+    }
+
+    /// The first tag `accept` accepts, in document order.
+    pub(super) fn find(&self, accept: impl Fn(&Tag) -> bool) -> Option<Tag> {
+        tags(&self.html()).into_iter().find(accept)
+    }
+
+    /// Every tag `accept` accepts, in document order.
+    pub(super) fn find_all(&self, accept: impl Fn(&Tag) -> bool) -> Vec<Tag> {
+        tags(&self.html()).into_iter().filter(accept).collect()
+    }
+
+    /// The tag carrying `id`.
+    pub(super) fn by_id(&self, id: &str) -> Option<Tag> {
+        self.find(|tag| tag.attribute("id") == Some(id))
+    }
+
+    /// The text of the element that `aria-labelledby` of the element with `id` references.
+    pub(super) fn labelled_by_text(&self, id: &str) -> String {
+        let label_id = self
+            .by_id(id)
+            .and_then(|tag| tag.attribute("aria-labelledby").map(str::to_owned))
+            .unwrap_or_else(|| panic!("{id} should be labelled"));
+        let html = self.html();
+        let start = html
+            .find(&format!("id=\"{label_id}\""))
+            .unwrap_or_else(|| panic!("the label {label_id} should exist"));
+        let rest = &html[start..];
+        let text_start = rest.find('>').expect("the label tag should close") + 1;
+        let text_end = rest.find('<').expect("the label should close");
+        rest[text_start..text_end].to_owned()
+    }
+
+    /// The `(value, text, selected)` of every option of the select named `name`, in order.
+    pub(super) fn options(&self, name: &str) -> Vec<(String, String, bool)> {
+        let html = self.html();
+        let start = html
+            .find(&format!("name=\"{name}\""))
+            .unwrap_or_else(|| panic!("a select named {name} should be rendered:\n{html}"));
+        let select = &html[start..];
+        let end = select
+            .find("</select>")
+            .unwrap_or_else(|| panic!("the select named {name} should close:\n{html}"));
+        let select = &select[..end];
+        let mut options = Vec::new();
+        let mut rest = select;
+        while let Some(start) = rest.find("<option") {
+            rest = &rest[start..];
+            let tag_end = rest.find('>').expect("an option tag should close");
+            let tag = tags(&rest[..=tag_end])
+                .pop()
+                .expect("an option tag should parse");
+            rest = &rest[tag_end + 1..];
+            let text_end = rest.find("</option>").expect("an option should close");
+            options.push((
+                tag.attribute("value").unwrap_or_default().to_owned(),
+                rest[..text_end].trim().to_owned(),
+                tag.attribute("selected") == Some("true"),
+            ));
+            rest = &rest[text_end..];
+        }
+        options
+    }
+
+    /// The attributes of the first tag whose `name` attribute is `name`.
+    pub(super) fn control(&self, name: &str) -> Tag {
+        let html = self.html();
+        tags(&html)
+            .into_iter()
+            .find(|tag| tag.attribute("name") == Some(name))
+            .unwrap_or_else(|| panic!("a control named {name} should be rendered:\n{html}"))
+    }
+
+    /// The DOM id the adapter assigned to the control bound at `name`.
+    pub(super) fn control_id(&self, name: &str) -> String {
+        self.control(name)
+            .attribute("id")
+            .unwrap_or_else(|| panic!("the control named {name} should carry an id"))
+            .to_owned()
+    }
+
+    /// The scalar-control actions of the node bound at `pointer`, for driving it through the
+    /// form handle the way a host would.
+    pub(super) fn actions_at(&self, pointer: &str) -> ControlActions {
+        self.handle
+            .node(self.identity_at(pointer))
+            .expect("the form should be readable")
+            .expect("the node should exist")
+            .actions()
+    }
+
+    /// The collection actions of the array bound at `pointer`.
+    pub(super) fn collection_actions_at(&self, pointer: &str) -> CollectionActions {
+        self.handle
+            .node(self.identity_at(pointer))
+            .expect("the form should be readable")
+            .expect("the node should exist")
+            .collection_actions()
+    }
+
+    /// The instance identity of the node bound at `pointer`.
+    pub(super) fn identity_at(&self, pointer: &str) -> InstanceIdentity {
+        let root = self
+            .handle
+            .reader()
+            .read()
+            .expect("the form should be readable")
+            .root;
+        let mut pending = vec![root];
+        while let Some(identity) = pending.pop() {
+            let projection = self
+                .handle
+                .node(identity)
+                .expect("the form should be readable")
+                .expect("the node should exist")
+                .read()
+                .expect("the node should be readable")
+                .expect("the node should remain present");
+            if projection
+                .binding
+                .as_ref()
+                .is_some_and(|binding| binding.as_str() == pointer)
+            {
+                return identity;
+            }
+            pending.extend(projection.children);
+        }
+        panic!("a node bound at {pointer} should exist");
+    }
+}
+
+/// One start tag from the rendered markup.
+#[derive(Debug)]
+pub(super) struct Tag {
+    pub(super) element: String,
+    attributes: Vec<(String, String)>,
+}
+
+impl Tag {
+    pub(super) fn attribute(&self, name: &str) -> Option<&str> {
+        self.attributes
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.as_str())
+    }
+
+    pub(super) fn classes(&self) -> Vec<&str> {
+        self.attribute("class")
+            .map(|class| class.split_whitespace().collect())
+            .unwrap_or_default()
+    }
+
+    /// Whether the tag carries every class in `expected`.
+    pub(super) fn has_classes(&self, expected: &[&str]) -> bool {
+        let classes = self.classes();
+        expected.iter().all(|class| classes.contains(class))
+    }
+}
+
+/// Every start tag in `html`, with its attributes. Dioxus SSR writes text values in double
+/// quotes with the quote character escaped, so a quote always ends such a value, and writes
+/// boolean values bare (`required=true`).
+pub(super) fn tags(html: &str) -> Vec<Tag> {
+    let mut tags = Vec::new();
+    let mut rest = html;
+    while let Some(start) = rest.find('<') {
+        rest = &rest[start + 1..];
+        if rest.starts_with('/') || rest.starts_with('!') {
+            continue;
+        }
+        let end = rest.find('>').expect("a start tag should close");
+        let (tag, after) = rest.split_at(end);
+        rest = &after[1..];
+        let tag = tag.trim_end_matches('/');
+        let mut parts = tag.splitn(2, char::is_whitespace);
+        let element = parts.next().unwrap_or_default().to_owned();
+        let attributes = parts.next().map(attributes).unwrap_or_default();
+        tags.push(Tag {
+            element,
+            attributes,
+        });
+    }
+    tags
+}
+
+fn attributes(mut source: &str) -> Vec<(String, String)> {
+    let mut attributes = Vec::new();
+    loop {
+        source = source.trim_start();
+        if source.is_empty() {
+            return attributes;
+        }
+        let name_end = source
+            .find(|character: char| character == '=' || character.is_whitespace())
+            .unwrap_or(source.len());
+        let name = source[..name_end].to_owned();
+        source = &source[name_end..];
+        let Some(after_equals) = source.strip_prefix('=') else {
+            attributes.push((name, String::new()));
+            continue;
+        };
+        let (value, after_value) = match after_equals.strip_prefix('"') {
+            Some(quoted) => {
+                let end = quoted.find('"').expect("a quoted value should close");
+                (&quoted[..end], &quoted[end + 1..])
+            }
+            None => {
+                let end = after_equals
+                    .find(char::is_whitespace)
+                    .unwrap_or(after_equals.len());
+                after_equals.split_at(end)
+            }
+        };
+        attributes.push((name, value.to_owned()));
+        source = after_value;
+    }
+}
+
+/// Every id in `html`.
+fn ids(html: &str) -> Vec<String> {
+    tags(html)
+        .iter()
+        .filter_map(|tag| tag.attribute("id").map(str::to_owned))
+        .collect()
+}
+
+/// The markup inside the element carrying `id`: from the end of its start tag to its matching
+/// end tag, found by counting the element's own nested start and end tags.
+pub(super) fn inner_html(html: &str, id: &str) -> String {
+    let start = html
+        .find(&format!("id=\"{id}\""))
+        .unwrap_or_else(|| panic!("an element with id {id} should exist:\n{html}"));
+    let tag_start = html[..start]
+        .rfind('<')
+        .expect("the id sits in a start tag");
+    let element = html[tag_start + 1..]
+        .split(|character: char| character.is_whitespace() || character == '>')
+        .next()
+        .expect("a start tag names its element")
+        .to_owned();
+    let open = html[start..].find('>').expect("the start tag should close") + start + 1;
+    let start_tag = format!("<{element}");
+    let end_tag = format!("</{element}>");
+    let mut depth = 1;
+    let mut cursor = open;
+    while depth > 0 {
+        let next_open = html[cursor..].find(&start_tag).map(|at| at + cursor);
+        let next_close = html[cursor..]
+            .find(&end_tag)
+            .map(|at| at + cursor)
+            .unwrap_or_else(|| panic!("the element {id} should close:\n{html}"));
+        match next_open {
+            Some(at) if at < next_close => {
+                depth += 1;
+                cursor = at + start_tag.len();
+            }
+            _ => {
+                depth -= 1;
+                if depth == 0 {
+                    return html[open..next_close].to_owned();
+                }
+                cursor = next_close + end_tag.len();
+            }
+        }
+    }
+    unreachable!("the loop returns when the element closes")
+}
+
+/// The text content directly inside the first element carrying `id`, up to its first child tag.
+pub(super) fn text_of(html: &str, id: &str) -> String {
+    let start = html
+        .find(&format!("id=\"{id}\""))
+        .unwrap_or_else(|| panic!("an element with id {id} should exist:\n{html}"));
+    let rest = &html[start..];
+    let text_start = rest.find('>').expect("the tag should close") + 1;
+    let text_end = rest[text_start..]
+        .find('<')
+        .expect("the element should close");
+    rest[text_start..text_start + text_end].to_owned()
+}
+
+/// Asserts that every id referenced by an ARIA relationship attribute or a `for` in `html`
+/// resolves to an element, and returns how many references were checked.
+pub(super) fn assert_aria_references_resolve(html: &str) -> usize {
+    let ids = ids(html);
+    let mut references = 0;
+    for tag in tags(html) {
+        for attribute in [
+            "aria-describedby",
+            "aria-errormessage",
+            "aria-labelledby",
+            "for",
+        ] {
+            for id in tag
+                .attribute(attribute)
+                .into_iter()
+                .flat_map(str::split_whitespace)
+            {
+                references += 1;
+                assert!(
+                    ids.iter().any(|candidate| candidate == id),
+                    "{attribute}={id} should resolve"
+                );
+            }
+        }
+    }
+    references
+}

@@ -4,10 +4,12 @@ use schemaform::{
     CompilationProfile, FormDefinition,
     json::{parse_data_schema, parse_ui_schema_v1},
 };
-use schemaform_dioxus::{SchemaForm, RenderConfiguration, use_form};
+use schemaform_dioxus::{RenderConfiguration, SchemaForm, use_form};
 use serde_json::json;
 
-use crate::components::{DemoPane, DemoSurface, StatusChip, StatusLine, snippet_theme};
+use crate::components::{
+    DemoPane, DemoSurface, StatusChip, StatusLine, schemaform_daisyui, snippet_theme,
+};
 
 const DATA_SCHEMA: &str = r#"{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -229,6 +231,8 @@ pub fn SchemaEditorExample() -> Element {
     }
 }
 
+/// The form the playground renders for its current definition: built-in controls and layouts,
+/// with the shell, any arrays, and the finding summary from the demo's daisyUI component.
 #[component]
 fn PlaygroundForm(definition: CompiledDefinition) -> Element {
     let form = use_form(definition.0, initial_form_data());
@@ -239,7 +243,10 @@ fn PlaygroundForm(definition: CompiledDefinition) -> Element {
     };
     let bound_form = form.clone();
     let bound = use_hook(move || {
-        RenderConfiguration::default()
+        RenderConfiguration::builder()
+            .structure(schemaform_daisyui::structure())
+            .summary_presenter(schemaform_daisyui::findings())
+            .build()
             .bind(&bound_form)
             .expect("playground compilation preflights default renderer requirements")
     });

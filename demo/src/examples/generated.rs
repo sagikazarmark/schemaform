@@ -1,13 +1,15 @@
 use dioxus::prelude::*;
 use schemaform::FormDefinition;
-use schemaform_dioxus::{SchemaForm, RenderConfiguration, use_form};
+use schemaform_dioxus::{RenderConfiguration, SchemaForm, use_form};
 use serde_json::json;
 
-use crate::components::StatusLine;
+use crate::components::{StatusLine, schemaform_daisyui};
 
 /// Generated presentation needs only a Draft 2020-12 data schema. This one
 /// exercises text, integer, boolean, choice, nullable, constant, read-only, and
-/// write-only controls as well as validation and submission.
+/// write-only controls as well as validation and submission. The controls are
+/// the built-in renderer's; only the shell and the finding summary come from
+/// the demo's daisyUI component.
 #[component]
 pub fn GeneratedControlsExample() -> Element {
     let definition = use_hook(definition);
@@ -27,7 +29,10 @@ pub fn GeneratedControlsExample() -> Element {
     .expect("the generated example form should be created");
     let bound_form = form.clone();
     let bound = use_hook(move || {
-        RenderConfiguration::default()
+        RenderConfiguration::builder()
+            .structure(schemaform_daisyui::structure())
+            .summary_presenter(schemaform_daisyui::findings())
+            .build()
             .bind(&bound_form)
             .expect("built-in controls should bind")
     });

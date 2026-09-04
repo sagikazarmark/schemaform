@@ -1,16 +1,24 @@
 # schemaform_daisyui
 
-A `schemaform-dioxus` control renderer that presents every control kind with
-the `dioxus-daisyui-components` registry: strings, numbers, and integers with
-`Field`, `FieldLabel`, `Input`, `FieldDescription`, and `FieldError`; booleans
-with a native checkbox or the registry's `Checkbox`; choices with
-`NativeSelect`, `RadioGroup`, or `Select`; constants as read-only output; and
-presence operations as its `Button`. A whole form's controls are therefore
-daisyUI-rendered, and only the structural nodes — layouts, groups, tabs,
-arrays, the form shell — still come from the adapter's built-in renderer. The
-demo styles those through the adapter's `schemaform-*` class hooks with daisyUI
-classes in its own stylesheet (`demo/src/forms.css`); that theme is the demo's,
-not this component's, and moves to structure renderers once those seams ship.
+A `schemaform-dioxus` renderer package that presents a form with the
+`dioxus-daisyui-components` registry and daisyUI classes. It fills three seams:
+
+- A **control renderer** for every control kind: strings, numbers, and integers
+  with `Field`, `FieldLabel`, `Input`, `FieldDescription`, and `FieldError`;
+  booleans with a native checkbox or the registry's `Checkbox`; choices with
+  `NativeSelect`, `RadioGroup`, or `Select`; constants as read-only output; and
+  presence operations as its `Button`.
+- A **structure bundle** with a `CollectionRenderer` that presents homogeneous
+  arrays as a fieldset of item cards with joined square action buttons, and a
+  `ShellRenderer` that lays the form out with a primary submit button.
+- A **finding presenter** that frames the form-wide summary as an alert of
+  focus-to-target links and renders node-local findings as a stack.
+
+Only the structural nodes no seam exists for yet — layouts, groups, and tabs —
+still come from the adapter's built-in renderer. The demo styles those through
+the adapter's `schemaform-*` class hooks with daisyUI classes in its own
+stylesheet (`demo/src/forms.css`); that theme is the demo's, not this
+component's, and shrinks as further structure seams ship.
 
 ## Browser CSR only
 
@@ -32,9 +40,11 @@ registry without changing shape:
   pinned to the version the registry's own manifests declare, so the copied
   widgets and this mapping share one `Binding` and one `FieldMetaValues`. The
   `schemaform` and `schemaform-dioxus` entries name the release that ships the
-  headless edit hooks; this demo builds them from the workspace instead.
+  headless edit hooks and the structure seams; this demo builds them from the
+  workspace instead.
 - `mod.rs`, `component.rs`, `mapping.rs`, `parts.rs`, `text.rs`, `boolean.rs`,
-  `choice.rs`, and `constant.rs` are what an install copies.
+  `choice.rs`, `constant.rs`, `collection.rs`, `shell.rs`, `findings.rs`, and
+  the test-only `test_support.rs` are what an install copies.
 - The registry components live beside this one under `src/components/`,
   copied verbatim from the pinned revision and committed. CI never runs
   `dx components add`.
@@ -66,6 +76,31 @@ replacement placeholder, the edit hook puts it back there after every write,
 and the label is the localized replacement label. A constant is never an
 editable widget with a metadata-only field context; it is output, with the
 presence affordances that materialize or remove it.
+
+## What it renders around the controls
+
+| Node | Presentation |
+| --- | --- |
+| homogeneous array | `fieldset` carrying the adapter's element id, focusable for the container presence operations; `fieldset-legend`; help; the incompatible-value readout and container presence `Button`s; a dashed empty state while there are no items; the adapter-keyed item hosts in a grid; the append affordance as an outline `Button`; the adapter's live region; the local findings |
+| array item | `card card-border card-sm` with `role="group"`, labelled by a title reading the item noun and its position; the insert, move up, move down, and remove affordances as a `join` of `btn-square` icon buttons whose `aria-label` is the affordance's positional accessible name and whose `title` is its label; the item's controls follow |
+| form shell | a `grid gap-4` of the adapter's summary region, the body, and the submit affordance as `btn btn-primary` of `type="submit"` |
+| finding summary | nothing while empty; otherwise `alert alert-soft`, `alert-error` while any finding blocks submission and `alert-warning` otherwise, with one `link` button per finding that reveals and focuses its target |
+| node-local findings | one `p` per finding in `text-error` or `text-warning` |
+
+Every button carries its affordance id, so focus after a move lands on the same
+button in the moved row; every finding element carries its stable id, so ids the
+adapter hands out in `aria-describedby` resolve. Identity, keying, focus after a
+mutation, and announcements stay the adapter's: the renderers place what they
+are handed and never compose affordances themselves.
+
+A built-in fixed object rendered as an array item is flattened into its card —
+its own border, padding, and background removed and its legend made
+screen-reader-only — through Tailwind arbitrary variants on the card body that
+name the adapter's `schemaform-group` hook. That is the one place the component
+reaches for a class hook; it goes when a `FixedObjectRenderer` seam exists.
+
+The empty state's text is a fixed English string: the localized item noun the
+context carries is a name, not a word a sentence can be built around.
 
 ## What it maps
 
@@ -118,16 +153,28 @@ use crate::components::schemaform_daisyui;
 
 let bound = RenderConfiguration::builder()
     .controls(schemaform_daisyui::controls())
+    .structure(schemaform_daisyui::structure())
+    .summary_presenter(schemaform_daisyui::findings())
+    .local_presenter(schemaform_daisyui::findings())
     .build()
     .bind(&form)?;
 ```
+
+The seams are independent: a host that keeps the built-in controls can still
+adopt `structure()` and the summary presenter, as the demo's other gallery pages
+do. Structure renderers are fixed when a form is bound; changing the bundle
+means rebinding.
 
 `controls()` starts from `ControlRegistry::with_builtins()`, registers the
 renderer through a matcher above the built-in priority that accepts every
 definition node the adapter derives a control kind from, and registers one
 renderer each for the exact widget symbols `daisyui:radio` and `daisyui:select`
-(`RADIO_WIDGET` and `SELECT_WIDGET`). The widget symbols are named on a UI
-schema control:
+(`RADIO_WIDGET` and `SELECT_WIDGET`). `structure()` is
+`StructureRenderers::default()` with the collection and shell slots replaced,
+so any slot this component does not implement stays the built-in. `findings()`
+is one presenter for both presenter slots; it tells the summary from a local
+collection by `FindingCollectionContext::is_summary`. The widget symbols are
+named on a UI schema control:
 
 ```json
 {

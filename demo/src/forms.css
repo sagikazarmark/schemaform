@@ -1,10 +1,14 @@
-/* daisyUI theme for the built-in renderer's `schemaform-*` class hooks.
+/* daisyUI theme for the `schemaform-*` class hooks of the built-in structure no renderer seam
+ * exists for yet.
  *
- * `schemaform-dioxus` renders unstyled semantic HTML; this file dresses it in daisyUI by applying
- * daisyUI's component classes (`fieldset`, `input`, `checkbox`, `btn`, `alert`, ...) to the class
- * hooks and data markers the built-in renderer emits. It is a Tailwind partial imported by the
- * site stylesheet, so `@apply` resolves against the daisyUI plugin and every colour follows the
- * active `data-theme`.
+ * `schemaform-dioxus` renders unstyled semantic HTML; this file dresses the built-in layouts,
+ * groups, tabs, controls, and their presence operations in daisyUI by applying daisyUI's component
+ * classes (`fieldset`, `input`, `checkbox`, `btn`, ...) to the class hooks and data markers the
+ * built-in renderers emit. Homogeneous arrays, the form shell (the submit button), and the finding
+ * summary are not styled here: the demo renders them through the `schemaform_daisyui` component's
+ * `CollectionRenderer`, `ShellRenderer`, and finding presenter, which emit daisyUI components
+ * directly. It is a Tailwind partial imported by the site stylesheet, so `@apply` resolves against
+ * the daisyUI plugin and every colour follows the active `data-theme`.
  *
  * Hand-written rules are limited to what the hooks cannot express through a class:
  *
@@ -20,7 +24,7 @@
 
 @layer components {
   .schemaform:where(:not([data-schemaform-unstyled] *)) {
-    @apply grid gap-4 text-sm;
+    @apply text-sm;
 
     /* Layouts. The grid's columns come from the stylesheet the built-in emits per form. */
     .schemaform-stack,
@@ -41,7 +45,7 @@
       @apply leading-6 text-base-content/70;
     }
 
-    /* Fixed-object groups, authored groups, and arrays are fieldsets. */
+    /* Fixed-object groups and authored groups are fieldsets. */
     .schemaform-group {
       @apply fieldset min-w-0 gap-4 rounded-box border border-base-300 bg-base-100 p-4 text-sm;
     }
@@ -118,75 +122,21 @@
       @apply text-warning;
     }
 
-    /* The finding summary is an alert once it has something to say, each finding a button that
-     * reveals and focuses its target; an unsupported region explains itself in place. An alert
-     * lays its children out in columns, so both stack theirs instead. */
-    [data-finding-summary]:has(.schemaform-finding),
+    /* An unsupported region explains itself in place as an alert. An alert lays its children
+     * out in columns, so it stacks them instead. */
     .schemaform-unsupported {
-      @apply alert flex flex-col items-stretch gap-1 alert-soft;
+      @apply alert flex flex-col items-stretch gap-1 alert-soft alert-warning;
     }
 
-    [data-finding-summary]:has(.schemaform-finding) {
-      @apply alert-error;
-    }
-
-    .schemaform-unsupported {
-      @apply alert-warning;
-    }
-
-    .schemaform-finding > button {
-      @apply link text-start;
-    }
-
-    /* Buttons. Presence operations, array item operations, and append are small buttons and
-     * submit is the primary one. The selectors name the built-in's wrappers and markers, so a
-     * widget a custom renderer builds on a `button` (the registry's checkbox, radio item, and
-     * select trigger) is never touched. */
-    .schemaform-presence-actions > button,
-    .schemaform-array-item > button,
-    [data-append-item],
-    & > button[type="submit"] {
-      @apply btn w-fit;
-    }
-
-    .schemaform-presence-actions > button,
-    .schemaform-array-item > button,
-    [data-append-item] {
-      @apply btn-sm;
-    }
-
-    & > button[type="submit"] {
-      @apply btn-primary;
+    /* Buttons. The presence operations of a built-in group are small buttons. The selector names
+     * the built-in's wrapper, so a widget a custom renderer builds on a `button` (the registry's
+     * checkbox, radio item, and select trigger) is never touched. */
+    .schemaform-presence-actions > button {
+      @apply btn w-fit btn-sm;
     }
 
     .schemaform-presence-actions {
       @apply flex flex-wrap gap-2 empty:hidden;
-    }
-
-    /* Array items are cards: the item's node first, its operations in a row below. A fixed
-     * object as the item flattens into the card rather than nesting a second border. */
-    .schemaform-array-item {
-      @apply flex flex-wrap items-center gap-2 rounded-box border border-base-300 bg-base-100 p-4;
-    }
-
-    .schemaform-array-item > :not(button) {
-      @apply basis-full;
-    }
-
-    .schemaform-array-item > button {
-      @apply btn-ghost;
-    }
-
-    .schemaform-array-item > .schemaform-group {
-      @apply border-0 bg-transparent p-0;
-    }
-
-    [data-append-item] {
-      @apply btn-outline;
-    }
-
-    [data-array-status] {
-      @apply text-xs text-base-content/60 empty:hidden;
     }
 
     /* Tabs. `tabs` applies to the tablist; `tabs-border` and `tab` are scoped to `.tabs > .tab`

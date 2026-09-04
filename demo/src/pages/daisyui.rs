@@ -7,8 +7,8 @@ use crate::components::{
 };
 use crate::examples::daisyui::{DaisyuiFormExample, WritingDirection};
 
-/// The daisyUI theme for the built-in renderer's class hooks, quoted on the page exactly as the
-/// site stylesheet compiles it.
+/// The daisyUI theme for the class hooks of the built-in structure no seam exists for yet, quoted
+/// on the page exactly as the site stylesheet compiles it.
 const HOOK_THEME: &str = include_str!("../forms.css");
 
 #[component]
@@ -60,11 +60,11 @@ fn DaisyuiPage(direction: WritingDirection) -> Element {
         PageHeader {
             eyebrow: "Renderers",
             title,
-            intro: "A custom control renderer owns its whole control region, and the built-in structure around it is styled with daisyUI classes through its class hooks. The whole form follows the site theme; the right-to-left variant is the same form under dir=\"rtl\".",
+            intro: "A custom control renderer owns its whole control region, a collection renderer the array chrome, a shell renderer the summary placement and the submit button, and a finding presenter the summary alert; the built-in structure no seam exists for yet is styled with daisyUI classes through its class hooks. The whole form follows the site theme; the right-to-left variant is the same form under dir=\"rtl\".",
         }
         DaisyuiVariants { current }
         ExampleSection {
-            title: "Registry widgets in the built-in structure",
+            title: "Registry widgets, daisyUI arrays and shell",
             intro: rsx! {
                 "The "
                 InlineCode { "schemaform_daisyui" }
@@ -82,7 +82,11 @@ fn DaisyuiPage(direction: WritingDirection) -> Element {
                 InlineCode { "daisyui:radio" }
                 " or "
                 InlineCode { "daisyui:select" }
-                "; constants are read-only output. The tabs, the identity group and its grid, the billing address with its remove operation, the team and tag arrays with their item operations, the finding summary, and the submit button are the built-in renderer's, dressed by the stylesheet below. Try a two-character name, switch to another tab, and submit: the summary lists the finding, and its button reveals the tab and focuses the control."
+                "; constants are read-only output. Its "
+                InlineCode { "structure()" }
+                " bundle renders the team and tag arrays as cards with joined item actions and the form shell with a primary submit button, and its "
+                InlineCode { "findings()" }
+                " presenter frames the summary as an alert. The tabs, the identity group and its grid, and the billing address with its remove operation are the built-in renderer's, dressed by the stylesheet below. Try a two-character name, switch to another tab, and submit: the summary lists the finding, and its button reveals the tab and focuses the control."
             },
             demo: rsx! { DaisyuiFormExample { direction } },
             code: rsx! {
@@ -90,21 +94,19 @@ fn DaisyuiPage(direction: WritingDirection) -> Element {
             },
         }
         section { class: "mt-10 rounded-[2rem] border border-base-300 bg-base-100 p-6 shadow-sm sm:p-8",
-            h2 { class: "text-xl font-semibold tracking-tight", "daisyUI classes on the built-in class hooks" }
+            h2 { class: "text-xl font-semibold tracking-tight", "daisyUI classes on the remaining class hooks" }
             p { class: "mt-2 max-w-[70ch] text-sm leading-6 text-base-content/65",
-                "Until structure renderers ship, the built-in groups, tabs, arrays, presence operations, finding summary, and submit button take their look from this Tailwind partial. It applies daisyUI's "
+                "The structure no renderer seam exists for yet — the built-in groups, tabs, layouts, and their presence operations, plus the built-in controls on the other gallery pages — takes its look from this Tailwind partial. It applies daisyUI's "
                 InlineCode { "fieldset" }
                 ", "
                 InlineCode { "input" }
                 ", "
                 InlineCode { "checkbox" }
-                ", "
-                InlineCode { "btn" }
                 ", and "
-                InlineCode { "alert" }
+                InlineCode { "btn" }
                 " classes to the "
                 InlineCode { "schemaform-*" }
-                " hooks and data markers the adapter emits, so every colour follows the active theme and every inline measurement is logical. Hand-written rules are down to what no class expresses: the tab buttons, because daisyUI scopes "
+                " hooks and data markers the adapter emits, so every colour follows the active theme and every inline measurement is logical. Arrays, the finding summary, and the submit button no longer appear here: the collection and shell renderers and the finding presenter render them as daisyUI components directly. Hand-written rules are down to what no class expresses: the tab buttons, because daisyUI scopes "
                 InlineCode { "tab" }
                 " to a literal "
                 InlineCode { ".tabs > .tab" }
@@ -115,12 +117,12 @@ fn DaisyuiPage(direction: WritingDirection) -> Element {
             div { class: "mt-6 max-h-[32rem] overflow-auto", SourcePanel { source: HOOK_THEME } }
         }
         DocsCallout {
-            title: "The mapping and the theme live in the demo",
+            title: "The component and the theme live in the demo",
             action: Some(ExternalAction::new(
                 "Read the component's README",
                 "https://github.com/sagikazarmark/schemaform/blob/main/demo/src/components/schemaform_daisyui/README.md",
             )),
-            "The published crates do not depend on dioxus-field, the registry, or daisyUI. The component is laid out as a dx components member under src/components so it can move to a registry later, the theme is the demo's own stylesheet, and both are browser-CSR only."
+            "The published crates do not depend on dioxus-field, the registry, or daisyUI. The component — its control renderer, structure bundle, and finding presenter — is laid out as a dx components member under src/components so it can move to a registry later, the theme for the remaining hooks is the demo's own stylesheet, and both are browser-CSR only."
         }
     }
 }

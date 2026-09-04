@@ -1,9 +1,9 @@
 use dioxus::prelude::*;
 use schemaform::{CompilationProfile, FormDefinition, json::parse_ui_schema_v1};
-use schemaform_dioxus::{SchemaForm, RenderConfiguration, use_form};
+use schemaform_dioxus::{RenderConfiguration, SchemaForm, use_form};
 use serde_json::json;
 
-use crate::components::StatusLine;
+use crate::components::{StatusLine, schemaform_daisyui};
 
 const UI_SCHEMA: &str = r#"{
   "version": 1,
@@ -106,7 +106,9 @@ const UI_SCHEMA: &str = r#"{
 }"#;
 
 /// The independent UI schema chooses ordering and layout without weakening the
-/// data schema's validation or changing submitted form data.
+/// data schema's validation or changing submitted form data. The controls and
+/// layouts are the built-in renderer's; the shell and the finding summary come
+/// from the demo's daisyUI component.
 #[component]
 pub fn AuthoredUiSchemaExample() -> Element {
     let definition = use_hook(definition);
@@ -124,7 +126,10 @@ pub fn AuthoredUiSchemaExample() -> Element {
     .expect("the authored example form should be created");
     let bound_form = form.clone();
     let bound = use_hook(move || {
-        RenderConfiguration::default()
+        RenderConfiguration::builder()
+            .structure(schemaform_daisyui::structure())
+            .summary_presenter(schemaform_daisyui::findings())
+            .build()
             .bind(&bound_form)
             .expect("authored controls should bind")
     });
