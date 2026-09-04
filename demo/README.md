@@ -26,8 +26,9 @@ with `cargo test` from this directory; the Dagger pipeline runs them as the
 - `src/examples/` contains the small runnable components shown in the gallery.
 - `src/pages/` adds explanation and quotes each example's exact source.
 - `src/components/` contains the responsive shell and documentation UI, plus
-  the `dx components` members: `button`, `field`, and `input` copied verbatim
-  from the `dioxus-daisyui-components` registry at a pinned revision, and
+  the `dx components` members: `button`, `checkbox`, `field`, `input`,
+  `native_select`, `radio_group`, and `select` copied verbatim from the
+  `dioxus-daisyui-components` registry at a pinned revision, and
   `schemaform_daisyui`, the daisyUI control renderer built on them (see its
   README). They are committed; CI never runs `dx components add`.
 - `style.css` is the Tailwind and daisyUI input that `npm run build` compiles
@@ -36,6 +37,6 @@ with `cargo test` from this directory; the Dagger pipeline runs them as the
 
 The gallery covers generated controls compiled from a data schema, homogeneous
 arrays with stable item identity, authored UI schemas with layouts and tabs,
-validation and submission outcomes, a daisyUI-rendered form driven by a custom
-control renderer, and a playground for editing a data schema and UI schema side
-by side with the rendered form.
+validation and submission outcomes, a form whose every control is
+daisyUI-rendered through a custom control renderer, and a playground for
+editing a data schema and UI schema side by side with the rendered form.

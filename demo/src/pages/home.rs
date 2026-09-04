@@ -22,8 +22,8 @@ pub fn Home() -> Element {
             Route::Presentation {},
         ),
         (
-            "daisyUI text controls",
-            "Render string, number, and integer controls with a component library through a custom control renderer.",
+            "daisyUI controls",
+            "Render every control kind with a component library through a custom control renderer.",
             Route::Daisyui {},
         ),
         (

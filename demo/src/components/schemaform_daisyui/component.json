@@ -1,6 +1,6 @@
 {
   "name": "schemaform_daisyui",
-  "description": "A schemaform-dioxus control renderer that presents string, number, and integer controls with the daisyUI registry's Field and Input parts.",
+  "description": "A schemaform-dioxus control renderer that presents string, number, integer, boolean, choice, and constant controls with the daisyUI registry's Field, Input, Checkbox, NativeSelect, RadioGroup, and Select parts.",
   "exclude": ["component.json", "README.md"],
   "componentDependencies": [
     {
@@ -10,6 +10,26 @@
     },
     {
       "name": "input",
+      "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
+      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+    },
+    {
+      "name": "checkbox",
+      "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
+      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+    },
+    {
+      "name": "native_select",
+      "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
+      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+    },
+    {
+      "name": "radio_group",
+      "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
+      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+    },
+    {
+      "name": "select",
       "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
       "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
     },

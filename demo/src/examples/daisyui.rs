@@ -1,17 +1,53 @@
 use dioxus::prelude::*;
-use schemaform::FormDefinition;
+use schemaform::{CompilationProfile, FormDefinition, json::parse_ui_schema_v1};
 use schemaform_dioxus::{RenderConfiguration, SchemaForm, use_form};
 use serde_json::json;
 
 use crate::components::{StatusLine, schemaform_daisyui};
 
-/// The same generated form as the built-in page, bound through the daisyUI
-/// control registry: every string, number, and integer control is a daisyUI
-/// `Field` with an `Input`, label, help, errors, and presence affordances, while
-/// the boolean, choice, and constant controls still come from the built-in
-/// renderer.
+/// The authored presentation: every control in data-schema order, except that the billing
+/// cycle asks for the `daisyui:radio` widget and the region for `daisyui:select`. Every other
+/// choice is the default native select.
+const UI_SCHEMA: &str = r#"{
+  "version": 1,
+  "root": {
+    "type": "stack",
+    "value": {
+      "children": [
+        {
+          "type": "auto",
+          "value": {
+            "binding": { "origin": "root", "pointer": "" },
+            "properties": { "exclude": ["billing_cycle", "region"] }
+          }
+        },
+        {
+          "type": "control",
+          "value": {
+            "binding": { "origin": "root", "pointer": "/billing_cycle" },
+            "widget": "daisyui:radio"
+          }
+        },
+        {
+          "type": "control",
+          "value": {
+            "binding": { "origin": "root", "pointer": "/region" },
+            "widget": "daisyui:select"
+          }
+        }
+      ]
+    }
+  }
+}"#;
+
+/// A form bound through the daisyUI control registry: every control kind is a daisyUI field.
+/// Strings, numbers, and integers are `Input`s; a non-nullable boolean is a native checkbox, a
+/// nullable one the registry `Checkbox` with null as indeterminate, a write-only one a
+/// replacement select; choices are a native select, a radio group, or the compound select as the
+/// UI schema asks; constants are read-only output. Only the layout and the submit button come
+/// from the built-ins.
 #[component]
-pub fn DaisyuiTextControlsExample() -> Element {
+pub fn DaisyuiControlsExample() -> Element {
     let definition = use_hook(definition);
     let form = use_form(
         definition,
@@ -20,7 +56,12 @@ pub fn DaisyuiTextControlsExample() -> Element {
             "age": 36,
             "price": 19.5,
             "active": true,
+            "newsletter": null,
+            "two_factor": true,
             "plan": "team",
+            "billing_cycle": "yearly",
+            "region": "eu",
+            "recovery_channel": "email",
             "nickname": null,
             "account_type": "standard",
             "customer_id": "cus_1843",
@@ -45,8 +86,10 @@ pub fn DaisyuiTextControlsExample() -> Element {
                 form: bound,
                 on_submit: move |snapshot: schemaform::SubmissionSnapshot| {
                     let mut displayed = snapshot.form_data().clone();
-                    if let Some(access_token) = displayed.get_mut("access_token") {
-                        *access_token = serde_json::Value::String("[redacted]".to_owned());
+                    for secret in ["access_token", "two_factor", "recovery_channel"] {
+                        if let Some(value) = displayed.get_mut(secret) {
+                            *value = serde_json::Value::String("[redacted]".to_owned());
+                        }
                     }
                     submitted.set(
                         serde_json::to_string_pretty(&displayed)
@@ -71,11 +114,16 @@ pub fn DaisyuiTextControlsExample() -> Element {
 }
 
 fn definition() -> FormDefinition {
-    FormDefinition::compile(json!({
+    let ui_schema = parse_ui_schema_v1(UI_SCHEMA.as_bytes(), &CompilationProfile::default())
+        .expect("the daisyUI example UI schema should parse");
+    FormDefinition::compiler(json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "age", "price", "active", "plan", "account_type"],
+        "required": [
+            "name", "age", "price", "active", "two_factor", "plan", "region",
+            "recovery_channel", "account_type"
+        ],
         "properties": {
             "name": {
                 "type": "string",
@@ -98,9 +146,34 @@ fn definition() -> FormDefinition {
                 "type": "boolean",
                 "title": "Account is active"
             },
+            "newsletter": {
+                "type": ["boolean", "null"],
+                "title": "Product newsletter",
+                "description": "Null means the account holder has not decided yet."
+            },
+            "two_factor": {
+                "type": "boolean",
+                "title": "Two-factor authentication",
+                "writeOnly": true
+            },
             "plan": {
                 "title": "Plan",
                 "enum": ["starter", "team", "enterprise"]
+            },
+            "billing_cycle": {
+                "type": ["string", "null"],
+                "title": "Billing cycle",
+                "description": "Null keeps the plan's default cycle.",
+                "enum": ["monthly", "yearly", null]
+            },
+            "region": {
+                "title": "Data region",
+                "enum": ["eu", "us", "apac"]
+            },
+            "recovery_channel": {
+                "title": "Recovery channel",
+                "enum": ["email", "sms"],
+                "writeOnly": true
             },
             "nickname": {
                 "type": ["string", "null"],
@@ -122,13 +195,40 @@ fn definition() -> FormDefinition {
             }
         }
     }))
-    .expect("the daisyUI example data schema should compile")
+    .ui_schema(ui_schema)
+    .compile()
+    .expect("the daisyUI example schemas should compile")
 }
 
 #[cfg(test)]
 mod tests {
+    use dioxus::core::{NoOpMutations, VirtualDom};
+
     #[test]
-    fn example_data_schema_compiles() {
+    fn example_schemas_compile() {
         super::definition();
+    }
+
+    /// The registry binds every control the example authors, and the two widget symbols reach
+    /// their widgets; a bind failure would surface as a rendered panic rather than a form.
+    #[test]
+    fn the_example_form_binds_and_renders_every_widget() {
+        let mut dom = VirtualDom::new(super::DaisyuiControlsExample);
+        dom.rebuild_in_place();
+        for _ in 0..4 {
+            dom.render_immediate(&mut NoOpMutations);
+        }
+        let html = dioxus_ssr::render(&dom);
+
+        assert!(!html.contains("Encountered panic"), "{html}");
+        assert!(html.contains("role=\"radiogroup\""), "{html}");
+        assert!(html.contains("aria-haspopup=\"listbox\""), "{html}");
+        assert!(html.contains("role=\"checkbox\""), "{html}");
+        assert!(html.contains("data-write-only-replacement"), "{html}");
+        assert!(
+            html.contains("data-schemaform-control=\"constant\""),
+            "{html}"
+        );
+        assert!(!html.contains("class=\"schemaform-control\""), "{html}");
     }
 }

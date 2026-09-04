@@ -62,7 +62,7 @@ fn DemoLayout() -> Element {
                         SidebarNavLink { route: Route::Presentation {}, label: "Authored UI schema" }
                     }
                     SidebarNavSection { label: "Renderers",
-                        SidebarNavLink { route: Route::Daisyui {}, label: "daisyUI text controls" }
+                        SidebarNavLink { route: Route::Daisyui {}, label: "daisyUI controls" }
                     }
                     SidebarNavSection { label: "Explore",
                         SidebarNavLink { route: Route::Playground {}, label: "Schema playground" }

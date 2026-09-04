@@ -4,32 +4,44 @@ use dioxus_code::{Code, code};
 use crate::components::{
     DocsCallout, ExampleSection, ExternalAction, InlineCode, PageHeader, snippet_theme,
 };
-use crate::examples::daisyui::DaisyuiTextControlsExample;
+use crate::examples::daisyui::DaisyuiControlsExample;
 
 #[component]
 pub fn Daisyui() -> Element {
     rsx! {
         PageHeader {
             eyebrow: "Renderers",
-            title: "daisyUI text controls",
-            intro: "A custom control renderer owns its whole control region. Here every string, number, and integer control is rendered by the daisyUI registry's Field and Input parts, while every other node kind still comes from the built-in renderer.",
+            title: "daisyUI controls",
+            intro: "A custom control renderer owns its whole control region. Here every control kind is rendered by the daisyUI registry's Field parts and widgets, so only the layout and the submit button still come from the built-in renderer.",
         }
         ExampleSection {
-            title: "Registry widgets on the headless text edit hook",
+            title: "Registry widgets on the headless edit hooks",
             intro: rsx! {
                 "The "
                 InlineCode { "schemaform_daisyui" }
                 " component registers one "
                 InlineCode { "ControlRenderer" }
-                " above the built-in priority for string, number, and integer controls. It maps "
+                " above the built-in priority for every control kind, plus one per widget symbol. It maps "
                 InlineCode { "use_text_edit" }
-                " onto a "
+                ", "
+                InlineCode { "use_boolean_edit" }
+                ", and "
+                InlineCode { "use_choice_edit" }
+                " onto "
                 InlineCode { "dioxus-field" }
-                " binding and the node presentation onto field metadata, so the registry's "
+                " bindings and the node presentation onto field metadata. Strings, numbers, and integers are an "
                 InlineCode { "Input" }
-                " shows the label, help, errors, and invalid state the core computes. Try a two-character name, a non-numeric age, or the nickname's presence affordances, then submit."
+                "; a non-nullable boolean is a native checkbox and a nullable one the registry "
+                InlineCode { "Checkbox" }
+                " showing null as indeterminate; a write-only boolean or choice is a replacement select that never echoes its value; choices are a "
+                InlineCode { "NativeSelect" }
+                " unless the UI schema names "
+                InlineCode { "daisyui:radio" }
+                " or "
+                InlineCode { "daisyui:select" }
+                "; constants are read-only output. Try a two-character name, set the newsletter to null and back, pick a billing cycle with the arrow keys, then submit."
             },
-            demo: rsx! { DaisyuiTextControlsExample {} },
+            demo: rsx! { DaisyuiControlsExample {} },
             code: rsx! {
                 Code { src: code!("src/examples/daisyui.rs"), theme: snippet_theme() }
             },

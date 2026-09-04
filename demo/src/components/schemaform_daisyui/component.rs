@@ -1,20 +1,21 @@
 //! The daisyUI control renderer and the registry that selects it.
 
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use dioxus::prelude::*;
-use dioxus_field::FieldContext;
-use dioxus_primitives::dioxus_attributes::attributes;
-use schemaform::definition::{DefinitionNodeView, SemanticKind};
+use schemaform::{
+    WidgetSymbol,
+    definition::{DefinitionNodeView, SemanticKind},
+};
 use schemaform_dioxus::{
     BuiltinControlRenderer, ControlKind, ControlMatcher, ControlRegistry, ControlRenderContext,
-    ControlRenderer, render::BUILTIN_CONTROL_PRIORITY, use_text_edit,
+    ControlRenderer, render::BUILTIN_CONTROL_PRIORITY,
 };
 
-use super::mapping::{field_meta_values, is_field_error, use_text_binding};
-use crate::components::button::{Button, ButtonSize};
-use crate::components::field::{Field, FieldDescription, FieldError, FieldLabel};
-use crate::components::input::Input;
+use super::boolean::BooleanControl;
+use super::choice::{NativeSelectControl, RadioGroupControl, SelectControl};
+use super::constant::ConstantControl;
+use super::text::TextControl;
 
 /// Matcher priority at which [`controls`] registers [`DaisyuiControlRenderer`].
 ///
@@ -22,37 +23,96 @@ use crate::components::input::Input;
 /// and the built-in keeps the rest.
 pub const DAISYUI_CONTROL_PRIORITY: i32 = BUILTIN_CONTROL_PRIORITY + 10;
 
-/// A control registry in which string, number, and integer controls render as daisyUI fields
-/// and every other control kind falls back to the built-in renderer.
+/// The widget symbol a UI schema control names to render a choice as a radio group.
+pub const RADIO_WIDGET: &str = "daisyui:radio";
+
+/// The widget symbol a UI schema control names to render a choice as the registry's compound
+/// select rather than the native one.
+pub const SELECT_WIDGET: &str = "daisyui:select";
+
+/// A control registry in which every control kind renders as a daisyUI field.
+///
+/// The registry starts from the built-ins, so structural nodes keep their built-in
+/// presentation and a control the daisyUI renderer does not accept still renders. Choices render
+/// as a native select unless the UI schema names [`RADIO_WIDGET`] or [`SELECT_WIDGET`] for them.
 pub fn controls() -> ControlRegistry {
-    ControlRegistry::with_builtins().matcher(
-        DAISYUI_CONTROL_PRIORITY,
-        Arc::new(TextControls),
-        Arc::new(DaisyuiControlRenderer),
-    )
+    ControlRegistry::with_builtins()
+        .matcher(
+            DAISYUI_CONTROL_PRIORITY,
+            Arc::new(DaisyuiControls),
+            Arc::new(DaisyuiControlRenderer::default()),
+        )
+        .widget(
+            widget_symbol(RADIO_WIDGET),
+            Arc::new(DaisyuiControlRenderer::with_choice_widget(
+                ChoiceWidget::RadioGroup,
+            )),
+        )
+        .widget(
+            widget_symbol(SELECT_WIDGET),
+            Arc::new(DaisyuiControlRenderer::with_choice_widget(
+                ChoiceWidget::Select,
+            )),
+        )
+}
+
+/// The registry key for one of this component's widget symbols.
+fn widget_symbol(symbol: &str) -> WidgetSymbol {
+    WidgetSymbol::parse(symbol).expect("the daisyUI widget symbols are non-empty")
 }
 
 /// Accepts exactly the definition nodes [`DaisyuiControlRenderer`] presents itself: those the
-/// adapter derives a string, number, or integer control kind from.
-struct TextControls;
+/// adapter derives a control kind from.
+struct DaisyuiControls;
 
-impl ControlMatcher for TextControls {
+impl ControlMatcher for DaisyuiControls {
     fn matches(&self, definition: DefinitionNodeView<'_>) -> bool {
         matches!(
             definition.semantic_kind(),
-            Some(SemanticKind::String | SemanticKind::Number | SemanticKind::Integer)
+            Some(
+                SemanticKind::String
+                    | SemanticKind::Number
+                    | SemanticKind::Integer
+                    | SemanticKind::Boolean
+                    | SemanticKind::Choice
+                    | SemanticKind::Null
+            )
         )
     }
 }
 
-/// Renders string, number, and integer controls with the registry's `Field` and `Input`.
+/// The widget a [`DaisyuiControlRenderer`] presents a selectable choice with.
 ///
-/// The renderer owns the whole control region: label, input, help, findings, and presence
-/// affordances. Should a host register it for a control of another kind, that control is
-/// handed to [`BuiltinControlRenderer`] rather than to an editable widget the mapping does not
-/// cover.
+/// An exact widget request never reaches the renderer at render time, so the registry carries
+/// one renderer per symbol and the symbol's meaning travels here.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct DaisyuiControlRenderer;
+pub enum ChoiceWidget {
+    /// The registry's `NativeSelect`: a native `select` at native-control weight.
+    #[default]
+    NativeSelect,
+    /// The registry's `RadioGroup`: one `RadioItem` per option.
+    RadioGroup,
+    /// The registry's compound `Select`: a trigger and a dropdown listbox.
+    Select,
+}
+
+/// Renders every control kind with the registry's `Field` parts and widgets.
+///
+/// The renderer owns the whole control region: label, widget, help, findings, and presence
+/// affordances. Should a host register it for a control kind this component does not know, that
+/// control is handed to [`BuiltinControlRenderer`] rather than to an editable widget the mapping
+/// does not cover.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DaisyuiControlRenderer {
+    choice: ChoiceWidget,
+}
+
+impl DaisyuiControlRenderer {
+    /// A renderer presenting choices with `choice`; [`Default`] presents them natively.
+    pub fn with_choice_widget(choice: ChoiceWidget) -> Self {
+        Self { choice }
+    }
+}
 
 impl ControlRenderer for DaisyuiControlRenderer {
     fn render(&self, context: ControlRenderContext) -> Element {
@@ -62,156 +122,14 @@ impl ControlRenderer for DaisyuiControlRenderer {
             ControlKind::String | ControlKind::Number | ControlKind::Integer => {
                 rsx! { TextControl { context } }
             }
+            ControlKind::Boolean => rsx! { BooleanControl { context } },
+            ControlKind::Choice => match self.choice {
+                ChoiceWidget::NativeSelect => rsx! { NativeSelectControl { context } },
+                ChoiceWidget::RadioGroup => rsx! { RadioGroupControl { context } },
+                ChoiceWidget::Select => rsx! { SelectControl { context } },
+            },
+            ControlKind::Constant => rsx! { ConstantControl { context } },
             _ => BuiltinControlRenderer.render(context),
-        }
-    }
-}
-
-/// The `inputmode` hint for a text control kind, as the built-in emits it.
-fn input_mode(kind: ControlKind) -> &'static str {
-    match kind {
-        ControlKind::Number => "decimal",
-        ControlKind::Integer => "numeric",
-        _ => "text",
-    }
-}
-
-/// The kind's name for the `data-schemaform-control` marker the built-in also emits.
-fn kind_name(kind: ControlKind) -> &'static str {
-    match kind {
-        ControlKind::Number => "number",
-        ControlKind::Integer => "integer",
-        _ => "string",
-    }
-}
-
-/// One daisyUI text control: the renderer's hook-safe child component.
-///
-/// `Field` receives a fresh context on every render whose binding compares equal across renders
-/// (its identity is the edit's hook-stable handles) and whose metadata values it syncs itself,
-/// so the registry parts re-render only when the node's presentation actually changes.
-///
-/// A read-only node renders as noninteractive `output` rather than an `Input` that merely
-/// rejects edits, as the built-in does; the facets' `read_only` also covers a node the core will
-/// not accept text for right now, which keeps its editable widget and its replace affordance.
-#[component]
-fn TextControl(context: ControlRenderContext) -> Element {
-    let edit = use_text_edit(&context);
-    let binding = use_text_binding(edit);
-    let Some(projection) = context.node().read().ok().flatten() else {
-        return rsx! {};
-    };
-    let presentation = context.presentation();
-    let control = context.control();
-    let field_context =
-        FieldContext::new(binding).with_meta_values(field_meta_values(presentation, control));
-
-    let element_id = presentation.element_id.clone();
-    let kind = kind_name(control.kind);
-    let label_class = if presentation.label_visible {
-        ""
-    } else {
-        "sr-only"
-    };
-    let help = presentation.help.clone();
-    let presence = presentation.presence.clone();
-
-    if projection.read_only {
-        // Nothing edits this node, so every finding is a description of the shown value and the
-        // output carries the adapter's own `aria-describedby`.
-        let label = presentation.label.clone();
-        let findings = presentation.findings.clone();
-        return rsx! {
-            Field { context: field_context, "data-schemaform-daisyui": kind,
-                FieldLabel { id: format!("{element_id}-label"), class: label_class, "{label}" }
-                output {
-                    id: element_id.clone(),
-                    name: control.name.clone(),
-                    class: "min-w-0 py-2",
-                    tabindex: "-1",
-                    "data-read-only": "",
-                    "data-schemaform-control": kind,
-                    "aria-invalid": presentation.invalid,
-                    "aria-describedby": presentation.described_by(),
-                    "{edit.value}"
-                }
-                if let Some(help) = help {
-                    FieldDescription { id: Rc::from(help.id.as_str()), "{help.text}" }
-                }
-                for finding in findings {
-                    FieldDescription {
-                        key: "{finding.stable_id}",
-                        id: Rc::from(finding.stable_id.as_str()),
-                        class: if finding.blocking { "text-error" } else { "text-warning" },
-                        "{finding.text}"
-                    }
-                }
-            }
-        };
-    }
-
-    // An editable write-only widget is labelled by its replacement action, as the built-in does,
-    // because the value it holds must not be described.
-    let label = control
-        .write_only_replacement
-        .as_ref()
-        .map(|replacement| replacement.label.clone())
-        .unwrap_or_else(|| presentation.label.clone());
-    let placeholder = control
-        .write_only_replacement
-        .as_ref()
-        .map(|replacement| replacement.placeholder.clone());
-    // `FieldError` presents the field errors; the remaining findings are presented as further
-    // descriptions so every stable id still resolves to an element.
-    let descriptions = presentation
-        .findings
-        .iter()
-        .filter(|finding| !is_field_error(finding))
-        .cloned()
-        .collect::<Vec<_>>();
-
-    // Listeners cannot travel through `extends`, so the composition events reach the native
-    // input through the widget's explicit attribute list together with its other attributes.
-    let input_attributes = attributes!(input {
-        r#type: if control.write_only { "password" } else { "text" },
-        inputmode: input_mode(control.kind),
-        readonly: edit.read_only,
-        placeholder,
-        "data-schemaform-control": kind,
-        oncompositionstart: move |_| edit.composition_start.call(()),
-        oncompositionend: move |_| edit.composition_end.call(()),
-    });
-
-    rsx! {
-        Field { context: field_context, "data-schemaform-daisyui": kind,
-            FieldLabel { id: format!("{element_id}-label"), class: label_class, "{label}" }
-            Input { attributes: input_attributes }
-            if let Some(help) = help {
-                FieldDescription { id: Rc::from(help.id.as_str()), "{help.text}" }
-            }
-            for finding in descriptions {
-                FieldDescription {
-                    key: "{finding.stable_id}",
-                    id: Rc::from(finding.stable_id.as_str()),
-                    class: if finding.blocking { "text-error" } else { "text-warning" },
-                    "{finding.text}"
-                }
-            }
-            FieldError { id: Rc::from(format!("{element_id}-errors")) }
-            if !presence.is_empty() {
-                div { class: "flex flex-wrap gap-2",
-                    for affordance in presence {
-                        Button {
-                            key: "{affordance.id}",
-                            id: affordance.id.clone(),
-                            r#type: "button",
-                            size: ButtonSize::Sm,
-                            onclick: move |_| affordance.invoke.call(()),
-                            "{affordance.label}"
-                        }
-                    }
-                }
-            }
         }
     }
 }
@@ -222,7 +140,9 @@ mod tests {
 
     use dioxus::core::{NoOpMutations, VirtualDom};
     use dioxus::prelude::*;
-    use schemaform::{FormDefinition, InstanceIdentity};
+    use schemaform::{
+        CompilationProfile, FormDefinition, InstanceIdentity, json::parse_ui_schema_v1,
+    };
     use schemaform_dioxus::{FormHandle, RenderConfiguration, SchemaForm, use_form};
     use serde_json::json;
 
@@ -239,9 +159,46 @@ mod tests {
         }
     }
 
+    /// The authored presentation: every control in data-schema order, except that the billing
+    /// cycle asks for the radio widget and the region for the compound select.
+    const UI_SCHEMA: &str = r#"{
+      "version": 1,
+      "root": {
+        "type": "stack",
+        "value": {
+          "children": [
+            {
+              "type": "auto",
+              "value": {
+                "binding": { "origin": "root", "pointer": "" },
+                "properties": { "exclude": ["billing", "region"] }
+              }
+            },
+            {
+              "type": "control",
+              "value": {
+                "binding": { "origin": "root", "pointer": "/billing" },
+                "widget": "daisyui:radio"
+              }
+            },
+            {
+              "type": "control",
+              "value": {
+                "binding": { "origin": "root", "pointer": "/region" },
+                "widget": "daisyui:select"
+              }
+            }
+          ]
+        }
+      }
+    }"#;
+
     fn gallery_app(props: GalleryAppProps) -> Element {
         let definition = use_hook(|| {
-            FormDefinition::compile(json!({
+            let ui_schema =
+                parse_ui_schema_v1(UI_SCHEMA.as_bytes(), &CompilationProfile::default())
+                    .expect("the gallery UI schema should parse");
+            FormDefinition::compiler(json!({
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "additionalProperties": false,
@@ -264,10 +221,33 @@ mod tests {
                         "readOnly": true
                     },
                     "active": { "type": "boolean", "title": "Active" },
-                    "plan": { "title": "Plan", "enum": ["starter", "team"] },
-                    "tier": { "title": "Tier", "const": "standard" }
+                    "newsletter": { "type": ["boolean", "null"], "title": "Newsletter" },
+                    "mfa": { "type": "boolean", "title": "MFA", "writeOnly": true },
+                    "plan": {
+                        "type": ["string", "null"],
+                        "title": "Plan",
+                        "enum": ["starter", "team", null]
+                    },
+                    "recovery": {
+                        "title": "Recovery",
+                        "enum": ["email", "sms"],
+                        "writeOnly": true
+                    },
+                    "tier": { "title": "Tier", "const": "standard" },
+                    "billing": {
+                        "type": ["string", "null"],
+                        "title": "Billing",
+                        "enum": ["monthly", "yearly", null]
+                    },
+                    "region": {
+                        "type": ["string", "null"],
+                        "title": "Region",
+                        "enum": ["eu", "us", null]
+                    }
                 }
             }))
+            .ui_schema(ui_schema)
+            .compile()
             .expect("the gallery data schema should compile")
         });
         let form = use_form(
@@ -280,8 +260,13 @@ mod tests {
                 "secret": "hunter2",
                 "reference": "ref_42",
                 "active": true,
+                "newsletter": null,
+                "mfa": true,
                 "plan": "team",
-                "tier": "standard"
+                "recovery": "sms",
+                "tier": "standard",
+                "billing": "yearly",
+                "region": "eu"
             }),
         )
         .expect("the gallery form should be created");
@@ -336,6 +321,63 @@ mod tests {
 
         fn html(&self) -> String {
             dioxus_ssr::render(&self.dom)
+        }
+
+        /// The first tag `accept` accepts, in document order.
+        fn find(&self, accept: impl Fn(&Tag) -> bool) -> Option<Tag> {
+            tags(&self.html()).into_iter().find(accept)
+        }
+
+        /// Every tag `accept` accepts, in document order.
+        fn find_all(&self, accept: impl Fn(&Tag) -> bool) -> Vec<Tag> {
+            tags(&self.html()).into_iter().filter(accept).collect()
+        }
+
+        /// The text of the element that `aria-labelledby` of the element with `id` references.
+        fn labelled_by_text(&self, id: &str) -> String {
+            let label_id = self
+                .find(|tag| tag.attribute("id") == Some(id))
+                .and_then(|tag| tag.attribute("aria-labelledby").map(str::to_owned))
+                .unwrap_or_else(|| panic!("{id} should be labelled"));
+            let html = self.html();
+            let start = html
+                .find(&format!("id=\"{label_id}\""))
+                .unwrap_or_else(|| panic!("the label {label_id} should exist"));
+            let rest = &html[start..];
+            let text_start = rest.find('>').expect("the label tag should close") + 1;
+            let text_end = rest.find('<').expect("the label should close");
+            rest[text_start..text_end].to_owned()
+        }
+
+        /// The `(value, text, selected)` of every option of the select named `name`, in order.
+        fn options(&self, name: &str) -> Vec<(String, String, bool)> {
+            let html = self.html();
+            let start = html
+                .find(&format!("name=\"{name}\""))
+                .unwrap_or_else(|| panic!("a select named {name} should be rendered:\n{html}"));
+            let select = &html[start..];
+            let end = select
+                .find("</select>")
+                .unwrap_or_else(|| panic!("the select named {name} should close:\n{html}"));
+            let select = &select[..end];
+            let mut options = Vec::new();
+            let mut rest = select;
+            while let Some(start) = rest.find("<option") {
+                rest = &rest[start..];
+                let tag_end = rest.find('>').expect("an option tag should close");
+                let tag = tags(&rest[..=tag_end])
+                    .pop()
+                    .expect("an option tag should parse");
+                rest = &rest[tag_end + 1..];
+                let text_end = rest.find("</option>").expect("an option should close");
+                options.push((
+                    tag.attribute("value").unwrap_or_default().to_owned(),
+                    rest[..text_end].trim().to_owned(),
+                    tag.attribute("selected") == Some("true"),
+                ));
+                rest = &rest[text_end..];
+            }
+            options
         }
 
         /// The attributes of the first tag whose `name` attribute is `name`.
@@ -498,18 +540,302 @@ mod tests {
     }
 
     #[test]
-    fn every_other_control_kind_falls_back_to_the_built_in() {
+    fn a_non_nullable_boolean_is_a_native_checkbox_with_the_daisyui_class() {
         let rendered = RenderedGallery::mount();
 
-        let boolean = rendered.control("/active");
-        assert_eq!(boolean.attribute("type"), Some("checkbox"));
-        assert!(!boolean.classes().contains(&"input"));
+        let active = rendered.control("/active");
+        assert_eq!(active.element, "input");
+        assert_eq!(active.attribute("type"), Some("checkbox"));
+        assert!(
+            active.classes().contains(&"checkbox"),
+            "the checkbox should carry daisyUI's class: {active:?}"
+        );
+        assert_eq!(active.attribute("checked"), Some("true"));
+        assert_eq!(active.attribute("aria-required"), Some("true"));
+        assert_eq!(active.attribute("aria-invalid"), Some("false"));
+        assert_eq!(
+            active.attribute("id").map(str::to_owned),
+            Some(rendered.control_id("/active"))
+        );
+    }
 
-        let choice = rendered.control("/plan");
-        assert_eq!(choice.element, "select");
+    #[test]
+    fn a_nullable_boolean_is_the_registry_checkbox_showing_null_as_indeterminate() {
+        let mut rendered = RenderedGallery::mount();
 
-        let constant = rendered.control("/tier");
-        assert_eq!(constant.element, "output");
+        let newsletter = rendered.control("/newsletter");
+        assert_eq!(newsletter.element, "button");
+        assert_eq!(newsletter.attribute("role"), Some("checkbox"));
+        assert!(
+            newsletter.classes().contains(&"checkbox"),
+            "the checkbox should carry daisyUI's class: {newsletter:?}"
+        );
+        assert_eq!(newsletter.attribute("aria-checked"), Some("mixed"));
+        assert_eq!(
+            newsletter.attribute("id").map(str::to_owned),
+            Some(rendered.control_id("/newsletter"))
+        );
+
+        let actions = rendered
+            .handle
+            .node(rendered.control_identity("/newsletter"))
+            .expect("the form should be readable")
+            .expect("newsletter should exist")
+            .actions();
+        actions
+            .set_value(json!(true))
+            .expect("the boolean should be set");
+        rendered.settle();
+
+        assert_eq!(
+            rendered.control("/newsletter").attribute("aria-checked"),
+            Some("true")
+        );
+    }
+
+    #[test]
+    fn a_write_only_boolean_is_a_replacement_select_that_never_shows_its_value() {
+        let rendered = RenderedGallery::mount();
+
+        let mfa = rendered.control("/mfa");
+        assert_eq!(mfa.element, "select");
+        assert!(
+            mfa.classes().contains(&"select"),
+            "the replacement select should carry daisyUI's class: {mfa:?}"
+        );
+        assert_eq!(mfa.attribute("data-write-only-replacement"), Some(""));
+        assert_eq!(mfa.attribute("value"), Some(""));
+        let html = rendered.html();
+        assert!(html.contains("Replace MFA"), "{html}");
+        let options = rendered.options("/mfa");
+        assert_eq!(
+            options,
+            vec![
+                ("".to_owned(), "Choose replacement".to_owned(), true),
+                ("false".to_owned(), "False".to_owned(), false),
+                ("true".to_owned(), "True".to_owned(), false),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_choice_is_a_daisyui_native_select_over_opaque_identities_with_the_null_option() {
+        let mut rendered = RenderedGallery::mount();
+
+        let plan = rendered.control("/plan");
+        assert_eq!(plan.element, "select");
+        assert!(
+            plan.classes().contains(&"select"),
+            "the select should carry daisyUI's class: {plan:?}"
+        );
+        assert_eq!(plan.attribute("required"), Some("true"));
+        let options = rendered.options("/plan");
+        let labels = options
+            .iter()
+            .map(|(_, label, _)| label.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(labels, vec!["", "null", "starter", "team"]);
+        let selected = options
+            .iter()
+            .filter(|(_, _, selected)| *selected)
+            .map(|(_, label, _)| label.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(selected, vec!["team"]);
+        let values = options
+            .iter()
+            .skip(1)
+            .map(|(value, _, _)| value.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(
+            values.len(),
+            3,
+            "option values should be distinct: {options:?}"
+        );
+        assert!(
+            !values.contains(""),
+            "only the placeholder is empty: {options:?}"
+        );
+        assert_eq!(plan.attribute("value"), options[3].0.as_str().into());
+
+        let actions = rendered
+            .handle
+            .node(rendered.control_identity("/plan"))
+            .expect("the form should be readable")
+            .expect("plan should exist")
+            .actions();
+        actions.set_null().expect("the choice should accept null");
+        rendered.settle();
+
+        let selected = rendered
+            .options("/plan")
+            .into_iter()
+            .filter(|(_, _, selected)| *selected)
+            .map(|(_, label, _)| label)
+            .collect::<Vec<_>>();
+        assert_eq!(selected, vec!["null"]);
+    }
+
+    #[test]
+    fn a_write_only_choice_shows_the_replacement_placeholder_and_no_selection() {
+        let rendered = RenderedGallery::mount();
+
+        let recovery = rendered.control("/recovery");
+        assert_eq!(recovery.element, "select");
+        assert!(recovery.classes().contains(&"select"), "{recovery:?}");
+        assert_eq!(recovery.attribute("data-write-only-replacement"), Some(""));
+        assert_eq!(recovery.attribute("value"), Some(""));
+        assert!(rendered.html().contains("Replace Recovery"));
+        let options = rendered.options("/recovery");
+        assert_eq!(options[0].1, "Choose replacement");
+        assert!(
+            options[0].2,
+            "the placeholder should be selected: {options:?}"
+        );
+        assert!(
+            options.iter().skip(1).all(|(_, _, selected)| !selected),
+            "no option should be selected: {options:?}"
+        );
+    }
+
+    #[test]
+    fn the_radio_widget_symbol_selects_a_daisyui_radio_group_with_one_item_per_option() {
+        let mut rendered = RenderedGallery::mount();
+        let billing = rendered.control_identity("/billing");
+
+        let group = rendered
+            .find(|tag| tag.attribute("role") == Some("radiogroup"))
+            .expect("a radio group should be rendered");
+        let group_id = group
+            .attribute("id")
+            .expect("the group should carry the control's element id")
+            .to_owned();
+        assert_eq!(group.attribute("aria-invalid"), Some("false"));
+        assert!(
+            group.attribute("aria-labelledby").is_some(),
+            "the group should be labelled: {group:?}"
+        );
+
+        let items = rendered.find_all(|tag| tag.attribute("role") == Some("radio"));
+        assert_eq!(
+            items.len(),
+            3,
+            "one item per option, the null option included"
+        );
+        for item in &items {
+            assert!(item.classes().contains(&"radio"), "{item:?}");
+            assert!(item.attribute("aria-labelledby").is_some(), "{item:?}");
+        }
+        let checked = items
+            .iter()
+            .filter(|item| item.attribute("aria-checked") == Some("true"))
+            .count();
+        assert_eq!(checked, 1);
+        let checked_id = items
+            .iter()
+            .find(|item| item.attribute("aria-checked") == Some("true"))
+            .and_then(|item| item.attribute("id"))
+            .expect("the checked item should carry an id")
+            .to_owned();
+        assert_eq!(rendered.labelled_by_text(&checked_id), "yearly");
+
+        // The hidden form participants carry the control's name, one per item.
+        let participants = rendered.find_all(|tag| {
+            tag.element == "input"
+                && tag.attribute("type") == Some("radio")
+                && tag.attribute("name") == Some("/billing")
+        });
+        assert_eq!(participants.len(), 3);
+
+        rendered
+            .handle
+            .node(billing)
+            .expect("the form should be readable")
+            .expect("billing should exist")
+            .actions()
+            .set_null()
+            .expect("billing should accept null");
+        rendered.settle();
+
+        let checked_id = rendered
+            .find_all(|tag| tag.attribute("role") == Some("radio"))
+            .iter()
+            .find(|item| item.attribute("aria-checked") == Some("true"))
+            .and_then(|item| item.attribute("id"))
+            .expect("the null item should be checked")
+            .to_owned();
+        assert_eq!(rendered.labelled_by_text(&checked_id), "null");
+        assert_eq!(
+            rendered
+                .find(|tag| tag.attribute("role") == Some("radiogroup"))
+                .and_then(|tag| tag.attribute("id").map(str::to_owned)),
+            Some(group_id)
+        );
+    }
+
+    #[test]
+    fn a_constant_is_read_only_output_with_its_presence_affordances() {
+        let rendered = RenderedGallery::mount();
+
+        let tier = rendered.control("/tier");
+        assert_eq!(tier.element, "output");
+        assert_eq!(tier.attribute("data-schemaform-control"), Some("constant"));
+        assert_eq!(tier.attribute("tabindex"), Some("-1"));
+        assert_eq!(tier.attribute("aria-invalid"), Some("false"));
+        let html = rendered.html();
+        assert!(html.contains(">standard</output>"), "{html}");
+        assert!(
+            rendered
+                .find(|tag| tag.attribute("name") == Some("/tier") && tag.element != "output")
+                .is_none(),
+            "a constant is never an editable widget: {html}"
+        );
+
+        let tier_id = rendered.control_id("/tier");
+        let remove = rendered
+            .find(|tag| tag.attribute("id") == Some(&format!("{tier_id}-remove-value")))
+            .expect("an optional constant offers its remove affordance");
+        assert_eq!(remove.element, "button");
+        assert!(remove.classes().contains(&"btn"), "{remove:?}");
+    }
+
+    #[test]
+    fn the_select_widget_symbol_selects_the_daisyui_compound_select() {
+        let mut rendered = RenderedGallery::mount();
+
+        let trigger = rendered.control("/region");
+        assert_eq!(trigger.element, "button");
+        assert_eq!(trigger.attribute("aria-haspopup"), Some("listbox"));
+        assert!(
+            trigger.classes().contains(&"select"),
+            "the trigger should carry daisyUI's class: {trigger:?}"
+        );
+        assert_eq!(
+            trigger.attribute("id").map(str::to_owned),
+            Some(rendered.control_id("/region"))
+        );
+        assert_eq!(trigger.attribute("aria-expanded"), Some("false"));
+        assert!(
+            rendered.html().contains(">eu</span></button>"),
+            "the trigger should show the selected option's label"
+        );
+
+        let region = rendered.control_identity("/region");
+        let actions = rendered
+            .handle
+            .node(region)
+            .expect("the form should be readable")
+            .expect("region should exist")
+            .actions();
+        actions
+            .set_value(json!("us"))
+            .expect("region should accept us");
+        rendered.settle();
+        assert!(rendered.html().contains(">us</span></button>"));
+
+        // The null option is an option like any other: selecting null shows its label.
+        actions.set_null().expect("region should accept null");
+        rendered.settle();
+        assert!(rendered.html().contains(">null</span></button>"));
     }
 
     #[test]
