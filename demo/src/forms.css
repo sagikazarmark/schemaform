@@ -137,7 +137,9 @@
   font-size: 0.82rem;
 }
 
-.schemaform button {
+/* Built-in buttons only: daisyUI buttons rendered by custom renderers keep
+ * their own `btn` styling. */
+.schemaform button:not(.btn) {
   width: fit-content;
   min-height: 2.25rem;
   padding: 0.45rem 0.8rem;

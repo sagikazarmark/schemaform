@@ -19,6 +19,8 @@ pub enum Route {
     Arrays {},
     #[route("/presentation")]
     Presentation {},
+    #[route("/daisyui")]
+    Daisyui {},
     #[route("/playground")]
     Playground {},
     #[route("/:..segments")]
@@ -58,6 +60,9 @@ fn DemoLayout() -> Element {
                     SidebarNavSection { label: "Structure",
                         SidebarNavLink { route: Route::Arrays {}, label: "Arrays" }
                         SidebarNavLink { route: Route::Presentation {}, label: "Authored UI schema" }
+                    }
+                    SidebarNavSection { label: "Renderers",
+                        SidebarNavLink { route: Route::Daisyui {}, label: "daisyUI text controls" }
                     }
                     SidebarNavSection { label: "Explore",
                         SidebarNavLink { route: Route::Playground {}, label: "Schema playground" }

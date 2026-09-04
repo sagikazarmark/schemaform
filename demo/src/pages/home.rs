@@ -22,6 +22,11 @@ pub fn Home() -> Element {
             Route::Presentation {},
         ),
         (
+            "daisyUI text controls",
+            "Render string, number, and integer controls with a component library through a custom control renderer.",
+            Route::Daisyui {},
+        ),
+        (
             "Schema playground",
             "Edit a data schema and UI schema side by side with the rendered form.",
             Route::Playground {},

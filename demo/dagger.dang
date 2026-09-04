@@ -56,6 +56,21 @@ type Demo {
   }
 
   """
+  Run the demo's native tests.
+
+  The gallery's example data schemas and the `schemaform_daisyui` mapping tests
+  (binding round trips, the errors/invalid partition, renderer selection) run
+  here; the wasm bundle above never executes them.
+  """
+  test: String! @check {
+    self
+      .dioxus
+      .container
+      .withExec(["cargo", "test", "--locked"])
+      .stdout
+  }
+
+  """
   Serve the demo application.
   """
   service: Service! @up {

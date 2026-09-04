@@ -1,0 +1,46 @@
+{
+  "name": "schemaform_daisyui",
+  "description": "A schemaform-dioxus control renderer that presents string, number, and integer controls with the daisyUI registry's Field and Input parts.",
+  "exclude": ["component.json", "README.md"],
+  "componentDependencies": [
+    {
+      "name": "field",
+      "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
+      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+    },
+    {
+      "name": "input",
+      "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
+      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+    },
+    {
+      "name": "button",
+      "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
+      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+    }
+  ],
+  "cargoDependencies": [
+    {
+      "name": "dioxus-field",
+      "version": "0.7.0",
+      "default_features": true
+    },
+    {
+      "name": "dioxus-primitives",
+      "git": "https://github.com/DioxusLabs/components",
+      "rev": "bf007c15d0cf4d04d3181cc46cf12325aa773955",
+      "default_features": false,
+      "features": ["router"]
+    },
+    {
+      "name": "schemaform",
+      "version": "0.2.0",
+      "default_features": true
+    },
+    {
+      "name": "schemaform-dioxus",
+      "version": "0.2.0",
+      "default_features": true
+    }
+  ]
+}
