@@ -9,8 +9,8 @@ forms.**
 `schemaform-dioxus` renders a [`schemaform`](../schemaform/README.md)
 `FormDefinition` as accessible, unstyled semantic HTML in a Dioxus browser
 client-side-rendered application. It keeps Dioxus state out of the core engine
-and provides explicit renderer, finding presenter, localization, and extension
-seams.
+and provides explicit control renderer, structure renderer, finding presenter,
+localization, and extension seams.
 
 ## Install
 
@@ -99,7 +99,8 @@ renderer everything it needs, pre-localized:
   re-calling the renderer.
 - Each `Affordance` in `presence` is a pre-localized, pre-authorized action:
   its `kind` (`Set`, `SetNull`, `RemoveValue`, `Replace`), localized `label`,
-  the `id` the triggering element must carry, and `invoke`, a callback that
+  the `id` the triggering element must carry, an optional `accessible_name` to
+  use as `aria-label` when it is `Some`, and `invoke`, a callback that
   performs the core operation and reports failures to `on_error` itself. The
   list holds exactly the operations the built-in would offer: set only while
   the value is missing or null and a creation seed exists, replace only while
@@ -336,6 +337,78 @@ special case: the highest matching priority wins, a tie is
 `ControlRegistry::empty()` reports `BindFinding::NoMatchingRenderer` for any
 control no registration accepts. A host can also register
 `BuiltinControlRenderer` under an exact widget symbol or at another priority.
+
+### Structure renderers
+
+Non-control presentation goes through one small trait per structural node kind,
+composed in a `StructureRenderers` bundle whose unset slots are the built-ins.
+A package implements only the traits it changes and exports a populated bundle;
+a host composes slots from several packages with the `with_*` setters and
+installs the result with `RenderConfigurationBuilder::structure`. There is no
+supertrait over the slots, so a new slot in a later release is additive for
+every existing implementation.
+
+Structure renderers are fixed when the form is bound. Unlike presenters and the
+localizer they are not signal-swappable: their output is the parent template of
+every node, so swapping one would remount every child scope.
+`RenderConfiguration::rebind_presentation` leaves them alone; changing a
+structure renderer means calling `RenderConfiguration::bind` again.
+
+The first slot is the **form shell**. `ShellRenderer::shell` receives a
+`ShellContext` and returns the *contents* of the `<form>` element:
+
+- `form_id` is the id of the adapter-owned `<form>`, which keeps `novalidate`,
+  the submit handling, `tabindex="-1"`, and the error-handler context.
+- `summary` is the finding summary inside its adapter-owned wrapper
+  (`{form_id}-summary`, `role="region"`, a localized `aria-label`,
+  `tabindex="-1"`). A blocked submission focuses it. It must be placed.
+- `body` is every root-level node in definition order, pre-keyed. It must be
+  placed.
+- `submit` is an `Affordance` of kind `Submit` with the localized submit label
+  and the id `{form_id}-submit`. `invoke` finalizes edit buffers and prepares
+  submission: a ready snapshot reaches `on_submit`, a blocked outcome focuses
+  the summary, and an adapter failure reaches `on_error`. Place it either as a
+  `type="submit"` button, which submits through the form element, or as any
+  element that calls `invoke`; not both on one element.
+
+`BuiltinShell` is the public built-in: summary, body, then a `type="submit"`
+button carrying the affordance's id and label.
+
+```rust
+use dioxus::prelude::*;
+use schemaform_dioxus::{
+    RenderConfiguration, ShellContext, ShellRenderer, StructureRenderers,
+};
+
+struct CardShell;
+
+impl ShellRenderer for CardShell {
+    fn shell(&self, context: ShellContext) -> Element {
+        let submit = context.submit;
+        rsx! {
+            div { class: "card-body", {context.body} }
+            div { class: "card-alerts", {context.summary} }
+            div { class: "card-actions",
+                button {
+                    id: submit.id.clone(),
+                    class: "btn btn-primary",
+                    r#type: "button",
+                    onclick: move |_| submit.invoke.call(()),
+                    "{submit.label}"
+                }
+            }
+        }
+    }
+}
+
+let configuration = RenderConfiguration::builder()
+    .structure(StructureRenderers::default().with_shell(CardShell))
+    .build();
+```
+
+`ShellRenderer::shell` runs during rendering and is not a hook-safe call site;
+a shell that needs hooks renders a child component and passes the context as
+props (`ShellContext` is `PartialEq`).
 
 `Localizer` receives a `render::MessageDescriptor` with an optional stable key,
 an English fallback, and structured parameters. Authored UI-schema text, schema

@@ -91,16 +91,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   { definition_node }` for every control no registration accepts.
 - `NodePresentation::presence` lists the presence affordances the core allows
   for a scalar control right now, and `Affordance` (`kind`, localized `label`,
-  the DOM `id` the triggering element must carry, `invoke`) performs the
-  operation and reports failures to `SchemaForm::on_error` itself. Set is
-  offered only while the value is missing or null and a creation seed exists,
-  replace only while the core allows replacement and a seed exists, set null
-  and remove value whenever the core allows them. `AffordanceKind` is
-  non-exhaustive (`Set`, `SetNull`, `RemoveValue`, `Replace` today) so later
-  renderer seams can add collection and submit affordances. The built-in
-  control renders its presence buttons from the same list, so a custom
-  renderer receives exactly the operations the built-in would offer; those
-  buttons now carry the affordance id.
+  the DOM `id` the triggering element must carry, optional `accessible_name`,
+  `invoke`) performs the operation and reports failures to
+  `SchemaForm::on_error` itself. Set is offered only while the value is missing
+  or null and a creation seed exists, replace only while the core allows
+  replacement and a seed exists, set null and remove value whenever the core
+  allows them. `AffordanceKind` is non-exhaustive (`Set`, `SetNull`,
+  `RemoveValue`, `Replace`, and `Submit` today) so later renderer seams can add
+  collection affordances. `accessible_name` is `Some` only when the accessible
+  name must differ from the visible label, as a positional item action's will;
+  every affordance shipped so far carries `None`. The built-in control renders
+  its presence buttons from the same list, so a custom renderer receives
+  exactly the operations the built-in would offer; those buttons now carry the
+  affordance id.
+- `ShellRenderer`, the first structure renderer seam, lets a host replace the
+  form shell: where the finding summary sits, how the body is framed, and what
+  triggers submission. `shell(ShellContext { form_id, summary, body, submit })`
+  returns the *contents* of the `<form>` element; the adapter keeps the form
+  element itself (`novalidate`, submit handling, `tabindex`, the error-handler
+  context), the finding-summary region wrapper with its id, role, label, and
+  focusability, and the submission rules. `summary` and `body` arrive as
+  pre-keyed elements and must be placed; `submit` is an
+  `AffordanceKind::Submit` affordance with the localized submit label and the
+  id `{form_id}-submit` whose `invoke` finalizes edit buffers, calls
+  `on_submit` for a ready snapshot, focuses the summary for a blocked outcome,
+  and reports adapter failures to `on_error`. A shell may place it as a
+  `type="submit"` button or as any element that calls `invoke`; a blocked
+  submit still focuses the summary and a ready submit still yields a
+  submission snapshot either way. `BuiltinShell` is the public built-in
+  (summary, body, then a `type="submit"` button carrying the affordance id).
+- `StructureRenderers` bundles one renderer per structural slot with private
+  per-trait storage; `Default` is every built-in and `with_shell(impl
+  ShellRenderer)` replaces the shell. `RenderConfigurationBuilder::structure`
+  installs a bundle. There is deliberately no supertrait over the slots, so
+  adding a slot later is additive for every existing renderer. Structure
+  renderers are fixed at `RenderConfiguration::bind` and are not
+  signal-swappable like presenters and the localizer:
+  `rebind_presentation` leaves them alone, and changing a structure renderer
+  means rebinding the form. The built-in submit button now carries the id
+  `{form_id}-submit`.
 - `ControlRenderContext::report(result)` routes a failed `ControlActions` call
   to `SchemaForm::on_error` and returns the success value as `Option`, so
   custom renderers no longer have to drop `HandleError` values.
@@ -110,7 +139,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   form a presentation renders findings through, pointer equality for prepared
   extensions), so a context can be passed as a prop to a child component
   without Dioxus memoization showing stale state. `Affordance` compares by
-  `kind`, `label`, and `id`; its `invoke` callback is hook-stable and excluded.
+  `kind`, `label`, `id`, and `accessible_name`; its `invoke` callback is
+  hook-stable and excluded. `ShellContext` is `PartialEq` for the same reason.
 - `ControlKind` is public: the widget family the adapter derives from a
   definition node (`String`, `Number`, `Integer`, `Boolean`, `Choice`,
   `Constant`; non-exhaustive).
@@ -156,6 +186,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   renders them unchanged.
 - The READMEs no longer describe the crates as unpublished and describe
   `SchemaForm::on_error` as the optional prop it is.
+- The finding summary and the form body are separate adapter components so a
+  shell can place them independently. The summary component alone subscribes
+  to the summary projection; the body re-renders only when the bound form
+  changes, whereas previously a summary change re-diffed the root node list as
+  well. Each node's own subscription is unchanged.
 
 ## [0.1.0] - 2026-08-03
 

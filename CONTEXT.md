@@ -52,6 +52,14 @@ _Avoid_: Nullability toggle, clear
 A localized, pre-authorized user action handed to a renderer. Invoking it performs the core operation and reports failures to the host; collection affordances also announce and move focus. Renderers place affordances, they do not compose them.
 _Avoid_: Button, action callback
 
+**Structure renderer**:
+Host-supplied presentation for one non-control form-tree node kind or the form shell, composed through a bundle whose unset slots are the built-ins. Structure renderers are fixed when a form is bound; changing one means rebinding, not swapping a signal.
+_Avoid_: Layout renderer, theme, render tree
+
+**Form shell**:
+The outermost form presentation — finding-summary placement, body framing, and the submit affordance — inside the adapter-owned form element. The adapter keeps the form element, its submit handling, and the summary region wrapper; the shell arranges them.
+_Avoid_: Page, wrapper, form layout
+
 **Form data**:
 The canonical JSON instance currently being edited and validated by a form.
 _Avoid_: Model, form value, values

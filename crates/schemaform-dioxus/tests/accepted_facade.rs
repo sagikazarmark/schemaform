@@ -3,11 +3,12 @@ use std::sync::Arc;
 use dioxus::prelude::Element;
 use schemaform::{ExtensionNamespace, WidgetSymbol, definition::DefinitionNodeView};
 use schemaform_dioxus::{
-    Affordance, AffordanceKind, BooleanEdit, BuiltinControlRenderer, ChoiceEdit, ChoiceOption,
-    ControlFacets, ControlKind, ControlMatcher, ControlRegistry, ControlRenderContext,
-    ControlRenderer, ExtensionHandler, ExtensionOccurrence, ExtensionPrepareError,
-    ExtensionRenderContext, FindingCollectionPresenter, Localizer, NodePresentation,
-    PreparedExtension, RenderConfiguration, TextEdit,
+    Affordance, AffordanceKind, BooleanEdit, BuiltinControlRenderer, BuiltinShell, ChoiceEdit,
+    ChoiceOption, ControlFacets, ControlKind, ControlMatcher, ControlRegistry,
+    ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
+    ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter, Localizer,
+    NodePresentation, PreparedExtension, RenderConfiguration, ShellContext, ShellRenderer,
+    StructureRenderers, TextEdit,
     render::{BUILTIN_CONTROL_PRIORITY, FindingCollectionContext, FindingKind, MessageDescriptor},
 };
 
@@ -43,9 +44,11 @@ impl ControlRenderer for Renderer {
                         | AffordanceKind::SetNull
                         | AffordanceKind::RemoveValue
                         | AffordanceKind::Replace
+                        | AffordanceKind::Submit
                 ),
                 affordance.label.as_str(),
                 affordance.id.as_str(),
+                affordance.accessible_name.as_deref(),
                 affordance.invoke,
                 affordance.clone() == *affordance,
             )
@@ -114,6 +117,26 @@ struct Matcher;
 impl ControlMatcher for Matcher {
     fn matches(&self, _definition: DefinitionNodeView<'_>) -> bool {
         true
+    }
+}
+
+struct Shell;
+
+impl ShellRenderer for Shell {
+    fn shell(&self, context: ShellContext) -> Element {
+        let _shell_fields = (
+            context.form_id.as_str(),
+            context.submit.kind == AffordanceKind::Submit,
+            context.submit.label.as_str(),
+            context.submit.id.as_str(),
+            context.submit.accessible_name.as_deref(),
+            context.submit.invoke,
+            context.clone() == context,
+        );
+        dioxus::prelude::rsx! {
+            {context.summary}
+            {context.body}
+        }
     }
 }
 
@@ -192,8 +215,10 @@ fn accepted_adapter_customization_types_build_an_immutable_configuration() {
         );
     let _without_builtins =
         ControlRegistry::empty().matcher(BUILTIN_CONTROL_PRIORITY, Arc::new(Matcher), renderer);
+    let _built_in_shell_explicitly = StructureRenderers::default().with_shell(BuiltinShell);
     let _configuration = RenderConfiguration::builder()
         .controls(controls)
+        .structure(StructureRenderers::default().with_shell(Shell))
         .local_presenter(Arc::new(Presenter))
         .summary_presenter(Arc::new(Presenter))
         .localizer(Arc::new(TestLocalizer))

@@ -1,10 +1,10 @@
 //! Accessible Dioxus browser rendering for [`schemaform::FormDefinition`].
 //!
 //! The crate keeps Dioxus state out of the core engine and provides explicit
-//! renderer, finding presenter, localization, and extension seams, plus headless
-//! [`edit`] hooks that give custom renderers the built-in editing behaviour.
-//! [`SchemaForm`] renders unstyled semantic HTML and submits immutable
-//! [`schemaform::SubmissionSnapshot`] values.
+//! control renderer, structure renderer, finding presenter, localization, and
+//! extension seams, plus headless [`edit`] hooks that give custom renderers the
+//! built-in editing behaviour. [`SchemaForm`] renders unstyled semantic HTML and
+//! submits immutable [`schemaform::SubmissionSnapshot`] values.
 #![deny(rustdoc::broken_intra_doc_links)]
 #![forbid(unsafe_code)]
 
@@ -1872,8 +1872,8 @@ pub mod render {
 
     /// The operation an [`Affordance`] performs when invoked.
     ///
-    /// Only presence operations on scalar controls are produced today. The enum grows as further
-    /// renderer seams hand out affordances, so matches need a wildcard arm.
+    /// Presence operations on scalar controls and the form's submit are produced today. The enum
+    /// grows as further renderer seams hand out affordances, so matches need a wildcard arm.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     #[non_exhaustive]
     pub enum AffordanceKind {
@@ -1885,6 +1885,11 @@ pub mod render {
         RemoveValue,
         /// Replaces a value the control cannot edit with its creation seed.
         Replace,
+        /// Finalizes edit buffers and prepares the form for submission.
+        ///
+        /// A ready outcome reaches `SchemaForm::on_submit`; a blocked outcome presents the
+        /// findings and focuses the finding summary instead.
+        Submit,
     }
 
     /// A localized, pre-authorized user action handed to a renderer.
@@ -1894,9 +1899,10 @@ pub mod render {
     /// adapter recomputes the list of affordances on every node render, so an affordance is
     /// present exactly while the core allows its operation.
     ///
-    /// Two affordances compare equal when their `kind`, `label`, and `id` are equal. `invoke` is
-    /// excluded because an affordance's behaviour is fixed by its node and kind, so a component
-    /// that memoizes on an affordance and keeps an earlier `invoke` performs the same operation.
+    /// Two affordances compare equal when their `kind`, `label`, `id`, and `accessible_name` are
+    /// equal. `invoke` is excluded because an affordance's behaviour is fixed by its node and
+    /// kind, so a component that memoizes on an affordance and keeps an earlier `invoke` performs
+    /// the same operation.
     #[derive(Clone)]
     #[non_exhaustive]
     pub struct Affordance {
@@ -1907,8 +1913,16 @@ pub mod render {
         /// DOM `id` the triggering element must carry.
         ///
         /// For presence affordances this is the node's [`NodePresentation::element_id`] followed
-        /// by `-set-value`, `-set-null`, `-remove-value`, or `-replace-value`.
+        /// by `-set-value`, `-set-null`, `-remove-value`, or `-replace-value`. For the submit
+        /// affordance it is [`ShellContext::form_id`] followed by `-submit`.
         pub id: String,
+        /// Localized accessible name when it differs from the visible `label`.
+        ///
+        /// `None` means `label` is the accessible name. `Some` is used when the visible text
+        /// alone would be ambiguous, such as a positional variant of an item action; a renderer
+        /// then sets the triggering element's `aria-label` to this value, whether it shows
+        /// `label` as text or renders an icon. Presence and submit affordances carry `None`.
+        pub accessible_name: Option<String>,
         /// Performs the operation and reports failures to the host's `SchemaForm::on_error`.
         ///
         /// Install this on an event callback rather than calling it during rendering.
@@ -1917,7 +1931,10 @@ pub mod render {
 
     impl PartialEq for Affordance {
         fn eq(&self, other: &Self) -> bool {
-            self.kind == other.kind && self.label == other.label && self.id == other.id
+            self.kind == other.kind
+                && self.label == other.label
+                && self.id == other.id
+                && self.accessible_name == other.accessible_name
         }
     }
 
@@ -1928,7 +1945,118 @@ pub mod render {
                 .field("kind", &self.kind)
                 .field("label", &self.label)
                 .field("id", &self.id)
+                .field("accessible_name", &self.accessible_name)
                 .finish_non_exhaustive()
+        }
+    }
+
+    /// Host-supplied presentation for the form shell: where the finding summary sits, how the
+    /// body is framed, and what triggers submission.
+    ///
+    /// The adapter keeps the `<form>` element itself (its `novalidate`, submit handling,
+    /// focusability, and error-handler context) and the finding-summary region wrapper; the shell
+    /// renderer returns the form's *contents*. The method runs synchronously during Dioxus
+    /// rendering and is not a hook-safe call site; a renderer that needs hooks renders a child
+    /// component and passes the context as props ([`ShellContext`] is `PartialEq`).
+    ///
+    /// Structure renderers are fixed at [`RenderConfiguration::bind`]. Unlike presenters and the
+    /// localizer they are not signal-swappable: their output is the parent template of every
+    /// node, so swapping one would remount every child scope. Changing a structure renderer means
+    /// rebinding the form.
+    pub trait ShellRenderer: 'static {
+        /// Returns the contents of the adapter-owned `<form>` element.
+        ///
+        /// The output must include [`ShellContext::summary`] and [`ShellContext::body`], and
+        /// should place [`ShellContext::submit`] once: either as a `type="submit"` button, which
+        /// submits through the form element, or as any element that calls the affordance's
+        /// `invoke`. Rendering both on one element submits twice.
+        fn shell(&self, context: ShellContext) -> Element;
+    }
+
+    /// The adapter-computed context for one form shell.
+    ///
+    /// Children arrive as pre-keyed elements; the renderer never sees bound nodes or recursion.
+    #[derive(Clone, PartialEq)]
+    #[non_exhaustive]
+    pub struct ShellContext {
+        /// DOM `id` of the adapter-owned `<form>` element that contains the shell's output.
+        pub form_id: String,
+        /// The finding summary region, including its adapter-owned wrapper element.
+        ///
+        /// The wrapper carries `{form_id}-summary`, `role="region"`, a localized `aria-label`,
+        /// and `tabindex="-1"`; a blocked submission focuses it. Must be placed.
+        pub summary: Element,
+        /// Every root-level node of the form, in definition order. Must be placed.
+        pub body: Element,
+        /// The submit affordance: [`AffordanceKind::Submit`] with the localized submit label and
+        /// the id `{form_id}-submit`.
+        pub submit: Affordance,
+    }
+
+    impl fmt::Debug for ShellContext {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter
+                .debug_struct("ShellContext")
+                .field("form_id", &self.form_id)
+                .field("submit", &self.submit)
+                .finish_non_exhaustive()
+        }
+    }
+
+    /// The built-in form shell: summary, body, then a `type="submit"` button.
+    ///
+    /// The button carries the submit affordance's id and label and submits through the form
+    /// element, so pressing Enter in a text control and clicking the button take the same path.
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+    pub struct BuiltinShell;
+
+    impl ShellRenderer for BuiltinShell {
+        fn shell(&self, context: ShellContext) -> Element {
+            dioxus::prelude::rsx! {
+                {context.summary}
+                {context.body}
+                button { id: context.submit.id.clone(), r#type: "submit", "{context.submit.label}" }
+            }
+        }
+    }
+
+    /// The structure renderers a bound form renders its non-control nodes and shell through.
+    ///
+    /// Each slot holds one renderer for one structural node kind; an unset slot is the built-in,
+    /// so a bundle that replaces only some slots degrades to accessible unstyled output rather
+    /// than a missing region. A package that ships structure renderers exports a fully populated
+    /// bundle (by convention `fn structure() -> StructureRenderers`), and a host composes slots
+    /// from several packages with the `with_*` setters. There is deliberately no supertrait
+    /// bundling every slot: adding a slot is then additive for every existing renderer
+    /// implementation.
+    ///
+    /// The bundle is fixed at [`RenderConfiguration::bind`]. It is not signal-swappable and
+    /// [`RenderConfiguration::rebind_presentation`] does not touch it; changing a structure
+    /// renderer means rebinding the form.
+    #[derive(Clone)]
+    pub struct StructureRenderers {
+        shell: Arc<dyn ShellRenderer>,
+    }
+
+    impl Default for StructureRenderers {
+        /// Every slot is its built-in.
+        fn default() -> Self {
+            Self {
+                shell: Arc::new(BuiltinShell),
+            }
+        }
+    }
+
+    impl StructureRenderers {
+        /// Replaces the shell renderer.
+        pub fn with_shell(mut self, renderer: impl ShellRenderer) -> Self {
+            self.shell = Arc::new(renderer);
+            self
+        }
+
+        /// Renders the form shell through the configured [`ShellRenderer`].
+        pub(crate) fn render_shell(&self, context: ShellContext) -> Element {
+            self.shell.shell(context)
         }
     }
 
@@ -2401,6 +2529,7 @@ pub mod render {
     #[derive(Clone)]
     pub struct RenderConfiguration {
         controls: ControlRegistry,
+        structure: StructureRenderers,
         local_presenter: Arc<dyn FindingCollectionPresenter>,
         summary_presenter: Arc<dyn FindingCollectionPresenter>,
         localizer: Arc<dyn Localizer>,
@@ -2414,6 +2543,7 @@ pub mod render {
         fn default() -> Self {
             Self {
                 controls: ControlRegistry::with_builtins(),
+                structure: StructureRenderers::default(),
                 local_presenter: Arc::new(DefaultPresenter),
                 summary_presenter: Arc::new(DefaultPresenter),
                 localizer: Arc::new(FallbackLocalizer),
@@ -2478,6 +2608,7 @@ pub mod render {
                     handle: form.clone(),
                     form_id: format!("schemaform-{bound_form_id}"),
                     nodes,
+                    structure: self.structure.clone(),
                     local_presenter: Signal::new(self.local_presenter.clone()),
                     summary_presenter: Signal::new(self.summary_presenter.clone()),
                     localizer: Signal::new(self.localizer.clone()),
@@ -2490,9 +2621,9 @@ pub mod render {
 
         /// Reactively replaces presenters and localization without rebuilding the render plan.
         ///
-        /// Controls, extensions, generated DOM identity, and the grid breakpoint remain those
-        /// selected by the original bind; call [`RenderConfiguration::bind`] for those changes.
-        /// Core form state is not changed.
+        /// Controls, structure renderers, extensions, generated DOM identity, and the grid
+        /// breakpoint remain those selected by the original bind; call
+        /// [`RenderConfiguration::bind`] for those changes. Core form state is not changed.
         pub fn rebind_presentation(&self, form: &BoundForm) {
             let mut local_presenter = form.inner.local_presenter;
             if !Arc::ptr_eq(&local_presenter.peek(), &self.local_presenter) {
@@ -2667,6 +2798,16 @@ pub mod render {
             self
         }
 
+        /// Replaces the structure renderer bundle; unset slots are the built-ins.
+        ///
+        /// The bundle is fixed at [`RenderConfiguration::bind`] and is not swapped by
+        /// [`RenderConfiguration::rebind_presentation`]; changing a structure renderer means
+        /// rebinding.
+        pub fn structure(mut self, structure: StructureRenderers) -> Self {
+            self.configuration.structure = structure;
+            self
+        }
+
         /// Sets the presenter for node-local finding collections.
         pub fn local_presenter(mut self, presenter: Arc<dyn FindingCollectionPresenter>) -> Self {
             self.configuration.local_presenter = presenter;
@@ -2782,6 +2923,8 @@ pub mod render {
         pub(crate) handle: FormHandle,
         pub(crate) form_id: String,
         pub(crate) nodes: Vec<BoundNode>,
+        /// Bind-fixed structure renderers; see [`StructureRenderers`].
+        pub(crate) structure: StructureRenderers,
         pub(crate) local_presenter: Signal<Arc<dyn FindingCollectionPresenter>>,
         pub(crate) summary_presenter: Signal<Arc<dyn FindingCollectionPresenter>>,
         pub(crate) localizer: Signal<Arc<dyn Localizer>>,
@@ -3478,10 +3621,6 @@ pub mod render {
         /// Returns a clone of the form handle rendered by this plan.
         pub fn handle(&self) -> FormHandle {
             self.inner.handle.clone()
-        }
-
-        pub(crate) fn render(&self) -> Element {
-            dioxus::prelude::rsx! { crate::BoundControls { form: self.clone() } }
         }
     }
 
@@ -4530,24 +4669,38 @@ pub struct SchemaFormProps {
 /// `on_error`. Built-ins emit semantic accessibility markup; a custom control renderer owns its
 /// whole control region and is responsible for emitting the elements its
 /// [`render::NodePresentation`] references.
+///
+/// The adapter owns the `<form>` element, the finding-summary region wrapper, and the submit
+/// handling; the bound form's [`render::ShellRenderer`] arranges the summary, the body, and the
+/// submit affordance inside it.
 pub fn SchemaForm(props: SchemaFormProps) -> Element {
     let operation_errors = use_context_provider(OperationErrorHandler::default);
     operation_errors.set(Some(props.on_error));
-    let submit_form = props.form.clone();
-    let summary_focus =
-        render::TargetFocusAction::new(format!("{}-summary", props.form.inner.form_id));
-    let on_submit = props.on_submit;
-    let on_error = props.on_error;
-    let controls = props.form.render();
-    let submit_label = localize_builtin(&props.form, BuiltinMessage::Submit);
+    let form_id = props.form.inner.form_id.clone();
+    let submit = use_submit_callback(&props);
+    let submit_affordance = render::Affordance {
+        kind: render::AffordanceKind::Submit,
+        label: localize_builtin(&props.form, BuiltinMessage::Submit),
+        id: format!("{form_id}-submit"),
+        accessible_name: None,
+        invoke: submit,
+    };
+    let contents = props
+        .form
+        .inner
+        .structure
+        .render_shell(render::ShellContext {
+            form_id: form_id.clone(),
+            summary: rsx! { FindingSummary { form: props.form.clone() } },
+            body: rsx! { FormBody { form: props.form.clone() } },
+            submit: submit_affordance,
+        });
     let mut grid_styles = format!(
-        "#{id} .schemaform-grid{{display:grid;grid-template-columns:repeat(12,minmax(0,1fr))}}",
-        id = props.form.inner.form_id,
+        "#{form_id} .schemaform-grid{{display:grid;grid-template-columns:repeat(12,minmax(0,1fr))}}",
     );
     for span in 1..=12 {
         grid_styles.push_str(&format!(
-            "#{id} .schemaform-grid-cell[data-compact-span='{span}']{{grid-column:span {span} / span {span}}}",
-            id = props.form.inner.form_id,
+            "#{form_id} .schemaform-grid-cell[data-compact-span='{span}']{{grid-column:span {span} / span {span}}}",
         ));
     }
     grid_styles.push_str(&format!(
@@ -4556,8 +4709,7 @@ pub fn SchemaForm(props: SchemaFormProps) -> Element {
     ));
     for span in 1..=12 {
         grid_styles.push_str(&format!(
-            "#{id} .schemaform-grid-cell[data-wide-span='{span}']{{grid-column:span {span} / span {span}}}",
-            id = props.form.inner.form_id,
+            "#{form_id} .schemaform-grid-cell[data-wide-span='{span}']{{grid-column:span {span} / span {span}}}",
         ));
     }
     grid_styles.push('}');
@@ -4565,34 +4717,54 @@ pub fn SchemaForm(props: SchemaFormProps) -> Element {
     rsx! {
         style { dangerous_inner_html: grid_styles }
         form {
-            id: props.form.inner.form_id.clone(),
+            id: form_id,
             class: "schemaform",
             "data-schemaform": "",
             novalidate: true,
             tabindex: "-1",
             onsubmit: move |event| {
                 event.prevent_default();
-                match submit_form.handle().prepare_submission() {
-                    Ok(preparation) => match preparation.into_parts().1 {
-                        SubmissionOutcome::Ready(snapshot) => on_submit.call(snapshot),
-                        SubmissionOutcome::Blocked(_) => summary_focus.focus(),
-                    },
-                    Err(error) => on_error.call(error),
-                }
+                submit.call(());
             },
-            {controls}
-            button { r#type: "submit", "{submit_label}" }
+            {contents}
         }
     }
 }
 
+/// Creates the hook-stable submission callback behind the submit affordance and the form's
+/// `submit` event.
+///
+/// Invocation finalizes edit buffers and prepares submission: a ready snapshot reaches
+/// `on_submit`, a blocked outcome focuses the finding summary, and an adapter failure reaches
+/// `on_error`. The closure is refreshed every render so it always calls the current props while
+/// the callback identity stays fixed. This is a hook: call it at the same position on every
+/// render.
+fn use_submit_callback(props: &SchemaFormProps) -> Callback<()> {
+    let form = props.form.clone();
+    let summary_focus =
+        render::TargetFocusAction::new(format!("{}-summary", props.form.inner.form_id));
+    let on_submit = props.on_submit;
+    let on_error = props.on_error;
+    use_callback(move |()| match form.handle().prepare_submission() {
+        Ok(preparation) => match preparation.into_parts().1 {
+            SubmissionOutcome::Ready(snapshot) => on_submit.call(snapshot),
+            SubmissionOutcome::Blocked(_) => summary_focus.focus(),
+        },
+        Err(error) => on_error.call(error),
+    })
+}
+
 #[derive(Props, Clone, PartialEq)]
-struct BoundControlsProps {
+struct BoundFormProps {
     form: render::BoundForm,
 }
 
+/// The adapter-owned finding summary region: the focusable wrapper a blocked submission targets
+/// and the summary presenter's output inside it.
+///
+/// This component subscribes to the summary projection, so summary changes re-render it alone.
 #[allow(non_snake_case)]
-fn BoundControls(props: BoundControlsProps) -> Element {
+fn FindingSummary(props: BoundFormProps) -> Element {
     if props.form.handle().ensure_live().is_err() {
         return rsx! {};
     }
@@ -4649,6 +4821,19 @@ fn BoundControls(props: BoundControlsProps) -> Element {
                 context: summary_context,
             }
         }
+    }
+}
+
+/// The form body: every root-level bound node, keyed by instance identity.
+///
+/// The render plan is bind-fixed, so this component re-renders only when its props change; each
+/// node subscribes to its own state.
+#[allow(non_snake_case)]
+fn FormBody(props: BoundFormProps) -> Element {
+    if props.form.handle().ensure_live().is_err() {
+        return rsx! {};
+    }
+    rsx! {
         for node in props.form.inner.nodes.iter().cloned() {
             BoundNode {
                 key: "{node.key()}",
@@ -7064,6 +7249,7 @@ fn scalar_presence_affordances(
             kind: AffordanceKind::Set,
             label: localize_builtin(form, BuiltinMessage::PresenceSet { label: label() }),
             id: format!("{element_id}-set-value"),
+            accessible_name: None,
             invoke: callbacks.set,
         });
     }
@@ -7072,6 +7258,7 @@ fn scalar_presence_affordances(
             kind: AffordanceKind::SetNull,
             label: localize_builtin(form, BuiltinMessage::PresenceSetNull { label: label() }),
             id: format!("{element_id}-set-null"),
+            accessible_name: None,
             invoke: callbacks.set_null,
         });
     }
@@ -7080,6 +7267,7 @@ fn scalar_presence_affordances(
             kind: AffordanceKind::RemoveValue,
             label: localize_builtin(form, BuiltinMessage::PresenceRemove { label: label() }),
             id: format!("{element_id}-remove-value"),
+            accessible_name: None,
             invoke: callbacks.remove_value,
         });
     }
@@ -7088,6 +7276,7 @@ fn scalar_presence_affordances(
             kind: AffordanceKind::Replace,
             label: localize_builtin(form, BuiltinMessage::PresenceReplace { label: label() }),
             id: format!("{element_id}-replace-value"),
+            accessible_name: None,
             invoke: callbacks.replace,
         });
     }
@@ -7655,10 +7844,11 @@ pub use handle::{
 };
 pub use render::{
     Affordance, AffordanceKind, BindError, BindFinding, BoundForm, BuiltinControlRenderer,
-    ControlFacets, ControlKind, ControlMatcher, ControlRegistry, ControlRenderContext,
-    ControlRenderer, ExtensionHandler, ExtensionOccurrence, ExtensionPrepareError,
-    ExtensionRenderContext, FindingCollectionPresenter, Help, Localizer, NodePresentation,
-    PreparedExtension, PreparedExtensions, RenderConfiguration,
+    BuiltinShell, ControlFacets, ControlKind, ControlMatcher, ControlRegistry,
+    ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
+    ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter, Help, Localizer,
+    NodePresentation, PreparedExtension, PreparedExtensions, RenderConfiguration, ShellContext,
+    ShellRenderer, StructureRenderers,
 };
 #[cfg(schemaform_test_validation_faults)]
 pub use render_observation::{RenderEvent, RenderNodeKind, RenderObservation, RenderObserver};

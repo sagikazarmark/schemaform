@@ -26,7 +26,7 @@ use schemaform_dioxus::{
     ExtensionOccurrence, ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter,
     FormHandle, HandleError, HandleTransactionError, Localizer, PreparedExtension,
     RenderConfiguration, RenderEvent, RenderNodeKind, RenderObservation, RenderObserver,
-    SchemaForm as RequiredSchemaForm,
+    SchemaForm as RequiredSchemaForm, ShellContext, ShellRenderer, StructureRenderers,
     render::{BindFinding, FindingCollectionContext},
     use_form,
 };
@@ -937,6 +937,66 @@ fn custom_renderer_operation_error_test_app(props: TestAppProps) -> Element {
     let form = use_form(definition, json!({ "text": "canonical" }))
         .expect("the custom-renderer operation-error form should be created");
     let bound = bind_affordance_renderer(&form);
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+    let errors = props.errors.clone();
+
+    rsx! {
+        SchemaForm {
+            form: bound,
+            on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
+            on_error: move |error| errors.borrow_mut().push(error),
+        }
+    }
+}
+
+/// A form shell with none of the built-in's chrome: the body first, the summary framed as an
+/// aside after it, and the submit affordance as a plain button that invokes the affordance rather
+/// than a `type="submit"` button. Submission and summary focus therefore have to come from the
+/// adapter's contract alone.
+struct TestShell;
+
+impl ShellRenderer for TestShell {
+    fn shell(&self, context: ShellContext) -> Element {
+        let submit = context.submit;
+        rsx! {
+            section { "data-test-shell": "body", {context.body} }
+            aside { "data-test-shell": "summary", {context.summary} }
+            footer {
+                "data-test-shell": "footer",
+                button {
+                    id: submit.id.clone(),
+                    r#type: "button",
+                    "data-test-shell-submit": "",
+                    "data-affordance": format!("{:?}", submit.kind),
+                    onclick: move |_| submit.invoke.call(()),
+                    "{submit.label}"
+                }
+            }
+        }
+    }
+}
+
+fn custom_shell_test_app(props: TestAppProps) -> Element {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+            "name": { "type": "string", "title": "Full name", "minLength": 2 }
+        }
+    }))
+    .expect("the custom-shell data schema should compile");
+    let form = use_form(definition, json!({ "name": "Ada" }))
+        .expect("the custom-shell form should be created");
+    let bound = RenderConfiguration::builder()
+        .structure(StructureRenderers::default().with_shell(TestShell))
+        .build()
+        .bind(&form)
+        .expect("the built-in control should bind under a custom shell");
     props
         .handle
         .borrow_mut()
@@ -9097,6 +9157,106 @@ async fn custom_renderer_reported_failures_reach_schema_form_on_error() {
         *errors.borrow(),
         vec![HandleError::BorrowConflict, HandleError::BorrowConflict]
     );
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+async fn custom_shell_renderer_keeps_submission_and_summary_focus_behaviour() {
+    let (
+        MountedTestApp {
+            root,
+            form_handle,
+            submitted,
+        },
+        errors,
+    ) = mount_test_app_with_errors(custom_shell_test_app).await;
+    let form: HtmlFormElement = root
+        .query_selector("form")
+        .expect("the form selector should be valid")
+        .expect("the schema form should render a form element")
+        .dyn_into()
+        .expect("the schema form should use semantic form HTML");
+    let form_id = form.id();
+
+    // The adapter keeps the form element and its submission contract.
+    assert!(form.no_validate());
+    assert_eq!(form.get_attribute("tabindex").as_deref(), Some("-1"));
+    assert!(form.has_attribute("data-schemaform"));
+
+    // The shell placed the adapter-owned summary wrapper and the body where it wanted, in its
+    // own order, and did not render a `type="submit"` button.
+    let summary = form
+        .query_selector("aside[data-test-shell='summary'] > [data-finding-summary]")
+        .expect("the summary selector should be valid")
+        .expect("the shell should place the adapter-owned summary wrapper inside its aside");
+    assert_eq!(summary.id(), format!("{form_id}-summary"));
+    assert!(
+        form.query_selector("section[data-test-shell='body'] input[name='/name']")
+            .expect("the body selector should be valid")
+            .is_some(),
+        "the shell should place the body in its section"
+    );
+    assert!(
+        form.query_selector("button[type='submit']")
+            .expect("the submit selector should be valid")
+            .is_none(),
+        "the adapter must not add its own submit button under a custom shell"
+    );
+    let submit: web_sys::HtmlElement = form
+        .query_selector("footer[data-test-shell='footer'] > button[data-test-shell-submit]")
+        .expect("the shell submit selector should be valid")
+        .expect("the shell should render the submit affordance")
+        .dyn_into()
+        .expect("the shell submit should be a button");
+    assert_eq!(submit.id(), format!("{form_id}-submit"));
+    assert_eq!(submit.text_content().as_deref(), Some("Submit"));
+    assert_eq!(
+        submit.get_attribute("data-affordance").as_deref(),
+        Some("Submit")
+    );
+    assert_eq!(
+        form.child_element_count(),
+        3,
+        "the form contains exactly the shell's output"
+    );
+
+    // A blocked submit through the affordance yields no snapshot and focuses the summary.
+    let input = input_with_binding(&root, "/name");
+    dispatch_input(&input, "A");
+    poll_dom(|| (form_handle.reader().form_data().ok()? == json!({ "name": "A" })).then_some(()))
+        .await;
+    submit.click();
+    next_microtask().await;
+    assert!(submitted.borrow().is_none());
+    wait_for_summary_focus(&root).await;
+    poll_dom(|| {
+        summary
+            .query_selector("[data-finding='minLength']")
+            .expect("the finding selector should be valid")
+    })
+    .await;
+
+    // A ready submit through the affordance yields an immutable snapshot.
+    dispatch_input(&input, "Grace");
+    let grace_data = json!({ "name": "Grace" });
+    poll_dom(|| (form_handle.reader().form_data().ok()? == grace_data).then_some(())).await;
+    submit.click();
+    let snapshot = poll_dom(|| submitted.borrow().clone()).await;
+    assert_eq!(snapshot.form_data(), &grace_data);
+
+    // The form element's own submit event (implicit submission) still runs the adapter's
+    // handler under a custom shell.
+    *submitted.borrow_mut() = None;
+    dispatch_submit(&form);
+    let snapshot = poll_dom(|| submitted.borrow().clone()).await;
+    assert_eq!(snapshot.form_data(), &grace_data);
+
+    dispatch_input(&input, "Lin");
+    poll_dom(|| (form_handle.reader().form_data().ok()? == json!({ "name": "Lin" })).then_some(()))
+        .await;
+    assert_eq!(snapshot.form_data(), &grace_data);
+    assert!(errors.borrow().is_empty());
 
     root.remove();
 }
