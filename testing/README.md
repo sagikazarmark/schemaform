@@ -11,6 +11,9 @@ crates, browser targets, or release workflows:
 - `browser/scripts/` contains the Node and Playwright drivers.
 - `browser/workload-pack/` is generated, checked-in output. Treat its manifests
   and content-addressed fixtures as immutable release contracts.
+- `toolchain/` keeps the Dioxus pin and `rust-version` identical across the
+  root, `fuzz/` and `demo/` manifests, which cannot inherit them from one
+  workspace.
 
 Testing infrastructure that follows ecosystem conventions remains outside this
 tree:

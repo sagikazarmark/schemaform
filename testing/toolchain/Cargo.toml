@@ -1,0 +1,10 @@
+[package]
+name = "toolchain-contract"
+version = "0.0.0"
+description = "Keeps the Dioxus pin and rust-version identical across every manifest in the repository"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false

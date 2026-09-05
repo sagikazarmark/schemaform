@@ -7,7 +7,10 @@
 //! manifests from drifting apart: a partial dependency bump once left the
 //! Dioxus umbrella crate on one patch release while its core crates moved to
 //! the next, and the demo lockfile fell behind the adapter it depends on.
-#![cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+//!
+//! This is repository infrastructure, not part of any product crate's
+//! contract: it reads files outside the crate it would ship in, so it lives in
+//! an unpublished `testing/` package rather than under `crates/*/tests/`.
 
 const WORKSPACE_MANIFEST: &str = include_str!("../../../Cargo.toml");
 const WORKSPACE_LOCK: &str = include_str!("../../../Cargo.lock");

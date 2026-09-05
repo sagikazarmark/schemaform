@@ -4,6 +4,7 @@ members = [
     "testing/browser/pack",
     "testing/browser/empty-shell",
     "testing/browser/runner",
+    "testing/toolchain",
 ]
 exclude = ["fuzz"]
 resolver = "3"
