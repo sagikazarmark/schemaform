@@ -5,6 +5,7 @@
 //! mapping it performs. The component's tests live in the crate's `tests/`
 //! directory, so this directory ships no test code.
 
+mod appearance;
 mod boolean;
 mod choice;
 mod collection;
@@ -16,8 +17,9 @@ mod parts;
 mod shell;
 mod text;
 
+pub use appearance::Appearance;
 pub use collection::DaisyuiCollection;
 pub use component::*;
-pub use findings::{DaisyuiFindings, findings};
+pub use findings::DaisyuiFindings;
 pub use mapping::*;
 pub use shell::DaisyuiShell;

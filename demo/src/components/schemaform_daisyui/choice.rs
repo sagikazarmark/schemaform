@@ -4,6 +4,7 @@
 use dioxus::prelude::*;
 use schemaform_dioxus::{ChoiceIdentity, ControlRenderContext, use_choice_edit};
 
+use super::Appearance;
 use super::mapping::{use_choice_binding, use_radio_binding};
 use super::parts::{WidgetLayout, editable, editable_field, kind_name};
 use crate::components::native_select::{NativeSelect, NativeSelectOption};
@@ -32,10 +33,13 @@ fn placeholder(context: &ControlRenderContext) -> String {
 /// after a rejected write. The placeholder is a disabled first option selected while nothing is,
 /// which is also where a write-only control rests after every write.
 #[component]
-pub(super) fn NativeSelectControl(context: ControlRenderContext) -> Element {
+pub(super) fn NativeSelectControl(
+    context: ControlRenderContext,
+    appearance: Appearance,
+) -> Element {
     let edit = use_choice_edit(&context);
     let binding = use_choice_binding(edit.clone());
-    if let Err(rendered) = editable(&context) {
+    if let Err(rendered) = editable(&context, appearance) {
         return rendered;
     }
     let control = context.control();
@@ -53,6 +57,7 @@ pub(super) fn NativeSelectControl(context: ControlRenderContext) -> Element {
 
     editable_field(
         &context,
+        appearance,
         binding,
         WidgetLayout::Stacked,
         rsx! {
@@ -76,10 +81,10 @@ pub(super) fn NativeSelectControl(context: ControlRenderContext) -> Element {
 /// state after every write. The registry reports focus exit one task after the group loses
 /// focus, so touched state lands one task later than with the native select.
 #[component]
-pub(super) fn RadioGroupControl(context: ControlRenderContext) -> Element {
+pub(super) fn RadioGroupControl(context: ControlRenderContext, appearance: Appearance) -> Element {
     let edit = use_choice_edit(&context);
     let binding = use_radio_binding(edit.clone());
-    if let Err(rendered) = editable(&context) {
+    if let Err(rendered) = editable(&context, appearance) {
         return rendered;
     }
     let control = context.control();
@@ -97,8 +102,11 @@ pub(super) fn RadioGroupControl(context: ControlRenderContext) -> Element {
         })
         .collect::<Vec<_>>();
 
+    let row_class = appearance.utilities("flex items-center gap-2");
+    let item_label_class = appearance.utilities("text-sm");
     editable_field(
         &context,
+        appearance,
         binding,
         WidgetLayout::Stacked,
         rsx! {
@@ -106,7 +114,7 @@ pub(super) fn RadioGroupControl(context: ControlRenderContext) -> Element {
                 "data-schemaform-control": kind,
                 "data-write-only-replacement": control.write_only.then_some(""),
                 for (index , (option , item_id , item_label_id)) in items.into_iter().enumerate() {
-                    div { key: "{item_id}", class: "flex items-center gap-2",
+                    div { key: "{item_id}", class: row_class,
                         RadioItem {
                             id: item_id.clone(),
                             value: option.identity.as_str().to_owned(),
@@ -114,7 +122,7 @@ pub(super) fn RadioGroupControl(context: ControlRenderContext) -> Element {
                             disabled: option.disabled,
                             aria_labelledby: item_label_id.clone(),
                         }
-                        span { id: item_label_id, class: "text-sm", "{option.label}" }
+                        span { id: item_label_id, class: item_label_class, "{option.label}" }
                     }
                 }
             }
@@ -131,10 +139,10 @@ pub(super) fn RadioGroupControl(context: ControlRenderContext) -> Element {
 /// reports focus exit one task after the trigger loses focus, so touched state lands one task
 /// later than with the native select.
 #[component]
-pub(super) fn SelectControl(context: ControlRenderContext) -> Element {
+pub(super) fn SelectControl(context: ControlRenderContext, appearance: Appearance) -> Element {
     let edit = use_choice_edit(&context);
     let binding = use_choice_binding(edit.clone());
-    if let Err(rendered) = editable(&context) {
+    if let Err(rendered) = editable(&context, appearance) {
         return rendered;
     }
     let control = context.control();
@@ -144,6 +152,7 @@ pub(super) fn SelectControl(context: ControlRenderContext) -> Element {
 
     editable_field(
         &context,
+        appearance,
         binding,
         WidgetLayout::Stacked,
         rsx! {

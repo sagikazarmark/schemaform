@@ -13,8 +13,8 @@
 //! **daisyUI presentation — moves with the component.** `mapping` drives the `dioxus-field`
 //! bindings the component builds from the adapter's edit hooks, through a capturing renderer and
 //! a `VirtualDom`, without rendering markup; it is the component's reusable contract with other
-//! `dioxus-field` consumers and moves as it is. `controls`, `collection`, `shell`, and `findings`
-//! observe the markup `dioxus-ssr` renders for a form bound through every seam, as a browser
+//! `dioxus-field` consumers and moves as it is. `appearance`, `controls`, `collection`, `shell`,
+//! and `findings` observe the markup `dioxus-ssr` renders for a form bound through every seam, as a browser
 //! would see it; the registry does not accept render-to-string tests, so they move as browser
 //! specs against the component's examples.
 //!
@@ -26,6 +26,7 @@
 mod contract;
 
 // daisyUI presentation: moves with the component.
+mod appearance;
 mod collection;
 mod controls;
 mod findings;

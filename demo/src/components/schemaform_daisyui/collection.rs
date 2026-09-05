@@ -7,18 +7,13 @@ use schemaform_dioxus::{
     render::{Affordance, AffordanceKind},
 };
 
+use super::Appearance;
 use super::parts::{icon, presence_affordances};
 use crate::components::button::{Button, ButtonSize};
 
 /// What an empty collection says in place of its items. A fixed host string: the localized item
 /// noun the context carries is a name, not a word a sentence can be built around.
 const EMPTY_STATE: &str = "Nothing here yet.";
-
-/// The classes a card body applies to a built-in fixed-object group rendered as its item, so the
-/// group's own box and legend flatten into the card instead of nesting a second frame under the
-/// card's title. They name the adapter's class hook because there is no `FixedObjectRenderer`
-/// seam yet; when one lands, the daisyUI fixed object decides its own frame and these go.
-const FLATTEN_NESTED_GROUP: &str = "[&>.schemaform-group]:border-0 [&>.schemaform-group]:bg-transparent [&>.schemaform-group]:p-0 [&>.schemaform-group>legend]:sr-only";
 
 /// Presents a homogeneous array as a daisyUI fieldset of item cards.
 ///
@@ -32,11 +27,27 @@ const FLATTEN_NESTED_GROUP: &str = "[&>.schemaform-group]:border-0 [&>.schemafor
 ///
 /// Identity, keying, focus after a mutation, and announcements stay the adapter's: every button
 /// carries its affordance id, so focus after a move lands on the same button in the moved row.
+///
+/// A built-in fixed object rendered as an item keeps its own frame here; the theme that gives
+/// `.schemaform-group` a frame is the one to flatten it inside a card, as the demo's does.
+///
+/// The [`Appearance`] axis switches every layout utility off; the `fieldset`, `card`, `btn`, and
+/// `join` component classes always render.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct DaisyuiCollection;
+pub struct DaisyuiCollection {
+    appearance: Appearance,
+}
+
+impl DaisyuiCollection {
+    /// The same renderer at `appearance`.
+    pub fn appearance(self, appearance: Appearance) -> Self {
+        Self { appearance }
+    }
+}
 
 impl CollectionRenderer for DaisyuiCollection {
     fn collection(&self, context: CollectionContext) -> Element {
+        let appearance = self.appearance;
         let presentation = context.presentation;
         let element_id = presentation.element_id.clone();
         let described_by = presentation.described_by();
@@ -49,47 +60,58 @@ impl CollectionRenderer for DaisyuiCollection {
         } else {
             "fieldset-legend sr-only"
         };
+        let fieldset_class = appearance
+            .utilities("min-w-0 gap-3 rounded-box border border-base-300 bg-base-100 p-4");
+        let help_class = appearance.utilities("min-w-0 text-base-content/70");
+        let readout_class = appearance.utilities("min-w-0 text-warning");
+        let empty_class = appearance.utilities(
+            "rounded-box border border-dashed border-base-300 p-4 text-center text-base-content/70",
+        );
+        let items_class = appearance.utilities("grid gap-3");
+        let append_class = appearance.utilities("w-fit");
+        let announcement_class = appearance.utilities("text-xs text-base-content/70");
         rsx! {
             fieldset {
                 id: element_id.clone(),
-                class: "fieldset min-w-0 gap-3 rounded-box border border-base-300 bg-base-100 p-4",
+                class: "fieldset {fieldset_class}",
                 "data-schemaform-daisyui": "collection",
                 tabindex: "-1",
                 "aria-invalid": presentation.invalid,
                 "aria-describedby": described_by,
                 legend { id: "{element_id}-legend", class: legend_class, "{presentation.label}" }
                 if let Some(help) = help {
-                    p { id: help.id, class: "min-w-0 text-base-content/70", "{help.text}" }
+                    p { id: help.id, class: help_class, "{help.text}" }
                 }
                 if let Some(value) = incompatible_value {
-                    output { class: "min-w-0 text-warning", "data-incompatible-value": "", "{value}" }
+                    output { class: readout_class, "data-incompatible-value": "", "{value}" }
                 }
-                {presence_affordances(&presentation.presence)}
+                {presence_affordances(&presentation.presence, appearance)}
                 if empty {
                     p {
-                        class: "rounded-box border border-dashed border-base-300 p-4 text-center text-base-content/70",
+                        class: empty_class,
                         "data-schemaform-daisyui": "collection-empty",
                         "{EMPTY_STATE}"
                     }
                 }
-                div { class: "grid gap-3", {context.items} }
+                div { class: items_class, {context.items} }
                 if let Some(append) = context.append {
                     Button {
                         id: append.id.clone(),
                         r#type: "button",
                         size: ButtonSize::Sm,
-                        class: "btn-outline w-fit",
+                        class: "btn-outline {append_class}",
                         onclick: move |_| append.invoke.call(()),
                         "{append.label}"
                     }
                 }
-                div { class: "text-xs text-base-content/70", {context.announcement} }
+                div { class: announcement_class, {context.announcement} }
                 {findings}
             }
         }
     }
 
     fn collection_item(&self, context: CollectionItemContext) -> Element {
+        let appearance = self.appearance;
         let title_id = format!("{}-title", context.row_id);
         let actions = [
             context.insert_before,
@@ -100,23 +122,29 @@ impl CollectionRenderer for DaisyuiCollection {
         .into_iter()
         .flatten()
         .collect::<Vec<_>>();
+        let card_class = appearance.utilities("bg-base-100");
+        let body_class = appearance.utilities("gap-3");
+        let header_class =
+            appearance.utilities("flex flex-wrap items-center justify-between gap-2");
+        let title_class = appearance
+            .utilities("text-xs font-medium tracking-wide text-base-content/70 uppercase");
         rsx! {
             div {
-                class: "card card-border card-sm bg-base-100",
+                class: "card card-border card-sm {card_class}",
                 role: "group",
                 "aria-labelledby": title_id.clone(),
                 "data-schemaform-daisyui": "collection-item",
-                div { class: "card-body gap-3 {FLATTEN_NESTED_GROUP}",
-                    div { class: "flex flex-wrap items-center justify-between gap-2",
+                div { class: "card-body {body_class}",
+                    div { class: header_class,
                         span {
                             id: title_id,
-                            class: "text-xs font-medium tracking-wide text-base-content/70 uppercase",
+                            class: title_class,
                             "{context.item_label} {context.position}"
                         }
                         if !actions.is_empty() {
                             div { class: "join",
                                 for affordance in actions {
-                                    {item_affordance(affordance)}
+                                    {item_affordance(affordance, appearance)}
                                 }
                             }
                         }
@@ -133,7 +161,7 @@ impl CollectionRenderer for DaisyuiCollection {
 /// The button carries the affordance id (focus after a move targets it), the positional
 /// accessible name as its `aria-label`, and the shorter visible label as its `title`, so the
 /// icon-only button still reads in full to assistive technology and on hover.
-fn item_affordance(affordance: Affordance) -> Element {
+fn item_affordance(affordance: Affordance, appearance: Appearance) -> Element {
     let name = affordance
         .accessible_name
         .clone()
@@ -150,7 +178,7 @@ fn item_affordance(affordance: Affordance) -> Element {
             title: affordance.label.clone(),
             onclick: move |_| affordance.invoke.call(()),
             if let Some(path) = glyph {
-                {icon(path, "size-4")}
+                {icon(path, appearance.utilities("size-4"))}
             } else {
                 "{affordance.label}"
             }

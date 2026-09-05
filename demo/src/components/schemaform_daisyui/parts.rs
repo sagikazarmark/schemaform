@@ -10,6 +10,7 @@ use schemaform_dioxus::{
     render::{Affordance, FindingDescriptor, Help},
 };
 
+use super::Appearance;
 use super::mapping::{field_meta_values, is_field_error};
 use crate::components::button::{Button, ButtonSize};
 use crate::components::field::{Field, FieldDescription, FieldLabel, FieldRow};
@@ -59,7 +60,10 @@ pub(super) fn widget_label(presentation: &NodePresentation, control: &ControlFac
 /// Call it after the component's hooks, so the hook order is the same on every render. The
 /// read-only rule lives here once: a read-only node is noninteractive `output` of its display
 /// text with no presence affordances, as the built-in offers none for it.
-pub(super) fn editable(context: &ControlRenderContext) -> Result<NodeProjection, Element> {
+pub(super) fn editable(
+    context: &ControlRenderContext,
+    appearance: Appearance,
+) -> Result<NodeProjection, Element> {
     let Some(projection) = context.node().read().ok().flatten() else {
         return Err(rsx! {});
     };
@@ -67,6 +71,7 @@ pub(super) fn editable(context: &ControlRenderContext) -> Result<NodeProjection,
         return Err(read_only_field(
             context.presentation(),
             context.control(),
+            appearance,
             projection.display_text(),
             &[],
         ));
@@ -93,6 +98,7 @@ pub(super) enum WidgetLayout {
 /// checkbox holding a string) still tells the user what the replace affordance discards.
 pub(super) fn editable_field<T: 'static>(
     context: &ControlRenderContext,
+    appearance: Appearance,
     binding: Binding<T>,
     layout: WidgetLayout,
     widget: Element,
@@ -119,8 +125,8 @@ pub(super) fn editable_field<T: 'static>(
                     }
                 },
             }
-            {incompatible_description(presentation)}
-            {supplements(presentation)}
+            {incompatible_description(presentation, appearance)}
+            {supplements(presentation, appearance)}
         }
     }
 }
@@ -128,13 +134,13 @@ pub(super) fn editable_field<T: 'static>(
 /// A description part per finding, each carrying the finding's stable id so every id the
 /// adapter hands out resolves to an element, plus `data-finding` (the code) and `data-blocking`
 /// as the finding presenter emits them.
-fn finding_descriptions(findings: Vec<FindingDescriptor>) -> Element {
+fn finding_descriptions(findings: Vec<FindingDescriptor>, appearance: Appearance) -> Element {
     rsx! {
         for finding in findings {
             FieldDescription {
                 key: "{finding.stable_id}",
                 id: Rc::from(finding.stable_id.as_str()),
-                class: if finding.blocking { "text-error" } else { "text-warning" },
+                class: appearance.utilities(if finding.blocking { "text-error" } else { "text-warning" }),
                 "data-finding": finding.code.clone(),
                 "data-blocking": finding.blocking.to_string(),
                 "{finding.text}"
@@ -149,7 +155,7 @@ fn finding_descriptions(findings: Vec<FindingDescriptor>) -> Element {
 /// Findings [`is_field_error`] accepts are presented in the error region the control references
 /// through `aria-errormessage`; every other finding is a description the control references
 /// through `aria-describedby`. Both kinds of element carry the finding's stable id.
-pub(super) fn supplements(presentation: &NodePresentation) -> Element {
+pub(super) fn supplements(presentation: &NodePresentation, appearance: Appearance) -> Element {
     let help = presentation.help.clone();
     let (errors, descriptions): (Vec<_>, Vec<_>) = presentation
         .findings
@@ -159,9 +165,9 @@ pub(super) fn supplements(presentation: &NodePresentation) -> Element {
     let errors_id = format!("{}-errors", presentation.element_id);
     rsx! {
         {help_description(help)}
-        {finding_descriptions(descriptions)}
-        FindingErrors { id: errors_id, findings: errors }
-        {presence_affordances(&presentation.presence)}
+        {finding_descriptions(descriptions, appearance)}
+        FindingErrors { id: errors_id, findings: errors, appearance }
+        {presence_affordances(&presentation.presence, appearance)}
     }
 }
 
@@ -183,14 +189,14 @@ fn help_description(help: Option<Help>) -> Element {
 /// renders the findings itself. It is always mounted so the live region exists before the first
 /// error arrives; it is empty while nothing blocks.
 #[component]
-fn FindingErrors(id: String, findings: Vec<FindingDescriptor>) -> Element {
+fn FindingErrors(id: String, findings: Vec<FindingDescriptor>, appearance: Appearance) -> Element {
     let meta = use_field_meta(None);
     let id: Rc<str> = Rc::from(id.as_str());
     use_error_id_registration(meta, Rc::clone(&id));
     rsx! {
         div {
             id: id.to_string(),
-            class: "text-error",
+            class: appearance.utilities("text-error"),
             "aria-live": "polite",
             "data-schemaform-errors": "",
             for finding in findings {
@@ -236,14 +242,17 @@ struct ActiveErrorRegistration {
 /// incompatible, or null where null is not accepted, the core allows replacement, and the
 /// control is not write-only. The description carries a stable id and describes the widget, so
 /// the replace affordance beside it has context.
-pub(super) fn incompatible_description(presentation: &NodePresentation) -> Element {
+pub(super) fn incompatible_description(
+    presentation: &NodePresentation,
+    appearance: Appearance,
+) -> Element {
     let value = presentation.incompatible_value.clone();
     let id = format!("{}-incompatible", presentation.element_id);
     rsx! {
         if let Some(value) = value {
             FieldDescription {
                 id: Rc::from(id.as_str()),
-                class: "text-warning",
+                class: appearance.utilities("text-warning"),
                 "data-incompatible-value": "",
                 "{value}"
             }
@@ -255,11 +264,11 @@ pub(super) fn incompatible_description(presentation: &NodePresentation) -> Eleme
 ///
 /// Presence affordances carry no accessible name today; should one arrive, it names the button
 /// as the adapter intends.
-pub(super) fn presence_affordances(presence: &[Affordance]) -> Element {
+pub(super) fn presence_affordances(presence: &[Affordance], appearance: Appearance) -> Element {
     let presence = presence.to_vec();
     rsx! {
         if !presence.is_empty() {
-            div { class: "flex flex-wrap gap-2",
+            div { class: appearance.utilities("flex flex-wrap gap-2"),
                 for affordance in presence {
                     Button {
                         key: "{affordance.id}",
@@ -277,11 +286,14 @@ pub(super) fn presence_affordances(presence: &[Affordance]) -> Element {
 }
 
 /// A decorative Heroicons outline icon: `path` is the icon's path data, `class` sizes it. Hidden
-/// from assistive technology, so the element it decorates must carry its own name.
+/// from assistive technology, so the element it decorates must carry its own name. The `width`
+/// and `height` attributes give it an intrinsic `1em` size for when no class sizes it.
 pub(super) fn icon(path: &'static str, class: &'static str) -> Element {
     rsx! {
         svg {
             class,
+            width: "1em",
+            height: "1em",
             "aria-hidden": "true",
             xmlns: "http://www.w3.org/2000/svg",
             fill: "none",
@@ -303,6 +315,7 @@ pub(super) fn icon(path: &'static str, class: &'static str) -> Element {
 pub(super) fn read_only_field(
     presentation: &NodePresentation,
     control: &ControlFacets,
+    appearance: Appearance,
     text: String,
     presence: &[Affordance],
 ) -> Element {
@@ -319,7 +332,7 @@ pub(super) fn read_only_field(
             output {
                 id: element_id,
                 name: control.name.clone(),
-                class: "min-w-0 py-2",
+                class: appearance.utilities("min-w-0 py-2"),
                 tabindex: "-1",
                 "data-read-only": "",
                 "data-schemaform-control": kind,
@@ -328,8 +341,8 @@ pub(super) fn read_only_field(
                 "{text}"
             }
             {help_description(help)}
-            {finding_descriptions(findings)}
-            {presence_affordances(presence)}
+            {finding_descriptions(findings, appearance)}
+            {presence_affordances(presence, appearance)}
         }
     }
 }

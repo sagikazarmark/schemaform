@@ -54,6 +54,18 @@
       @apply fieldset-legend text-sm;
     }
 
+    /* A fixed-object group rendered as an item of the daisyUI collection sits in a card that
+     * already frames it and names it by its title, so the frame this theme gives the group and
+     * its legend flatten into the card rather than nesting a second box under the card's header.
+     * This is the theme's rule, not the component's: the component knows nothing of the frame. */
+    [data-schemaform-daisyui="collection-item"] > .card-body > .schemaform-group {
+      @apply border-0 bg-transparent p-0;
+    }
+
+    [data-schemaform-daisyui="collection-item"] > .card-body > .schemaform-group > legend {
+      @apply sr-only;
+    }
+
     /* Controls mirror the registry's `Field`: a grid holding the label, the widget, and the
      * parts under it. */
     .schemaform-control {

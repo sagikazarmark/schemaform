@@ -3,6 +3,7 @@
 use dioxus::prelude::*;
 use schemaform_dioxus::ControlRenderContext;
 
+use super::Appearance;
 use super::parts::{editable, read_only_field};
 
 /// One daisyUI constant control: the renderer's hook-safe child component.
@@ -12,8 +13,8 @@ use super::parts::{editable, read_only_field};
 /// fixed value's display text, with the presence affordances that materialize or remove it
 /// unless the node itself is read-only.
 #[component]
-pub(super) fn ConstantControl(context: ControlRenderContext) -> Element {
-    let projection = match editable(&context) {
+pub(super) fn ConstantControl(context: ControlRenderContext, appearance: Appearance) -> Element {
+    let projection = match editable(&context, appearance) {
         Ok(projection) => projection,
         Err(rendered) => return rendered,
     };
@@ -23,5 +24,11 @@ pub(super) fn ConstantControl(context: ControlRenderContext) -> Element {
         .write_only_status
         .clone()
         .unwrap_or_else(|| projection.display_text());
-    read_only_field(presentation, control, text, &presentation.presence)
+    read_only_field(
+        presentation,
+        control,
+        appearance,
+        text,
+        &presentation.presence,
+    )
 }

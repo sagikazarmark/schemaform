@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 use dioxus_primitives::dioxus_attributes::attributes;
 use schemaform_dioxus::{ControlKind, ControlRenderContext, use_text_edit};
 
+use super::Appearance;
 use super::mapping::use_text_binding;
 use super::parts::{WidgetLayout, editable, editable_field, kind_name};
 use crate::components::input::Input;
@@ -29,10 +30,10 @@ fn input_mode(kind: ControlKind) -> &'static str {
 /// rejects edits, as the built-in does; the facets' `read_only` also covers a node the core will
 /// not accept text for right now, which keeps its editable widget and its replace affordance.
 #[component]
-pub(super) fn TextControl(context: ControlRenderContext) -> Element {
+pub(super) fn TextControl(context: ControlRenderContext, appearance: Appearance) -> Element {
     let edit = use_text_edit(&context);
     let binding = use_text_binding(edit);
-    if let Err(rendered) = editable(&context) {
+    if let Err(rendered) = editable(&context, appearance) {
         return rendered;
     }
     let control = context.control();
@@ -57,6 +58,7 @@ pub(super) fn TextControl(context: ControlRenderContext) -> Element {
 
     editable_field(
         &context,
+        appearance,
         binding,
         WidgetLayout::Stacked,
         rsx! {

@@ -25,49 +25,8 @@ use demo::components::schemaform_daisyui::{configuration, controls};
 /// `minItems`, so its sole item cannot be removed and emptying it from the host provokes an
 /// array-level finding.
 pub(crate) fn arrays_app(props: TestAppProps) -> Element {
-    let definition = use_hook(|| {
-        FormDefinition::compile(json!({
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["name", "team"],
-            "properties": {
-                "name": { "type": "string", "title": "Name", "minLength": 2 },
-                "tags": {
-                    "type": "array",
-                    "title": "Tags",
-                    "description": "Keywords for the badge.",
-                    "default": ["seed"],
-                    "maxItems": 3,
-                    "items": { "type": "string", "title": "Tag", "default": "fresh" }
-                },
-                "team": {
-                    "type": "array",
-                    "title": "Team",
-                    "minItems": 1,
-                    "maxItems": 2,
-                    "items": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "required": ["name"],
-                        "properties": {
-                            "name": { "type": "string", "title": "Member", "default": "New member" }
-                        }
-                    }
-                }
-            }
-        }))
-        .expect("the arrays data schema should compile")
-    });
-    let form = use_form(
-        definition,
-        json!({
-            "name": "Ada",
-            "tags": ["rust", "dioxus"],
-            "team": [{ "name": "Ada" }]
-        }),
-    )
-    .expect("the arrays form should be created");
+    let definition = use_hook(arrays_definition);
+    let form = use_form(definition, arrays_baseline()).expect("the arrays form should be created");
     props
         .handle
         .borrow_mut()
@@ -80,6 +39,51 @@ pub(crate) fn arrays_app(props: TestAppProps) -> Element {
     rsx! {
         SchemaForm { form: bound, on_submit: move |_| {} }
     }
+}
+
+/// The arrays form's data schema, compiled.
+pub(crate) fn arrays_definition() -> FormDefinition {
+    FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "team"],
+        "properties": {
+            "name": { "type": "string", "title": "Name", "minLength": 2 },
+            "tags": {
+                "type": "array",
+                "title": "Tags",
+                "description": "Keywords for the badge.",
+                "default": ["seed"],
+                "maxItems": 3,
+                "items": { "type": "string", "title": "Tag", "default": "fresh" }
+            },
+            "team": {
+                "type": "array",
+                "title": "Team",
+                "minItems": 1,
+                "maxItems": 2,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name"],
+                    "properties": {
+                        "name": { "type": "string", "title": "Member", "default": "New member" }
+                    }
+                }
+            }
+        }
+    }))
+    .expect("the arrays data schema should compile")
+}
+
+/// The arrays form's baseline data.
+pub(crate) fn arrays_baseline() -> serde_json::Value {
+    json!({
+        "name": "Ada",
+        "tags": ["rust", "dioxus"],
+        "team": [{ "name": "Ada" }]
+    })
 }
 
 /// The gallery's authored presentation: every control in data-schema order, except that the

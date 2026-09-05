@@ -10,6 +10,7 @@ use dioxus_field::{
 use dioxus_primitives::dioxus_attributes::attributes;
 use schemaform_dioxus::{ControlRenderContext, use_boolean_edit};
 
+use super::Appearance;
 use super::mapping::{use_boolean_binding, use_checkbox_binding};
 use super::parts::{WidgetLayout, editable, editable_field, kind_name};
 use crate::components::checkbox::Checkbox;
@@ -26,11 +27,11 @@ use crate::components::native_select::{NativeSelect, NativeSelectOption};
 /// the built-in's native semantics; its two-state view of the edit is the tri-state binding with
 /// null read as unchecked, which such a node never holds.
 #[component]
-pub(super) fn BooleanControl(context: ControlRenderContext) -> Element {
+pub(super) fn BooleanControl(context: ControlRenderContext, appearance: Appearance) -> Element {
     let edit = use_boolean_edit(&context);
     let binding = use_boolean_binding(edit);
     let checkbox = use_checkbox_binding(edit);
-    if let Err(rendered) = editable(&context) {
+    if let Err(rendered) = editable(&context, appearance) {
         return rendered;
     }
     let control = context.control();
@@ -49,6 +50,7 @@ pub(super) fn BooleanControl(context: ControlRenderContext) -> Element {
         ];
         return editable_field(
             &context,
+            appearance,
             binding,
             WidgetLayout::Stacked,
             rsx! {
@@ -65,6 +67,7 @@ pub(super) fn BooleanControl(context: ControlRenderContext) -> Element {
     if control.nullable {
         return editable_field(
             &context,
+            appearance,
             checkbox,
             WidgetLayout::Row,
             rsx! {
@@ -75,6 +78,7 @@ pub(super) fn BooleanControl(context: ControlRenderContext) -> Element {
 
     editable_field(
         &context,
+        appearance,
         binding,
         WidgetLayout::Row,
         rsx! {

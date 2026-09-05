@@ -10,15 +10,16 @@ use schemaform::{
 };
 use schemaform_dioxus::{
     BUILTIN_CONTROL_PRIORITY, BuiltinControlRenderer, ControlKind, ControlMatcher, ControlRegistry,
-    ControlRenderContext, ControlRenderer, FormHandle, HandleError, RenderConfiguration,
-    SchemaForm, StructureRenderers,
+    ControlRenderContext, ControlRenderer, FindingCollectionPresenter, FormHandle, HandleError,
+    RenderConfiguration, SchemaForm, StructureRenderers,
 };
 
+use super::Appearance;
 use super::boolean::BooleanControl;
 use super::choice::{NativeSelectControl, RadioGroupControl, SelectControl};
 use super::collection::DaisyuiCollection;
 use super::constant::ConstantControl;
-use super::findings::findings;
+use super::findings::DaisyuiFindings;
 use super::shell::DaisyuiShell;
 use super::text::TextControl;
 
@@ -42,8 +43,11 @@ pub fn SchemaformDaisyui(
     /// Receives adapter operation failures; failures are dropped when it is not set.
     #[props(default)]
     on_error: EventHandler<HandleError>,
+    /// Whether the renderers emit their layout utilities. Fixed at mount, like the renderers.
+    #[props(default)]
+    appearance: Appearance,
 ) -> Element {
-    let bound = use_hook(|| configuration().bind(&form).map_err(Rc::new));
+    let bound = use_hook(|| configuration_with(appearance).bind(&form).map_err(Rc::new));
     let bound = match bound {
         Ok(bound) => bound,
         Err(error) => return Err(dioxus::core::CapturedError::from_display(error).into()),
@@ -56,11 +60,16 @@ pub fn SchemaformDaisyui(
 /// The render configuration [`SchemaformDaisyui`] binds a form with: [`controls`] as the control
 /// registry, [`structure`] as the structure bundle, and [`findings`] in both presenter slots.
 pub fn configuration() -> RenderConfiguration {
+    configuration_with(Appearance::default())
+}
+
+/// [`configuration`] with every renderer at `appearance`.
+pub fn configuration_with(appearance: Appearance) -> RenderConfiguration {
     RenderConfiguration::builder()
-        .controls(controls())
-        .structure(structure())
-        .summary_presenter(findings())
-        .local_presenter(findings())
+        .controls(controls_with(appearance))
+        .structure(structure_with(appearance))
+        .summary_presenter(findings_with(appearance))
+        .local_presenter(findings_with(appearance))
         .build()
 }
 
@@ -83,23 +92,26 @@ pub const SELECT_WIDGET: &str = "daisyui:select";
 /// presentation and a control the daisyUI renderer does not accept still renders. Choices render
 /// as a native select unless the UI schema names [`RADIO_WIDGET`] or [`SELECT_WIDGET`] for them.
 pub fn controls() -> ControlRegistry {
+    controls_with(Appearance::default())
+}
+
+/// [`controls`] with every renderer at `appearance`.
+pub fn controls_with(appearance: Appearance) -> ControlRegistry {
+    let renderer =
+        |choice| DaisyuiControlRenderer::with_choice_widget(choice).appearance(appearance);
     ControlRegistry::with_builtins()
         .matcher(
             DAISYUI_CONTROL_PRIORITY,
             Arc::new(DaisyuiControls),
-            Arc::new(DaisyuiControlRenderer::default()),
+            Arc::new(renderer(ChoiceWidget::NativeSelect)),
         )
         .widget(
             widget_symbol(RADIO_WIDGET),
-            Arc::new(DaisyuiControlRenderer::with_choice_widget(
-                ChoiceWidget::RadioGroup,
-            )),
+            Arc::new(renderer(ChoiceWidget::RadioGroup)),
         )
         .widget(
             widget_symbol(SELECT_WIDGET),
-            Arc::new(DaisyuiControlRenderer::with_choice_widget(
-                ChoiceWidget::Select,
-            )),
+            Arc::new(renderer(ChoiceWidget::Select)),
         )
 }
 
@@ -115,9 +127,28 @@ fn widget_symbol(symbol: &str) -> WidgetSymbol {
 /// bundle degrades to the adapter's accessible unstyled output for those node kinds rather than
 /// losing a region.
 pub fn structure() -> StructureRenderers {
+    structure_with(Appearance::default())
+}
+
+/// [`structure`] with both renderers at `appearance`.
+pub fn structure_with(appearance: Appearance) -> StructureRenderers {
     StructureRenderers::default()
-        .with_shell(DaisyuiShell)
-        .with_collection(DaisyuiCollection)
+        .with_shell(DaisyuiShell::default().appearance(appearance))
+        .with_collection(DaisyuiCollection::default().appearance(appearance))
+}
+
+/// The finding presenter for both presenter slots of a render configuration.
+///
+/// Wire it as the summary presenter for the alert and as the local presenter so the findings a
+/// built-in container or this component's collection renders through
+/// `NodePresentation::present_findings` are daisyUI-styled as well.
+pub fn findings() -> Arc<dyn FindingCollectionPresenter> {
+    findings_with(Appearance::default())
+}
+
+/// [`findings`] at `appearance`.
+pub fn findings_with(appearance: Appearance) -> Arc<dyn FindingCollectionPresenter> {
+    Arc::new(DaisyuiFindings::default().appearance(appearance))
 }
 
 /// Accepts exactly the definition nodes [`DaisyuiControlRenderer`] presents itself: those the
@@ -164,30 +195,40 @@ pub enum ChoiceWidget {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct DaisyuiControlRenderer {
     choice: ChoiceWidget,
+    appearance: Appearance,
 }
 
 impl DaisyuiControlRenderer {
     /// A renderer presenting choices with `choice`; [`Default`] presents them natively.
     pub fn with_choice_widget(choice: ChoiceWidget) -> Self {
-        Self { choice }
+        Self {
+            choice,
+            appearance: Appearance::default(),
+        }
+    }
+
+    /// The same renderer at `appearance`.
+    pub fn appearance(self, appearance: Appearance) -> Self {
+        Self { appearance, ..self }
     }
 }
 
 impl ControlRenderer for DaisyuiControlRenderer {
     fn render(&self, context: ControlRenderContext) -> Element {
+        let appearance = self.appearance;
         // The kind is definition-stable, so a node always renders the same child component and
         // the hooks inside it are called unconditionally.
         match context.control().kind {
             ControlKind::String | ControlKind::Number | ControlKind::Integer => {
-                rsx! { TextControl { context } }
+                rsx! { TextControl { context, appearance } }
             }
-            ControlKind::Boolean => rsx! { BooleanControl { context } },
+            ControlKind::Boolean => rsx! { BooleanControl { context, appearance } },
             ControlKind::Choice => match self.choice {
-                ChoiceWidget::NativeSelect => rsx! { NativeSelectControl { context } },
-                ChoiceWidget::RadioGroup => rsx! { RadioGroupControl { context } },
-                ChoiceWidget::Select => rsx! { SelectControl { context } },
+                ChoiceWidget::NativeSelect => rsx! { NativeSelectControl { context, appearance } },
+                ChoiceWidget::RadioGroup => rsx! { RadioGroupControl { context, appearance } },
+                ChoiceWidget::Select => rsx! { SelectControl { context, appearance } },
             },
-            ControlKind::Constant => rsx! { ConstantControl { context } },
+            ControlKind::Constant => rsx! { ConstantControl { context, appearance } },
             _ => BuiltinControlRenderer.render(context),
         }
     }

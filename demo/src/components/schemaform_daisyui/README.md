@@ -1,7 +1,11 @@
 # schemaform_daisyui
 
 A `schemaform-dioxus` renderer package that presents a form with the
-`dioxus-daisyui-components` registry and daisyUI classes. It fills three seams:
+`dioxus-daisyui-components` registry and daisyUI classes: a control renderer for
+every control kind, a structure bundle for homogeneous arrays and the form
+shell, and a finding presenter for the summary and node-local findings.
+
+It fills three seams:
 
 - A **control renderer** for every control kind: strings, numbers, and integers
   with `Field`, `FieldLabel`, `Input`, and `FieldDescription`; booleans with a
@@ -45,9 +49,10 @@ registry without changing shape:
   `schemaform` and `schemaform-dioxus` entries name the release that ships the
   headless edit hooks and the structure seams; this demo builds them from the
   workspace instead.
-- `mod.rs`, `component.rs`, `mapping.rs`, `parts.rs`, `text.rs`, `boolean.rs`,
-  `choice.rs`, `constant.rs`, `collection.rs`, `shell.rs`, and `findings.rs`
-  are what an install copies. None of them contains test code.
+- `mod.rs`, `component.rs`, `appearance.rs`, `mapping.rs`, `parts.rs`,
+  `text.rs`, `boolean.rs`, `choice.rs`, `constant.rs`, `collection.rs`,
+  `shell.rs`, and `findings.rs` are what an install copies. None of them
+  contains test code.
 - The component's tests live in the demo's `tests/schemaform_daisyui/`, in two
   groups. `contract.rs` asserts the adapter's contract through this package as
   a real consumer and stays with schemaform. The rest move with the component:
@@ -117,6 +122,11 @@ adapter hands out in `aria-describedby` resolve. Identity, keying, focus after a
 mutation, and announcements stay the adapter's: the renderers place what they
 are handed and never compose affordances themselves.
 
+A built-in fixed object rendered as an array item keeps whatever frame the
+host's theme gives `.schemaform-group`; the collection knows nothing of it. A
+theme that frames groups is the one to flatten them inside a card, as the
+demo's `forms.css` does under `[data-schemaform-daisyui="collection-item"]`.
+
 ## What it maps
 
 `schemaform-dioxus` owns the correctness-critical editing behaviour through
@@ -175,6 +185,24 @@ hook's value signal, write is the hook's callback — that the registry widgets
 consume as they would any host binding. The widgets never see form data, and a
 write the core rejects is undone by the hook resynchronising the widget's DOM
 state, not by state kept in this component.
+
+## Axes
+
+- `appearance: Appearance`: `Default` emits the Tailwind utilities the package
+  lays itself out with (gaps, borders, widths, the semantic text colours);
+  `None` emits none of them. The daisyUI component classes — `fieldset`,
+  `card`, `btn`, `join`, `alert`, `link`, `input`, `checkbox`, `select` — and
+  the `sr-only` that keeps a hidden label accessible render under both values,
+  since a caller's utilities override component classes cleanly and only the
+  package's own utilities would tie with theirs. The same elements, ids, and
+  markers render under both values.
+
+The axis is fixed when a form is bound, like the renderers: it is a prop of
+`SchemaformDaisyui`, an argument of `configuration_with`, `controls_with`,
+`structure_with`, and `findings_with`, and a builder method on
+`DaisyuiControlRenderer`, `DaisyuiCollection`, `DaisyuiShell`, and
+`DaisyuiFindings`. `Appearance::ALL` lists both values. The registry parts the
+controls compose keep their own appearance axes at their defaults.
 
 ## Usage
 
@@ -251,16 +279,14 @@ Where this component departs from the registry's conventions, and why:
   `{element_id}-label`, `{element_id}-errors`, `{element_id}-incompatible`,
   `{element_id}-legend`, and `{row_id}-title` from the adapter's ids, and a
   radio item's id from the control's element id and the option's identity.
-- **One class hook.** A built-in fixed object rendered as an array item is
-  flattened into its card — its own border, padding, and background removed and
-  its legend made screen-reader-only — through Tailwind arbitrary variants on
-  the card body that name the adapter's `schemaform-group` hook. That is the
-  one place the component reaches for a class hook, and it presumes a theme
-  that gives `.schemaform-group` a frame to remove; it goes when a
-  `FixedObjectRenderer` seam exists.
-- **Fixed utilities.** The collection, the shell, and the presenter emit their
-  layout utilities unconditionally; there is no appearance axis to switch them
-  off.
+- **Error colour contrast is the theme's.** Findings, the error region, and the
+  summary use daisyUI's semantic `text-error`, `text-warning`, `alert-error`,
+  and `alert-warning`, as the registry's `FieldError` does. On daisyUI's stock
+  light theme, `text-error` on `base-100` does not reach WCAG AA contrast; the
+  demo darkens `--color-error` in its own theme to pass its axe check. The
+  component ships no colour of its own (ADR-0002), so a host that wants AA on
+  the stock theme overrides the same variable, or renders findings through a
+  presenter of its own.
 
 ## daisyUI classes deliberately not used
 
