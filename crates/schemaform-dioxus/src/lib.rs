@@ -1177,13 +1177,27 @@ fn localize_node_text(form: &render::BoundForm, projection: &mut handle::NodePro
     }
 }
 
+/// Instantiates one item's bound subtree from the array's item template.
+///
+/// The read is untracked on purpose: this only consumes the projection's structure — the control
+/// binding and the child identities — which the core derives from the definition tree and the
+/// item's position. Position and count are already props of the item host, so a structural
+/// change re-renders it through them, while an edit inside the item re-renders only the control
+/// that owns the edited node. A tracked read here would subscribe the item host (and the
+/// finding summary, which walks the same template) to every node in the item, and item hosts
+/// would no longer memoize on their props as the contract promises.
 fn instantiate_array_template(
     form: &render::BoundForm,
     template: &render::BoundTemplateNode,
     identity: schemaform::InstanceIdentity,
     array_element_id: &str,
 ) -> Option<render::BoundNode> {
-    let projection = form.handle().node(identity).ok()??.read().ok()??;
+    let projection = form
+        .handle()
+        .node(identity)
+        .ok()??
+        .read_untracked()
+        .ok()??;
     match template {
         render::BoundTemplateNode::Decorated(decorated) => {
             let child =
@@ -1409,41 +1423,6 @@ impl ArrayFeedback {
     }
 }
 
-/// Renders one affordance as the built-in does, for scalar presence, container presence, and
-/// collection operations alike.
-///
-/// Each button carries the affordance id, one marker attribute for its operation
-/// (`data-set-value`, `data-set-null`, `data-remove-value`, `data-replace-value`,
-/// `data-materialize`, `data-append-item`, `data-insert-item-before`, `data-move-item-up`,
-/// `data-move-item-down`, `data-remove-item`), and the positional accessible name when the
-/// affordance has one. rsx attribute names are literal, so each marker is an `Option` attribute.
-fn builtin_affordance_button(affordance: render::Affordance) -> Element {
-    use render::AffordanceKind;
-
-    let kind = affordance.kind;
-    let marker = |expected: AffordanceKind| (kind == expected).then_some("");
-    rsx! {
-        button {
-            key: "{affordance.id}",
-            id: affordance.id.clone(),
-            r#type: "button",
-            "data-set-value": marker(AffordanceKind::Set),
-            "data-set-null": marker(AffordanceKind::SetNull),
-            "data-remove-value": marker(AffordanceKind::RemoveValue),
-            "data-replace-value": marker(AffordanceKind::Replace),
-            "data-materialize": marker(AffordanceKind::Materialize),
-            "data-append-item": marker(AffordanceKind::Append),
-            "data-insert-item-before": marker(AffordanceKind::InsertBefore),
-            "data-move-item-up": marker(AffordanceKind::MoveUp),
-            "data-move-item-down": marker(AffordanceKind::MoveDown),
-            "data-remove-item": marker(AffordanceKind::RemoveItem),
-            "aria-label": affordance.accessible_name.clone(),
-            onclick: move |_| affordance.invoke.call(()),
-            "{affordance.label}"
-        }
-    }
-}
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ArrayAnnouncement {
     Inserted { position: usize },
@@ -1654,21 +1633,15 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
     // One keyed host scope per item, keyed by instance identity: DOM identity follows the item
     // as it moves regardless of what the renderer emits, and each item's affordance callbacks are
     // hook-stable inside their own scope.
+    //
+    // The pairs come from the array's own projection rather than from a read of each item node:
+    // the array's tracked read above already covers every structural change (the core marks the
+    // array changed whenever its children or data change), and tracking each item node here
+    // would only add redundant subscriptions.
     let item_identities = projection
-        .children
+        .collection_items
         .iter()
-        .copied()
-        .filter_map(|identity| {
-            let item = props
-                .form
-                .handle()
-                .node(identity)
-                .ok()??
-                .read()
-                .ok()??
-                .item?;
-            Some((identity, item))
-        })
+        .map(|item| (item.identity, item.item))
         .collect::<Vec<_>>();
     let count = item_identities.len();
     let gates = ItemGates {
@@ -2920,7 +2893,7 @@ fn scalar_presence_actions(presence: &[render::Affordance]) -> Element {
     rsx! {
         div { class: "schemaform-presence-actions",
             for affordance in buttons {
-                {builtin_affordance_button(affordance)}
+                {affordance.present()}
             }
         }
     }
@@ -3196,7 +3169,7 @@ fn BuiltinBooleanControl(props: BuiltinControlProps) -> Element {
     };
     let chrome = BuiltinChrome::new(context, &projection);
     if projection.read_only {
-        return chrome.read_only_output(edit::display_text(&projection));
+        return chrome.read_only_output(projection.display_text());
     }
     let facets = context.control();
     let required = facets.required;
@@ -3289,7 +3262,7 @@ fn BuiltinChoiceControl(props: BuiltinControlProps) -> Element {
     };
     let chrome = BuiltinChrome::new(context, &projection);
     if projection.read_only {
-        return chrome.read_only_output(edit::display_text(&projection));
+        return chrome.read_only_output(projection.display_text());
     }
     let facets = context.control();
     let write_only = facets.write_only;
@@ -3310,7 +3283,7 @@ fn BuiltinChoiceControl(props: BuiltinControlProps) -> Element {
     let placeholder_label = match &facets.write_only_replacement {
         Some(replacement) => replacement.placeholder.clone(),
         None if placeholder_hidden => String::new(),
-        None => edit::display_text(&projection),
+        None => projection.display_text(),
     };
     // The event handler maps the select's DOM value back to an opaque identity, so it needs its
     // own copy of the options the option list below consumes.
@@ -3373,7 +3346,7 @@ fn BuiltinConstantControl(props: BuiltinControlProps) -> Element {
         return rsx! {};
     };
     let chrome = BuiltinChrome::new(context, &projection);
-    let display_value = edit::display_text(&projection);
+    let display_value = projection.display_text();
     if projection.read_only {
         return chrome.read_only_output(display_value);
     }
@@ -3467,17 +3440,20 @@ pub use edit::{
     use_text_edit,
 };
 pub use handle::{
-    ChoiceIdentity, ChoiceOptionProjection, CollectionActions, ControlActions, FormHandle,
-    FormReader, HandleError, HandleTransactionError, NodeProjection, NodeReader, use_form,
+    ChoiceIdentity, ChoiceOptionProjection, CollectionActions, CollectionItemProjection,
+    ControlActions, FindingProjection, FormHandle, FormProjection, FormReader, HandleError,
+    HandleTransactionError, NodeProjection, NodeReader, use_form,
 };
 pub use render::{
-    Affordance, AffordanceKind, BindError, BindFinding, BoundForm, BuiltinCollection,
-    BuiltinControlRenderer, BuiltinShell, CollectionContext, CollectionItemContext,
-    CollectionRenderer, ControlFacets, ControlKind, ControlMatcher, ControlRegistry,
-    ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
-    ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter, Help, Localizer,
-    NodePresentation, PreparedExtension, PreparedExtensions, RenderConfiguration, ShellContext,
-    ShellRenderer, StructureRenderers,
+    Affordance, AffordanceKind, BUILTIN_CONTROL_PRIORITY, BindError, BindFinding, BooleanLabels,
+    BoundForm, BuiltinCollection, BuiltinControlRenderer, BuiltinShell, CollectionContext,
+    CollectionItemContext, CollectionRenderer, ControlFacets, ControlKind, ControlMatcher,
+    ControlRegistry, ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
+    ExtensionPrepareError, ExtensionRenderContext, FindingCollectionContext,
+    FindingCollectionPresenter, FindingDescriptor, FindingKind, FindingPresentation, Help,
+    Localizer, MessageDescriptor, NodePresentation, PreparedExtension, PreparedExtensions,
+    RenderConfiguration, RenderConfigurationBuilder, ShellContext, ShellRenderer,
+    StructureRenderers, TargetFocusAction, WriteOnlyReplacement,
 };
 #[cfg(schemaform_test_validation_faults)]
 pub use render_observation::{RenderEvent, RenderNodeKind, RenderObservation, RenderObserver};

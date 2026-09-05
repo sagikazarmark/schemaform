@@ -187,15 +187,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Constant`; non-exhaustive).
 - `NodeProjection::nullable` reports whether the bound scalar accepts JSON
   null.
+- `Affordance::present()` renders an affordance exactly as the built-ins do: a
+  `button[type="button"]` carrying the affordance id, the built-in's `data-*`
+  marker for its kind, `aria-label` from `accessible_name`, and `invoke` on
+  `onclick`. The built-in control, array, and item render their buttons through
+  it, so a custom renderer that wants the built-in's button no longer copies it.
+- `NodeProjection::display_text()` is the text a control shows for a node it
+  is not editing — the retained edit buffer or canonical spelling, else the
+  current data spelled as JSON, and nothing for a write-only value without an
+  edit buffer — so a custom constant or read-only renderer no longer restates
+  the write-only rule.
+- The crate root re-exports every public type of the `render` and `handle`
+  modules a renderer author needs (`BUILTIN_CONTROL_PRIORITY`, `BooleanLabels`,
+  `WriteOnlyReplacement`, `FindingCollectionContext`, `FindingDescriptor`,
+  `FindingKind`, `FindingPresentation`, `TargetFocusAction`,
+  `MessageDescriptor`, `RenderConfigurationBuilder`,
+  `CollectionItemProjection`, `FindingProjection`, `FormProjection`); the
+  module paths remain valid.
 
 ### Fixed
 
 - `SchemaForm::on_error` is optional in the props builder, as its documentation
   has always said; omitting it drops adapter failures instead of failing to
   compile.
+- Collection item hosts memoize on their props, as the `CollectionRenderer`
+  contract promises. The adapter instantiated an item's bound subtree through
+  tracked reads of every node in the item, so an edit inside any item
+  re-rendered its host (and the finding summary, which walks the same subtrees)
+  on every keystroke; the reads are now untracked, since an item's structure
+  changes only with its position and count, which are already the host's
+  props. The collection itself still re-renders when the array node changes,
+  which the core reports whenever the array's data or findings change.
+- A visible finding of a family the adapter does not project is left out of
+  the summary projection instead of panicking inside a mutation. Debug builds
+  still assert, so the lockstep release of the two crates catches a new core
+  finding family in the adapter's tests.
 
 ### Changed
 
+- The renderer contract documents that `Affordance::invoke` is owned by the
+  scope that computed it, so invoking an affordance retained past its node's
+  removal panics inside Dioxus, and that the `Element` fields of
+  `ShellContext`, `CollectionContext`, and `CollectionItemContext` compare by
+  pointer: passing one of those contexts to a child component gives structure
+  renderers a place for hooks, not memoization; only `ControlRenderContext`
+  compares by value.
 - The minimum supported Rust version is now 1.92, declared as `rust-version` in
   the root workspace, `fuzz`, and `demo` manifests. The previous claim of 1.85
   was already false: the crates use let-chains, stable since Rust 1.88. 1.92 is

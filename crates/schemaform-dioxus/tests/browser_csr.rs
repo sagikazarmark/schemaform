@@ -9732,8 +9732,181 @@ async fn custom_collection_renderer_keeps_identity_focus_announcements_and_prese
     root.remove();
 }
 
-/// Returns the affordance button of `kind` that the custom renderer emitted for `input`. The
-/// selector requires the adapter's id prefix, so a renderer that drops the id is caught here.
+/// A collection renderer that only counts how often the adapter calls it. Its output is the
+/// minimum the contract requires: the announcement, the item hosts, and the append affordance.
+#[derive(Clone)]
+struct CountingCollection {
+    collection_calls: Rc<RefCell<usize>>,
+    item_calls: Rc<RefCell<usize>>,
+}
+
+impl CollectionRenderer for CountingCollection {
+    fn collection(&self, context: CollectionContext) -> Element {
+        *self.collection_calls.borrow_mut() += 1;
+        rsx! {
+            section {
+                id: context.presentation.element_id.clone(),
+                "data-counting-collection": "",
+                "data-test-count": "{context.count}",
+                {context.announcement}
+                {context.items}
+                if let Some(append) = context.append {
+                    {test_affordance_button(append)}
+                }
+            }
+        }
+    }
+
+    fn collection_item(&self, context: CollectionItemContext) -> Element {
+        *self.item_calls.borrow_mut() += 1;
+        rsx! {
+            div { "data-counting-item": "", {context.children} }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct CountingCollectionAppProps {
+    handle: Rc<RefCell<Option<FormHandle>>>,
+    collection_calls: Rc<RefCell<usize>>,
+    item_calls: Rc<RefCell<usize>>,
+}
+
+fn counting_collection_test_app(props: CountingCollectionAppProps) -> Element {
+    let definition = use_hook(|| {
+        FormDefinition::compile(json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "title": "Tags",
+                    "maxItems": 4,
+                    "items": { "type": "string", "title": "Tag", "default": "valid", "minLength": 4 }
+                }
+            }
+        }))
+        .expect("the counting-collection data schema should compile")
+    });
+    let form = use_form(definition, json!({ "tags": ["same", "same"] }))
+        .expect("the counting-collection form should be created");
+    let renderer = CountingCollection {
+        collection_calls: props.collection_calls.clone(),
+        item_calls: props.item_calls.clone(),
+    };
+    let form_to_bind = form.clone();
+    let bound = use_hook(move || {
+        RenderConfiguration::builder()
+            .structure(StructureRenderers::default().with_collection(renderer))
+            .build()
+            .bind(&form_to_bind)
+            .expect("the built-in item control should bind under the counting collection")
+    });
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+
+    rsx! {
+        SchemaForm { form: bound, on_submit: move |_| {} }
+    }
+}
+
+/// An edit inside an item re-renders the control that owns the edited node, never the item
+/// host: item hosts memoize on their props, as the `CollectionRenderer` contract promises. The
+/// collection itself may re-render, since the core marks the array node changed when its data
+/// or findings change (`uniqueItems` depends on item values), so this test does not pin it.
+#[wasm_bindgen_test]
+async fn an_item_edit_does_not_re_render_the_item_hosts() {
+    let root = mount_test_root();
+    let handle = Rc::new(RefCell::new(None));
+    let collection_calls = Rc::new(RefCell::new(0_usize));
+    let item_calls = Rc::new(RefCell::new(0_usize));
+    let vdom = VirtualDom::new_with_props(
+        counting_collection_test_app,
+        CountingCollectionAppProps {
+            handle: handle.clone(),
+            collection_calls: collection_calls.clone(),
+            item_calls: item_calls.clone(),
+        },
+    );
+    launch_test_vdom(&root, vdom).await;
+    let form_handle = handle
+        .borrow()
+        .clone()
+        .expect("the mounted application should expose its handle");
+    let collection = poll_dom(|| {
+        root.query_selector("section[data-counting-collection]")
+            .expect("the collection selector should be valid")
+    })
+    .await;
+    assert_eq!(
+        collection.get_attribute("data-test-count").as_deref(),
+        Some("2")
+    );
+    let first = input_with_binding(&root, "/tags/0");
+    let element_id = collection.id();
+
+    // Let any mount-time effects settle, then take the baseline.
+    next_browser_task().await;
+    let collection_baseline = *collection_calls.borrow();
+    let item_baseline = *item_calls.borrow();
+    assert!(collection_baseline >= 1);
+    assert!(item_baseline >= 2);
+
+    // A value that stays valid: only the control's own node changes.
+    dispatch_input(&first, "samer");
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()? == json!({ "tags": ["samer", "same"] }))
+            .then_some(())
+    })
+    .await;
+    next_browser_task().await;
+    assert_eq!(
+        *item_calls.borrow(),
+        item_baseline,
+        "a keystroke inside an item must not re-run any item host"
+    );
+
+    // A value that fails `minLength`: the control's findings change, still inside the control.
+    dispatch_input(&first, "x");
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()? == json!({ "tags": ["x", "same"] })).then_some(())
+    })
+    .await;
+    poll_dom(|| (first.get_attribute("aria-invalid").as_deref() == Some("true")).then_some(()))
+        .await;
+    next_browser_task().await;
+    assert_eq!(
+        *item_calls.borrow(),
+        item_baseline,
+        "a validation change inside an item must not re-run any item host"
+    );
+
+    // The counters are live: a structural change re-runs the collection, and every item host
+    // re-renders because its `count` prop changed.
+    element_by_id(&format!("{element_id}-append")).click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()? == json!({ "tags": ["x", "same", "valid"] }))
+            .then_some(())
+    })
+    .await;
+    poll_dom(|| {
+        (collection.get_attribute("data-test-count").as_deref() == Some("3")).then_some(())
+    })
+    .await;
+    assert!(
+        *collection_calls.borrow() > collection_baseline,
+        "appending an item re-runs the collection renderer"
+    );
+    assert!(
+        *item_calls.borrow() >= item_baseline + 3,
+        "appending an item re-renders every item host through its count prop"
+    );
+
+    root.remove();
+}
 fn affordance_button(
     root: &web_sys::Element,
     input: &HtmlInputElement,

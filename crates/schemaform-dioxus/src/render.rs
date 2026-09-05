@@ -403,7 +403,15 @@ pub enum AffordanceKind {
 /// Two affordances compare equal when their `kind`, `label`, `id`, and `accessible_name` are
 /// equal. `invoke` is excluded because an affordance's behaviour is fixed by its node and
 /// kind, so a component that memoizes on an affordance and keeps an earlier `invoke` performs
-/// the same operation.
+/// the same operation — for as long as the node that produced it is mounted.
+///
+/// `invoke` is owned by the scope that computed it: the control host for presence affordances,
+/// the item host for item affordances, the collection for the append affordance, and the form
+/// for the submit affordance. Invoking it after that scope has been dropped (an item affordance
+/// retained past the item's removal, for example) panics inside Dioxus. Renderers therefore
+/// place affordances in the render that hands them out and do not store them in state that
+/// outlives the node — a collection-level context menu, say, must be rebuilt from the current
+/// contexts rather than from affordances captured earlier.
 #[derive(Clone)]
 #[non_exhaustive]
 pub struct Affordance {
@@ -432,6 +440,46 @@ pub struct Affordance {
     ///
     /// Install this on an event callback rather than calling it during rendering.
     pub invoke: Callback<()>,
+}
+
+impl Affordance {
+    /// Renders the affordance as the built-in does: a `button[type="button"]` carrying
+    /// [`Affordance::id`], the built-in's marker attribute for its kind (`data-set-value`,
+    /// `data-set-null`, `data-remove-value`, `data-replace-value`, `data-materialize`,
+    /// `data-append-item`, `data-insert-item-before`, `data-move-item-up`,
+    /// `data-move-item-down`, `data-remove-item`, `data-submit`), `aria-label` from
+    /// [`Affordance::accessible_name`] when present, and [`Affordance::label`] as its text, with
+    /// `onclick` installed on [`Affordance::invoke`].
+    ///
+    /// Renderers that want different markup render the fields themselves and keep the `id`, the
+    /// accessible name, and the `invoke` on an event handler — the three things the adapter's
+    /// focus, announcements, and operations depend on.
+    pub fn present(&self) -> Element {
+        let affordance = self.clone();
+        let kind = affordance.kind;
+        let marker = |expected: AffordanceKind| (kind == expected).then_some("");
+        dioxus::prelude::rsx! {
+            button {
+                key: "{affordance.id}",
+                id: affordance.id.clone(),
+                r#type: "button",
+                "data-set-value": marker(AffordanceKind::Set),
+                "data-set-null": marker(AffordanceKind::SetNull),
+                "data-remove-value": marker(AffordanceKind::RemoveValue),
+                "data-replace-value": marker(AffordanceKind::Replace),
+                "data-materialize": marker(AffordanceKind::Materialize),
+                "data-append-item": marker(AffordanceKind::Append),
+                "data-insert-item-before": marker(AffordanceKind::InsertBefore),
+                "data-move-item-up": marker(AffordanceKind::MoveUp),
+                "data-move-item-down": marker(AffordanceKind::MoveDown),
+                "data-remove-item": marker(AffordanceKind::RemoveItem),
+                "data-submit": marker(AffordanceKind::Submit),
+                "aria-label": affordance.accessible_name.clone(),
+                onclick: move |_| affordance.invoke.call(()),
+                "{affordance.label}"
+            }
+        }
+    }
 }
 
 impl PartialEq for Affordance {
@@ -698,12 +746,12 @@ impl CollectionRenderer for BuiltinCollection {
                         output { "data-incompatible-value": "", "{value}" }
                     }
                     for affordance in presence {
-                        {crate::builtin_affordance_button(affordance)}
+                        {affordance.present()}
                     }
                 }
                 {context.items}
                 if let Some(append) = context.append {
-                    {crate::builtin_affordance_button(append)}
+                    {append.present()}
                 }
                 {context.announcement}
                 {findings}
@@ -724,7 +772,7 @@ impl CollectionRenderer for BuiltinCollection {
         dioxus::prelude::rsx! {
             {context.children}
             for affordance in actions {
-                {crate::builtin_affordance_button(affordance)}
+                {affordance.present()}
             }
         }
     }

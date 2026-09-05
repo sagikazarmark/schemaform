@@ -344,7 +344,7 @@ impl TextEditTarget {
 fn canonical_text_of(read: Result<Option<NodeProjection>, HandleError>) -> Option<String> {
     read.ok()
         .flatten()
-        .map(|projection| display_text(&projection))
+        .map(|projection| projection.display_text())
 }
 
 /// Headless editing behaviour for one boolean control.
@@ -846,19 +846,5 @@ fn choice_state_of(
         entries,
         operations,
         write_only,
-    })
-}
-
-/// Display text for a projected text control, as the built-in control shows it.
-pub(crate) fn display_text(projection: &NodeProjection) -> String {
-    if projection.write_only && projection.edit_buffer.is_none() {
-        return String::new();
-    }
-    projection.value.clone().unwrap_or_else(|| {
-        projection
-            .current_data
-            .as_ref()
-            .map(Value::to_string)
-            .unwrap_or_default()
     })
 }

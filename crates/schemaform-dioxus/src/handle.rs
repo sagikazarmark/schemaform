@@ -677,44 +677,56 @@ fn project_summary(form: &Form) -> SummaryProjection {
     }
 }
 
+/// Projects the form's visible findings.
+///
+/// `FindingView` is `#[non_exhaustive]`; a family this adapter does not know is left out of the
+/// projection rather than aborting the application from inside a mutation. The debug assertion
+/// keeps the lockstep release of the two crates honest: a new core family fails the adapter's
+/// tests until it is projected.
 fn project_visible_findings(form: &Form) -> Vec<FindingProjection> {
     form.view()
         .visible_findings()
-        .map(|finding| match finding {
+        .filter_map(|finding| match finding {
             schemaform::FindingView::Validation { target, finding } => {
-                FindingProjection::Validation {
+                Some(FindingProjection::Validation {
                     target,
                     finding: finding.clone(),
-                }
+                })
             }
             schemaform::FindingView::ValidationFindingsTruncated { target, retained } => {
-                FindingProjection::ValidationFindingsTruncated { target, retained }
+                Some(FindingProjection::ValidationFindingsTruncated { target, retained })
             }
             schemaform::FindingView::Indeterminate { target, reason } => {
-                FindingProjection::Indeterminate {
+                Some(FindingProjection::Indeterminate {
                     target,
                     reason: reason.clone(),
-                }
+                })
             }
             schemaform::FindingView::Capability { target, finding } => {
-                FindingProjection::Capability {
+                Some(FindingProjection::Capability {
                     target,
                     finding: finding.clone(),
-                }
+                })
             }
             schemaform::FindingView::External {
                 target,
                 source,
                 finding,
-            } => FindingProjection::External {
+            } => Some(FindingProjection::External {
                 target,
                 source: source.to_owned(),
                 finding: finding.clone(),
-            },
+            }),
             schemaform::FindingView::Parse { target, kind } => {
-                FindingProjection::Parse { target, kind }
+                Some(FindingProjection::Parse { target, kind })
             }
-            _ => unreachable!("the adapter must cover every core finding family"),
+            _ => {
+                debug_assert!(
+                    false,
+                    "the adapter must project every core finding family; one is missing"
+                );
+                None
+            }
         })
         .collect()
 }
@@ -784,6 +796,27 @@ pub struct NodeProjection {
     pub choice_options: Vec<ChoiceOptionProjection>,
     /// Whether a choice control permits selecting among its options.
     pub choice_selectable: bool,
+}
+
+impl NodeProjection {
+    /// The text a control shows for this node when it is not being edited, as the built-in
+    /// controls show it: the retained edit buffer or canonical spelling in [`Self::value`],
+    /// else [`Self::current_data`] spelled as JSON, else nothing.
+    ///
+    /// A write-only value is never spelled out; only an in-progress edit buffer is shown, so a
+    /// renderer that presents a read-only or constant node through this method keeps the
+    /// write-only rule without restating it.
+    pub fn display_text(&self) -> String {
+        if self.write_only && self.edit_buffer.is_none() {
+            return String::new();
+        }
+        self.value.clone().unwrap_or_else(|| {
+            self.current_data
+                .as_ref()
+                .map(Value::to_string)
+                .unwrap_or_default()
+        })
+    }
 }
 
 /// One current collection child and its stable item identity.

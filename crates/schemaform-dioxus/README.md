@@ -333,7 +333,9 @@ callbacks plus a read signal derived through a memo over the node.
 
 A widget maps its DOM value back to an identity by looking it up in `options`
 with `ChoiceIdentity::as_str`. Constant controls have no hook: render read-only
-output from `presentation()` and `control()`.
+output from `presentation()`, `control()`, and the node projection's
+`display_text()`, which spells the current value as the built-in does and keeps
+a write-only value hidden.
 
 The built-in scalar control is itself a `ControlRenderer` built on these hooks
 and the public context. `ControlRegistry::with_builtins()` registers
@@ -415,7 +417,13 @@ let configuration = RenderConfiguration::builder()
 
 `ShellRenderer::shell` runs during rendering and is not a hook-safe call site;
 a shell that needs hooks renders a child component and passes the context as
-props (`ShellContext` is `PartialEq`).
+props (`ShellContext` is `PartialEq`). Note what that equality buys: the
+`Element` fields of `ShellContext`, `CollectionContext`, and
+`CollectionItemContext` (`summary`, `body`, `items`, `announcement`,
+`children`) are fresh on every render and compare by pointer, so a child
+component taking one of these contexts re-renders whenever its host does. The
+pattern gives structure renderers a place for hooks, not memoization; only
+`ControlRenderContext` compares by value.
 
 The second slot is the **collection**: the chrome of a homogeneous array and of
 each of its items. `CollectionRenderer` has two methods. `collection` receives
@@ -462,9 +470,22 @@ wrapper), so a renderer may put its buttons before the children without
 stealing that focus.
 
 `collection` and `collection_item` are not called together: the collection
-re-renders after every announcement while item hosts memoize on their props. A
-renderer that needs per-item state renders a child component (both contexts
-are `PartialEq`) rather than carrying state between the two calls.
+re-renders when the array node changes (its structure, data, or findings) while
+item hosts memoize on their props, so an edit inside an item re-renders the
+control that owns the edited node and not the item host. A renderer that needs
+per-item state renders a child component (both contexts are `PartialEq`, with
+the caveat above) rather than carrying state between the two calls.
+
+An affordance's `invoke` is owned by the scope that computed it — the item host
+for item affordances, the collection for `append`. Place affordances in the
+render that hands them out; invoking one retained past its node's removal
+panics inside Dioxus.
+
+`Affordance::present()` renders an affordance exactly as the built-ins do: a
+`button[type="button"]` with the affordance `id`, the built-in's `data-*`
+marker for its kind, `aria-label` from `accessible_name`, and `invoke` on
+`onclick`. A renderer that wants its own markup renders the fields itself and
+keeps the `id`, the accessible name, and the `invoke` on an event handler.
 
 `BuiltinCollection` is the public built-in: a `fieldset[data-schemaform-array]`
 with legend, help, presence buttons, item rows, append button, live region, and
