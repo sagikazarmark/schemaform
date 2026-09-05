@@ -3046,7 +3046,7 @@ dependencies = [
 
 [[package]]
 name = "schemaform"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "jsonptr",
  "jsonschema",
@@ -3060,7 +3060,7 @@ dependencies = [
 
 [[package]]
 name = "schemaform-dioxus"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dioxus",
  "dioxus-core",
