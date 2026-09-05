@@ -225,6 +225,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `schemaform-dioxus` declares `wasm-bindgen`, `web-sys`, `js-sys`, and
+  `wasm-bindgen-futures` as minimum requirements rather than exact pins, so
+  the crate resolves alongside whatever version of that stack a consumer's
+  other dependencies already lock. The versions this workspace builds and
+  tests with are unchanged: they are the lockfile's, which CI holds with
+  `--locked`. `jsonschema`, `referencing`, and `serde_json` stay exact, as one
+  qualified validator release; a consumer whose lockfile already holds a newer
+  `serde_json` needs `cargo update -p serde_json --precise 1.0.151` once.
 - The renderer contract documents that `Affordance::invoke` is owned by the
   scope that computed it, so invoking an affordance retained past its node's
   removal panics inside Dioxus, and that the `Element` fields of
