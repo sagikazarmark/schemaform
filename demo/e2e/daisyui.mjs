@@ -1,11 +1,18 @@
-// Drives the demo's daisyUI-rendered pages in a real browser: runs axe-core at
-// named checkpoints in the light and dark themes, drives every registry widget
-// the daisyUI form renders (native and registry checkboxes, inputs with a
-// parse blocker and a rejected write, the radio group, the compound select,
-// the write-only widgets), verifies finding-summary focus-to-target and
-// presence repair on the daisyUI-rendered controls, and add, insert, move, and
-// remove with their focus and announcements on the daisyUI-rendered arrays of
-// the arrays page.
+// Drives the demo's daisyUI-rendered pages in a real browser, in the light and
+// dark themes, running axe-core at named checkpoints. The scenarios fall in two
+// groups, kept apart so the second can move to the component's registry:
+//
+// - Adapter contract (`contract-*`): what `schemaform-dioxus` promises every
+//   renderer package, exercised through a real one — finding visibility, the
+//   edit buffer behind a parse blocker, resynchronisation after a rejected
+//   write, blocked submission and summary focus, focus-to-target, presence
+//   affordances, write-only widgets resting after every write, and item
+//   identity, focus and announcements across array mutations. Stays here: this
+//   is how schemaform is tested end to end against a consumer.
+// - daisyUI presentation (`presentation-*`): what `schemaform_daisyui` itself
+//   decides — which registry widget a kind renders as and how it behaves when
+//   driven, the empty state, the chrome under right-to-left writing. Moves with
+//   the component.
 //
 //   node daisyui.mjs --site <built demo directory>   # serves the bundle itself
 //   node daisyui.mjs --url http://127.0.0.1:8080     # against a running server
@@ -170,8 +177,9 @@ async function selectTab(page, name) {
 
 // The focused element, reduced to what the scenarios assert on: a control's
 // binding (`name`), the finding summary, an affordance button's accessible
-// name (`label`), and the binding of the first control in the item card the
-// element sits in (`card`).
+// name (`label`), and the binding of the first control in the array item the
+// element sits in (`item`, found through the adapter-owned row wrapper, so it
+// does not depend on the renderer's item markup).
 async function activeElement(page) {
   return page.evaluate(() => {
     const active = document.activeElement;
@@ -183,11 +191,9 @@ async function activeElement(page) {
       name: active.getAttribute("name"),
       summary: active.hasAttribute("data-finding-summary"),
       label: active.getAttribute("aria-label"),
-      card:
-        active
-          .closest('[data-schemaform-daisyui="collection-item"]')
-          ?.querySelector("input, select")
-          ?.getAttribute("name") ?? null,
+      item:
+        active.closest("[data-array-item]")?.querySelector("input, select")?.getAttribute("name") ??
+        null,
     };
   });
 }
@@ -205,9 +211,7 @@ async function openPage(page, baseUrl, route, theme) {
 // --- One theme's run --------------------------------------------------------
 
 // The scenarios in one theme: a fresh browser context, the checkpoints they
-// passed through, and everything the browser said along the way. Each scenario
-// runs to completion or failure on its own, so a failure on one page does not
-// hide the other page's checkpoints.
+// passed through, and everything the browser said along the way.
 class ThemeRun {
   constructor({ browser, baseUrl, theme, out }) {
     this.browser = browser;
@@ -274,66 +278,46 @@ class ThemeRun {
     }
   }
 
-  // The daisyUI form: registry widgets through the control renderer, arrays
-  // and shell through the structure bundle, the summary through the presenter.
-  async daisyuiScenario() {
+  // ==========================================================================
+  // Adapter contract — stays with schemaform.
+  //
+  // What these assert is what `schemaform-dioxus` promises every renderer
+  // package, exercised here through a real one: finding visibility, the edit
+  // buffer behind a parse blocker, resynchronisation after a rejected write,
+  // blocked submission and summary focus, focus-to-target, presence
+  // affordances, write-only widgets resting after every write, and item
+  // identity, focus and announcements across array mutations. They fail when
+  // schemaform breaks a seam, not when daisyUI changes its markup, so every
+  // locator below is a control's binding, an affordance's accessible name, a
+  // collection's label, or an adapter-owned attribute.
+  // ==========================================================================
+
+  // The daisyUI form: the adapter's contract through the registry widgets.
+  async contractForm() {
     const { page, baseUrl } = this;
 
     await openPage(page, baseUrl, "/daisyui", this.theme);
     await this.checkpoint("profile");
 
-    // --- The registry widgets on the Profile tab -----------------------------
-    // Everything below is browser-only behaviour of the edit hooks the widgets
-    // are mapped onto: the DOM state after a write, after a write the core
-    // rejects, and after a presence operation.
-
-    // The native checkbox writes the boolean through the edit hook. A rejected
-    // write would resynchronise the checkbox; a stable unchecked state means
-    // the core accepted it.
-    const active = control(page, "/active");
-    assert(await active.isChecked(), "the account starts active");
-    await active.click();
-    await eventually("the checkbox to be unchecked", async () => !(await active.isChecked()));
-
-    // The nullable registry Checkbox shows null as indeterminate. A click makes
-    // it a boolean, which the core reflects by offering set-null; set-null takes
-    // it back to indeterminate.
-    const newsletter = form(page).locator('[role="checkbox"][name="/newsletter"]');
-    assert((await newsletter.getAttribute("aria-checked")) === "mixed", "null shows as indeterminate");
-    await newsletter.click();
-    await eventually(
-      "the newsletter checkbox to be unchecked",
-      async () => (await newsletter.getAttribute("aria-checked")) === "false",
-    );
-    await affordance(page, "Set Product newsletter to null").click();
-    await eventually(
-      "the newsletter checkbox to be indeterminate again",
-      async () => (await newsletter.getAttribute("aria-checked")) === "mixed",
-    );
-    await newsletter.click();
-    await eventually(
-      "the newsletter checkbox to be unchecked once more",
-      async () => (await newsletter.getAttribute("aria-checked")) === "false",
-    );
-
-    // An unparseable edit stays in the input as typed: the core keeps it as an
-    // edit buffer behind a parse blocker, the field is invalid, and the error
-    // region the input references names the blocker.
+    // An unparseable edit stays in the widget as typed: the core keeps it as
+    // an edit buffer behind a parse blocker, the control is invalid, and the
+    // error element the control references names the blocker.
     const age = control(page, "/age");
     await age.fill("abc");
     await eventually("the age to be marked invalid", async () => (await age.getAttribute("aria-invalid")) === "true");
     assert((await age.inputValue()) === "abc", "an unparseable edit is kept as typed");
     const ageErrors = form(page).locator(`[id="${await age.getAttribute("aria-errormessage")}"]`);
     await eventually(
-      "the error region to name the parse blocker",
+      "the referenced error element to name the parse blocker",
       async () => (await ageErrors.textContent())?.includes("Enter a valid integer."),
     );
     await age.fill("40");
     await eventually("the age to be valid again", async () => (await age.getAttribute("aria-invalid")) === "false");
 
     // A write the core rejects — an edit buffer over its resource limit — is
-    // resynchronised: the input returns to the last accepted value and the
-    // failure is reported to the host, which the demo logs to the console.
+    // resynchronised: the widget carrying the element id returns to the last
+    // accepted value and the failure reaches the host's `on_error`, which the
+    // demo logs to the console.
     await age.fill("9".repeat(512 * 1024 + 1));
     await eventually("the rejected write to be resynchronised", async () => (await age.inputValue()) === "40");
     await eventually(
@@ -341,29 +325,17 @@ class ThemeRun {
       async () => this.browserLog.some((entry) => entry.type === "error" && entry.text.startsWith("form operation failed")),
     );
 
-    // The writes above reached form data: a submission shows them.
+    // The accepted write reached form data: a submission shows it.
     await form(page).locator('button[type="submit"]').click();
     const submitted = page.locator('div[dir] > p[role="status"]');
     await eventually("the submission to be shown", async () => (await submitted.count()) === 1);
-    const submittedText = await submitted.textContent();
-    for (const expected of ['"active": false', '"newsletter": false', '"age": 40']) {
-      assert(submittedText.includes(expected), `the submission should contain ${expected}: ${submittedText}`);
-    }
-    await this.checkpoint("profile-widgets");
-
-    // Back to the baseline for the scenarios below.
+    assert((await submitted.textContent()).includes('"age": 40'), "the submission should carry the accepted write");
     await page.getByRole("button", { name: "Reset to baseline", exact: true }).click();
-    await eventually(
-      "the baseline to be restored",
-      async () =>
-        (await active.isChecked()) &&
-        (await age.inputValue()) === "36" &&
-        (await newsletter.getAttribute("aria-checked")) === "mixed",
-    );
+    await eventually("the baseline to be restored", async () => (await age.inputValue()) === "36");
 
-    // A two-character display name violates minLength; the daisyUI Input
-    // reports the finding once the control has been left, and the summary
-    // lists it at the same moment.
+    // A two-character display name violates minLength; the finding becomes
+    // visible once the control has been left, on the control and in the
+    // summary at the same moment.
     const name = control(page, "/name");
     await name.fill("Ad");
     await name.press("Tab");
@@ -375,31 +347,9 @@ class ThemeRun {
     await eventually("the finding summary to list the finding", async () => (await findings.count()) === 1);
     await this.checkpoint("profile-invalid-name");
 
-    await selectTab(page, "Billing");
-    await this.checkpoint("billing");
-
-    // --- The registry widgets on the Billing tab -----------------------------
-    // The radio group: clicking an item selects its option and unchecks the
-    // previous one.
-    const yearly = form(page).getByRole("radio", { name: "yearly", exact: true });
-    const monthly = form(page).getByRole("radio", { name: "monthly", exact: true });
-    assert((await yearly.getAttribute("aria-checked")) === "true", "yearly is the baseline cycle");
-    await monthly.click();
-    await eventually("monthly to be checked", async () => (await monthly.getAttribute("aria-checked")) === "true");
-    await eventually("yearly to be unchecked", async () => (await yearly.getAttribute("aria-checked")) === "false");
-
-    // The compound select: the trigger opens a listbox, choosing an option
-    // closes it, and the trigger shows the option's label.
-    const region = form(page).locator('button[name="/region"]');
-    assert((await region.textContent())?.includes("eu"), "eu is the baseline region");
-    await region.click();
-    await page.getByRole("option", { name: "us", exact: true }).click();
-    await eventually("the trigger to show the chosen option", async () => (await region.textContent())?.includes("us"));
-    await eventually("the listbox to close", async () => (await region.getAttribute("aria-expanded")) === "false");
-    await this.checkpoint("billing-widgets");
-
     // Submitting from another tab is blocked, and the blocked submit moves
     // focus to the summary.
+    await selectTab(page, "Billing");
     await form(page).locator('button[type="submit"]').click();
     await eventually("the finding summary to take focus", async () => (await activeElement(page))?.summary);
     assert((await findings.count()) === 1, `expected one summary finding, found ${await findings.count()}`);
@@ -420,10 +370,8 @@ class ThemeRun {
 
     // Presence repair on the nullable nickname, null at baseline. The core
     // decides which presence operations the node allows right now, and the
-    // daisyUI renderer places exactly those as buttons: null offers set and
-    // remove; a string offers set-null and remove; a missing value offers set
-    // and set-null. (A null value displays as its canonical text, `null`, as
-    // it does in the built-in; the affordances are what change.)
+    // renderer places exactly those: null offers set and remove; a string
+    // offers set-null and remove; a missing value offers set and set-null.
     const nickname = control(page, "/nickname");
     await expectAffordances(page, "Nickname", { set: true, setNull: false, remove: true });
     await affordance(page, "Set Nickname").click();
@@ -445,18 +393,15 @@ class ThemeRun {
     await expectAffordances(page, "Nickname", { set: false, setNull: true, remove: true });
     assert((await nickname.inputValue()) === "", "a nickname set after removal should be the empty string");
 
+    // Write-only widgets never echo their value: after every write the edit
+    // hook puts the widget carrying the element id back on its placeholder,
+    // and the write-only string is an empty password input.
     await selectTab(page, "Security");
-    await this.checkpoint("security");
-
-    // --- The write-only widgets on the Security tab --------------------------
-    // Write-only widgets never echo their value: the replacement select for the
-    // write-only boolean and the write-only choice rest on their placeholder
-    // after every write, and the write-only string is an empty password input.
     const twoFactor = form(page).locator('select[name="/two_factor"]');
     assert((await twoFactor.inputValue()) === "", "a write-only boolean rests on its placeholder");
     await twoFactor.selectOption("false");
     await eventually(
-      "the replacement select to rest on its placeholder after the write",
+      "the write-only boolean to rest on its placeholder after the write",
       async () => (await twoFactor.inputValue()) === "",
     );
     const recovery = form(page).locator('select[name="/recovery_channel"]');
@@ -469,22 +414,14 @@ class ThemeRun {
     const token = control(page, "/access_token");
     assert((await token.getAttribute("type")) === "password", "a write-only string is a password input");
     assert((await token.inputValue()) === "", "a write-only string shows nothing");
-    await this.checkpoint("security-widgets");
-
-    await selectTab(page, "Team");
-    await this.checkpoint("team");
-
-    // The right-to-left variant is the same form with its chrome mirrored.
-    await openPage(page, baseUrl, "/daisyui/rtl", this.theme);
-    assert((await form(page).locator("xpath=..").getAttribute("dir")) === "rtl", "the RTL variant should set dir=rtl");
-    await this.checkpoint("rtl-profile");
+    await this.checkpoint("security-write-only");
   }
 
-  // The arrays page: two homogeneous arrays rendered through the daisyUI
-  // collection renderer. The renderer only places the affordances; item
-  // identity, focus after each mutation, and the live-region announcements are
-  // the adapter's, so the scenario asserts all three through the daisyUI chrome.
-  async arraysScenario() {
+  // The arrays page: item identity, focus after each mutation, the live-region
+  // announcements, and affordance authorization, through the daisyUI
+  // collection. The renderer only places the affordances; all four are the
+  // adapter's.
+  async contractArrays() {
     const { page, baseUrl } = this;
 
     await openPage(page, baseUrl, "/arrays", this.theme);
@@ -523,11 +460,11 @@ class ThemeRun {
     assert((await control(page, "/tags/1").inputValue()) === "dioxus", "the next tag should be the one that followed the removed item");
     await expectAnnouncement(page, "Tags", "Tags item removed from position 2.");
 
-    // Append a team member: a new card whose object item is seeded empty (its
-    // members offer "Set …"), with focus in the card and the addition announced.
+    // Append a team member: a new item whose object is seeded empty (its
+    // members offer "Set …"), with focus in the item and the addition announced.
     await affordance(page, "Add Team members item").click();
-    await eventually("the new team card to be rendered", async () => (await control(page, "/team/2/name").count()) === 1);
-    await eventually("focus to land in the new team card", async () => (await activeElement(page))?.card === "/team/2/name");
+    await eventually("the new team item to be rendered", async () => (await control(page, "/team/2/name").count()) === 1);
+    await eventually("focus to land in the new team item", async () => (await activeElement(page))?.item === "/team/2/name");
     await eventually(
       "the empty member's name to offer its set affordance",
       async () => (await affordance(page, "Set Name").count()) === 1,
@@ -535,18 +472,13 @@ class ThemeRun {
     await expectAnnouncement(page, "Team members", "Team members item added at position 3.");
     await this.checkpoint("arrays-mutated");
 
-    // Empty the tags: the collection shows its empty state in place of the
-    // cards, the removal is announced, and append is still offered.
+    // Empty the tags: the removal is announced and append is still offered.
     await affordance(page, "Remove Tags item at position 1").click();
     await eventually("a single tag to remain", async () => (await control(page, "/tags/1").count()) === 0);
     await affordance(page, "Remove Tags item at position 1").click();
-    const emptyState = collection(page, "Tags").locator('[data-schemaform-daisyui="collection-empty"]');
-    await eventually("the empty state to appear", async () => (await emptyState.count()) === 1);
-    assert((await emptyState.textContent()) === "Nothing here yet.", "the empty state should say so");
-    assert((await control(page, "/tags/0").count()) === 0, "no tag card should remain");
+    await eventually("no tag to remain", async () => (await control(page, "/tags/0").count()) === 0);
     await expectAnnouncement(page, "Tags", "Tags item removed from position 1.");
     assert((await affordance(page, "Add Tags item").count()) === 1, "append should still be offered");
-    await this.checkpoint("arrays-empty");
 
     // minItems: once one team member remains, the core withdraws removal and
     // the renderer no longer places a remove button for it.
@@ -561,13 +493,133 @@ class ThemeRun {
     await this.checkpoint("arrays-min-items");
   }
 
+  // ==========================================================================
+  // daisyUI presentation — moves with the component.
+  //
+  // What these assert is what `schemaform_daisyui` itself decides: which
+  // registry widget a control kind renders as and how that widget behaves
+  // when driven (the native checkbox, the registry Checkbox showing null as
+  // indeterminate, the radio group, the compound select), the empty state,
+  // and the chrome under right-to-left writing. They fail when daisyUI changes
+  // its presentation, not when schemaform changes a seam. The axe checkpoints
+  // inside them are the demo's and stay; the registry brings its own harness.
+  // ==========================================================================
+
+  // The registry widgets on the daisyUI form.
+  async presentationForm() {
+    const { page, baseUrl } = this;
+
+    await openPage(page, baseUrl, "/daisyui", this.theme);
+
+    // The native checkbox writes the boolean through the edit hook. A rejected
+    // write would resynchronise the checkbox; a stable unchecked state means
+    // the core accepted it.
+    const active = control(page, "/active");
+    assert(await active.isChecked(), "the account starts active");
+    await active.click();
+    await eventually("the checkbox to be unchecked", async () => !(await active.isChecked()));
+
+    // The nullable registry Checkbox shows null as indeterminate. A click makes
+    // it a boolean, which the core reflects by offering set-null; set-null takes
+    // it back to indeterminate.
+    const newsletter = form(page).locator('[role="checkbox"][name="/newsletter"]');
+    assert((await newsletter.getAttribute("aria-checked")) === "mixed", "null shows as indeterminate");
+    await newsletter.click();
+    await eventually(
+      "the newsletter checkbox to be unchecked",
+      async () => (await newsletter.getAttribute("aria-checked")) === "false",
+    );
+    await affordance(page, "Set Product newsletter to null").click();
+    await eventually(
+      "the newsletter checkbox to be indeterminate again",
+      async () => (await newsletter.getAttribute("aria-checked")) === "mixed",
+    );
+    await newsletter.click();
+    await eventually(
+      "the newsletter checkbox to be unchecked once more",
+      async () => (await newsletter.getAttribute("aria-checked")) === "false",
+    );
+
+    // Both writes reached form data: a submission shows them.
+    await form(page).locator('button[type="submit"]').click();
+    const submitted = page.locator('div[dir] > p[role="status"]');
+    await eventually("the submission to be shown", async () => (await submitted.count()) === 1);
+    const submittedText = await submitted.textContent();
+    for (const expected of ['"active": false', '"newsletter": false']) {
+      assert(submittedText.includes(expected), `the submission should contain ${expected}: ${submittedText}`);
+    }
+    await this.checkpoint("profile-widgets");
+
+    await selectTab(page, "Billing");
+    await this.checkpoint("billing");
+
+    // The radio group: clicking an item selects its option and unchecks the
+    // previous one.
+    const yearly = form(page).getByRole("radio", { name: "yearly", exact: true });
+    const monthly = form(page).getByRole("radio", { name: "monthly", exact: true });
+    assert((await yearly.getAttribute("aria-checked")) === "true", "yearly is the baseline cycle");
+    await monthly.click();
+    await eventually("monthly to be checked", async () => (await monthly.getAttribute("aria-checked")) === "true");
+    await eventually("yearly to be unchecked", async () => (await yearly.getAttribute("aria-checked")) === "false");
+
+    // The compound select: the trigger opens a listbox, choosing an option
+    // closes it, and the trigger shows the option's label.
+    const region = form(page).locator('button[name="/region"]');
+    assert((await region.textContent())?.includes("eu"), "eu is the baseline region");
+    await region.click();
+    await page.getByRole("option", { name: "us", exact: true }).click();
+    await eventually("the trigger to show the chosen option", async () => (await region.textContent())?.includes("us"));
+    await eventually("the listbox to close", async () => (await region.getAttribute("aria-expanded")) === "false");
+    await this.checkpoint("billing-widgets");
+
+    await selectTab(page, "Security");
+    await this.checkpoint("security");
+
+    await selectTab(page, "Team");
+    await this.checkpoint("team");
+
+    // The right-to-left variant is the same form with its chrome mirrored.
+    await openPage(page, baseUrl, "/daisyui/rtl", this.theme);
+    assert((await form(page).locator("xpath=..").getAttribute("dir")) === "rtl", "the RTL variant should set dir=rtl");
+    await this.checkpoint("rtl-profile");
+  }
+
+  // The daisyUI collection's own chrome on the arrays page.
+  async presentationArrays() {
+    const { page, baseUrl } = this;
+
+    await openPage(page, baseUrl, "/arrays", this.theme);
+
+    // Each item is a card labelled by the item noun and its position.
+    const firstCard = form(page).getByRole("group", { name: "Tags item 1", exact: true });
+    assert((await firstCard.count()) === 1, "the first tag renders as a card named by noun and position");
+
+    // Empty the tags: the collection shows its empty state in place of the
+    // cards.
+    await affordance(page, "Remove Tags item at position 1").click();
+    await eventually("a single tag to remain", async () => (await control(page, "/tags/1").count()) === 0);
+    await affordance(page, "Remove Tags item at position 1").click();
+    const emptyState = collection(page, "Tags").locator('[data-schemaform-daisyui="collection-empty"]');
+    await eventually("the empty state to appear", async () => (await emptyState.count()) === 1);
+    assert((await emptyState.textContent()) === "Nothing here yet.", "the empty state should say so");
+    assert((await control(page, "/tags/0").count()) === 0, "no tag card should remain");
+    await this.checkpoint("arrays-empty");
+  }
+
+
   async run() {
     process.stdout.write(`${this.theme} theme\n`);
     await this.open();
     try {
+      // Each scenario opens its page afresh and runs to completion or failure
+      // on its own, so a failure in one does not hide another's checkpoints.
+      // The two groups are what stays with schemaform (`contract-*`) and what
+      // moves with the component (`presentation-*`).
       for (const [name, scenario] of [
-        ["daisyui", () => this.daisyuiScenario()],
-        ["arrays", () => this.arraysScenario()],
+        ["contract-form", () => this.contractForm()],
+        ["contract-arrays", () => this.contractArrays()],
+        ["presentation-form", () => this.presentationForm()],
+        ["presentation-arrays", () => this.presentationArrays()],
       ]) {
         try {
           await scenario();

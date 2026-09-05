@@ -6,11 +6,13 @@ use std::{cell::RefCell, rc::Rc};
 
 use dioxus::core::{NoOpMutations, ScopeId, VirtualDom};
 use dioxus::prelude::*;
-use schemaform::{FormDefinition, InstanceIdentity};
-use schemaform_dioxus::{CollectionActions, ControlActions, FormHandle, SchemaForm, use_form};
+use schemaform::{CompilationProfile, FormDefinition, InstanceIdentity, json::parse_ui_schema_v1};
+use schemaform_dioxus::{
+    CollectionActions, ControlActions, FormHandle, RenderConfiguration, SchemaForm, use_form,
+};
 use serde_json::json;
 
-use demo::components::schemaform_daisyui::configuration;
+use demo::components::schemaform_daisyui::{configuration, controls};
 
 /// A form with the two array shapes the collection renderer presents — string items and
 /// fixed-object items — plus a validated string, bound through every daisyUI seam this component
@@ -74,6 +76,133 @@ pub(crate) fn arrays_app(props: TestAppProps) -> Element {
         configuration()
             .bind(&form)
             .expect("the daisyUI seams should bind the arrays form")
+    });
+    rsx! {
+        SchemaForm { form: bound, on_submit: move |_| {} }
+    }
+}
+
+/// The gallery's authored presentation: every control in data-schema order, except that the
+/// billing cycle asks for the radio widget and the region for the compound select.
+const GALLERY_UI_SCHEMA: &str = r#"{
+  "version": 1,
+  "root": {
+    "type": "stack",
+    "value": {
+      "children": [
+        {
+          "type": "auto",
+          "value": {
+            "binding": { "origin": "root", "pointer": "" },
+            "properties": { "exclude": ["billing", "region"] }
+          }
+        },
+        {
+          "type": "control",
+          "value": {
+            "binding": { "origin": "root", "pointer": "/billing" },
+            "widget": "daisyui:radio"
+          }
+        },
+        {
+          "type": "control",
+          "value": {
+            "binding": { "origin": "root", "pointer": "/region" },
+            "widget": "daisyui:select"
+          }
+        }
+      ]
+    }
+  }
+}"#;
+
+pub(crate) fn gallery_app(props: TestAppProps) -> Element {
+    let definition = use_hook(|| {
+        let ui_schema =
+            parse_ui_schema_v1(GALLERY_UI_SCHEMA.as_bytes(), &CompilationProfile::default())
+                .expect("the gallery UI schema should parse");
+        FormDefinition::compiler(json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "quantity", "price", "active", "plan"],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "title": "Name",
+                    "description": "Shown on the badge.",
+                    "minLength": 2
+                },
+                "quantity": { "type": "integer", "title": "Quantity" },
+                "price": { "type": "number", "title": "Price" },
+                "nickname": { "type": ["string", "null"], "title": "Nickname" },
+                "secret": { "type": "string", "title": "Secret", "writeOnly": true },
+                "reference": {
+                    "type": "string",
+                    "title": "Reference",
+                    "description": "Assigned by the server.",
+                    "readOnly": true
+                },
+                "active": { "type": "boolean", "title": "Active" },
+                "newsletter": { "type": ["boolean", "null"], "title": "Newsletter" },
+                "mfa": { "type": "boolean", "title": "MFA", "writeOnly": true },
+                "plan": {
+                    "type": ["string", "null"],
+                    "title": "Plan",
+                    "enum": ["starter", "team", null]
+                },
+                "recovery": {
+                    "title": "Recovery",
+                    "enum": ["email", "sms"],
+                    "writeOnly": true
+                },
+                "tier": { "title": "Tier", "const": "standard" },
+                "billing": {
+                    "type": ["string", "null"],
+                    "title": "Billing",
+                    "enum": ["monthly", "yearly", null]
+                },
+                "region": {
+                    "type": ["string", "null"],
+                    "title": "Region",
+                    "enum": ["eu", "us", null]
+                }
+            }
+        }))
+        .ui_schema(ui_schema)
+        .compile()
+        .expect("the gallery data schema should compile")
+    });
+    let form = use_form(
+        definition,
+        json!({
+            "name": "Ada",
+            "quantity": 1,
+            "price": 9.5,
+            "nickname": null,
+            "secret": "hunter2",
+            "reference": "ref_42",
+            "active": true,
+            "newsletter": null,
+            "mfa": true,
+            "plan": "team",
+            "recovery": "sms",
+            "tier": "standard",
+            "billing": "yearly",
+            "region": "eu"
+        }),
+    )
+    .expect("the gallery form should be created");
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+    let bound = use_hook(move || {
+        RenderConfiguration::builder()
+            .controls(controls())
+            .build()
+            .bind(&form)
+            .expect("the daisyUI registry should bind every control")
     });
     rsx! {
         SchemaForm { form: bound, on_submit: move |_| {} }

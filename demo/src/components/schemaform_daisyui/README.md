@@ -48,11 +48,16 @@ registry without changing shape:
 - `mod.rs`, `component.rs`, `mapping.rs`, `parts.rs`, `text.rs`, `boolean.rs`,
   `choice.rs`, `constant.rs`, `collection.rs`, `shell.rs`, and `findings.rs`
   are what an install copies. None of them contains test code.
-- The component's tests live in the demo's `tests/schemaform_daisyui/`: the
-  binding tests (`mapping.rs`) drive the `dioxus-field` bindings through a
-  capturing renderer without rendering markup, and the rest observe the markup
-  `dioxus-ssr` renders for a form bound through every seam. Browser-only
-  behaviour is covered by the Playwright suite in `demo/e2e/`.
+- The component's tests live in the demo's `tests/schemaform_daisyui/`, in two
+  groups. `contract.rs` asserts the adapter's contract through this package as
+  a real consumer and stays with schemaform. The rest move with the component:
+  the binding tests (`mapping.rs`) drive the `dioxus-field` bindings through a
+  capturing renderer without rendering markup and move as they are; the others
+  observe the markup `dioxus-ssr` renders for a form bound through every seam
+  and become browser specs against the component's examples, since the
+  registry does not accept render-to-string tests. The Playwright suite in
+  `demo/e2e/` draws the same line between its `contract-*` and
+  `presentation-*` scenarios.
 - The registry components live beside this one under `src/components/`,
   copied verbatim from the pinned revision and committed. CI never runs
   `dx components add`.

@@ -23,6 +23,18 @@ beside the examples; the `schemaform_daisyui` component's tests live in
 `tests/schemaform_daisyui/` rather than in the component directory, so what a
 `dx components add` install would copy ships no test code.
 
+Those tests, and the browser check below, are split in two groups along one
+line: what asserts the **adapter's contract** through the daisyUI package as a
+real consumer (`tests/schemaform_daisyui/contract.rs`, the `contract-*`
+Playwright scenarios) stays with schemaform when the component moves to its
+registry; what asserts the **component's own presentation** (the other test
+modules, the `presentation-*` scenarios) moves with it. The first group is how
+schemaform is tested end to end against a renderer that owns its whole
+presentation. It comes with a coupling to accept: once the component is
+consumed from the registry at a pinned revision, a breaking change in
+`schemaform-dioxus` fails this workspace's build until the registry catches
+up — which is the signal a consumer test is for.
+
 ## Browser check
 
 The daisyUI form and the arrays page have a Playwright + axe check in `e2e/`:

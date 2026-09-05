@@ -1,12 +1,6 @@
-//! The daisyUI form shell, and the component that binds a form through every seam.
+//! The daisyUI form shell.
 
-use dioxus::prelude::*;
-use schemaform::FormDefinition;
-use schemaform_dioxus::use_form;
-use serde_json::json;
-
-use crate::support::{RenderedForm, TestAppProps, arrays_app};
-use demo::components::schemaform_daisyui::SchemaformDaisyui;
+use crate::support::{RenderedForm, arrays_app};
 
 fn mount() -> RenderedForm {
     RenderedForm::mount(arrays_app)
@@ -47,70 +41,4 @@ fn the_shell_places_summary_then_body_and_a_primary_submit_button() {
         .find(&format!("id=\"{form_id}-submit\""))
         .expect("checked above");
     assert!(summary < body && body < submit, "{html}");
-}
-
-/// A form rendered through `SchemaformDaisyui` rather than a hand-composed configuration.
-fn component_app(props: TestAppProps) -> Element {
-    let definition = use_hook(|| {
-        FormDefinition::compile(json!({
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["name"],
-            "properties": {
-                "name": { "type": "string", "title": "Name", "minLength": 2 },
-                "tags": {
-                    "type": "array",
-                    "title": "Tags",
-                    "items": { "type": "string", "title": "Tag" }
-                }
-            }
-        }))
-        .expect("the component data schema should compile")
-    });
-    let form = use_form(definition, json!({ "name": "Ada", "tags": ["rust"] }))
-        .expect("the component form should be created");
-    props
-        .handle
-        .borrow_mut()
-        .get_or_insert_with(|| form.clone());
-    rsx! {
-        SchemaformDaisyui { form, on_submit: move |_| {} }
-    }
-}
-
-/// The component binds the form through every seam at once: the shell, the collection, the
-/// control renderer, and — once a finding is visible — the presenter.
-#[test]
-fn the_component_binds_a_form_through_every_daisyui_seam() {
-    let mut rendered = RenderedForm::mount(component_app);
-
-    assert!(
-        rendered
-            .find(|tag| tag.attribute("data-schemaform-daisyui") == Some("shell"))
-            .is_some(),
-        "the shell is the daisyUI shell"
-    );
-    assert!(
-        rendered
-            .find(|tag| tag.attribute("data-schemaform-daisyui") == Some("collection"))
-            .is_some(),
-        "the array is the daisyUI collection"
-    );
-    let name = rendered.control("/name");
-    assert!(
-        name.classes().contains(&"input"),
-        "the control is a daisyUI input: {name:?}"
-    );
-
-    let actions = rendered.actions_at("/name");
-    actions.input_text("A").expect("the edit should apply");
-    actions.blur().expect("leaving the control should apply");
-    rendered.settle();
-    assert!(
-        rendered
-            .find(|tag| tag.has_classes(&["alert", "alert-error"]))
-            .is_some(),
-        "the summary is the daisyUI alert"
-    );
 }

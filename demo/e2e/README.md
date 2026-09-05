@@ -2,43 +2,73 @@
 
 A browser check for the demo's daisyUI-rendered pages: Playwright drives
 `/daisyui`, `/daisyui/rtl`, and `/arrays` in the light and dark themes, runs
-[axe-core] at named checkpoints, and verifies the behaviours a custom renderer
-is most likely to break: what every registry widget shows after a write, after
-a write the core rejects, and after a presence operation; finding-summary
-focus-to-target; and focus after each mutation and its live-region announcement
-on the arrays. These are the behaviours the component's native tests cannot
-see, since they observe server-rendered markup rather than a DOM.
+[axe-core] at named checkpoints, and verifies the behaviours the component's
+native tests cannot see, since they observe server-rendered markup rather than
+a DOM.
 
-It exists because the daisyUI controls, arrays, shell, and finding summary are
-not the built-in renderers. The adapter's own browser suite covers the
-built-ins; this is the automated accessibility coverage for renderers that own
-their whole presentation.
+The scenarios fall in two groups, kept apart in the script so the second can
+move to the component's registry with it:
+
+- **Adapter contract** (`contract-form`, `contract-arrays`) — what
+  `schemaform-dioxus` promises every renderer package, exercised through a real
+  one: finding visibility, the edit buffer behind a parse blocker,
+  resynchronisation after a rejected write, blocked submission and summary
+  focus, focus-to-target, presence affordances, write-only widgets resting
+  after every write, and item identity, focus and announcements across array
+  mutations. Every locator is a control's binding, an affordance's accessible
+  name, a collection's label, or an adapter-owned attribute, so these fail when
+  schemaform breaks a seam and not when daisyUI changes its markup. **This
+  group stays with schemaform**: it is how the project is tested end to end
+  against a consumer that owns its whole presentation. The adapter's own
+  browser suite covers the same contract with test renderers; this is the
+  real-consumer check on top of it.
+- **daisyUI presentation** (`presentation-form`, `presentation-arrays`) — what
+  `schemaform_daisyui` itself decides: which registry widget a kind renders as
+  and how it behaves when driven (the native checkbox, the registry `Checkbox`
+  showing null as indeterminate, the radio group, the compound select), the
+  empty state, the item cards, and the chrome under right-to-left writing.
+  **This group moves with the component.**
+
+The axe checkpoints are the demo's and stay in both groups: they measure the
+component together with the demo's theme, which is what the deployed site
+shows. When the presentation group moves, the registry replaces them with its
+own harness.
 
 ## What it checks
 
-Per theme, in order, with an axe run at each checkpoint:
+Per theme, in order, with an axe run at each checkpoint. Every scenario opens
+its page afresh.
+
+### Adapter contract
 
 | Checkpoint             | State                                                                                                        |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `profile`              | The page as loaded, Profile tab.                                                                             |
-| `profile-widgets`      | The native checkbox unchecked; the nullable registry `Checkbox` taken from indeterminate to unchecked, back to null through set-null, and unchecked again; `abc` typed into the age (kept as typed, `aria-invalid`, the error region names the parse blocker) then `40`; an over-limit edit rejected and resynchronised to `40`, with the failure logged; submitted, and the status line shows the three writes. Reset to baseline afterwards. |
+| `profile`              | `/daisyui` as loaded, Profile tab.                                                                           |
+| —                      | `abc` typed into the age: kept as typed, `aria-invalid`, the element `aria-errormessage` references names the parse blocker; then `40`. An over-limit edit rejected: resynchronised to `40`, the failure logged by the host. Submitted: the status line shows `"age": 40`. Reset to baseline. |
 | `profile-invalid-name` | A two-character display name left behind: the control is `aria-invalid`, the summary lists the finding.      |
-| `billing`              | Billing tab: radio group, compound select, price, billing address fixed object.                              |
-| `billing-widgets`      | "monthly" clicked in the radio group (checked, "yearly" unchecked); the compound select opened and "us" chosen (trigger shows it, listbox closed). |
-| `blocked-submit`       | Submit clicked from Billing: blocked, focus moved to the finding summary.                                    |
+| `blocked-submit`       | Submit clicked from the Billing tab: blocked, focus moved to the finding summary.                             |
 | `focus-to-target`      | The summary's finding button clicked: the Profile tab is revealed and the display name control has focus.    |
 | `presence-set`         | "Set Nickname" on the null nickname: an editable empty string, set-null and remove offered, text typed.      |
 | `presence-set-null`    | "Set Nickname to null": null again, set and remove offered.                                                  |
 | `presence-remove`      | "Remove Nickname": the value is gone, set and set-null offered. Set again afterwards.                        |
-| `security`             | Security tab: write-only boolean, choice, and string.                                                        |
-| `security-widgets`     | A value chosen in the write-only boolean's replacement select and in the write-only choice: both rest on their placeholder again; the write-only string is an empty password input. |
-| `team`                 | Team tab: homogeneous arrays of fixed objects and strings as daisyUI collections.                            |
-| `rtl-profile`          | `/daisyui/rtl` as loaded.                                                                                    |
-| `arrays`               | `/arrays` as loaded: the Tags and Team members collections as labelled groups of item cards.                 |
+| `security-write-only`  | Security tab: a value chosen in the write-only boolean's replacement select and in the write-only choice, both resting on their placeholder again; the write-only string an empty password input. |
+| `arrays`               | `/arrays` as loaded: the Tags and Team members collections as labelled groups.                               |
 | `arrays-inserted`      | "Insert Tags item before position 1" clicked: the seeded tag has focus and the insertion is announced.       |
-| `arrays-mutated`       | The inserted tag moved down (focus stays on its move-down button) and removed (focus moves to the next tag), then a team member appended (focus in the new card); each announced. |
-| `arrays-empty`         | Every tag removed: the empty state stands in for the cards, the removal is announced, append is still offered. |
+| `arrays-mutated`       | The inserted tag moved down (focus stays on its move-down button) and removed (focus moves to the next tag), then a team member appended (focus in the new item); each announced. |
+| —                      | Every tag removed: the removal is announced, append is still offered.                                        |
 | `arrays-min-items`     | Team members reduced to one: the core withdraws removal and no remove button remains.                        |
+
+### daisyUI presentation
+
+| Checkpoint        | State                                                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `profile-widgets` | `/daisyui`: the native checkbox unchecked; the nullable registry `Checkbox` taken from indeterminate to unchecked, back to null through set-null, and unchecked again; submitted, and the status line shows both writes. |
+| `billing`         | Billing tab: radio group, compound select, price, billing address fixed object.                                   |
+| `billing-widgets` | "monthly" clicked in the radio group (checked, "yearly" unchecked); the compound select opened and "us" chosen (trigger shows it, listbox closed). |
+| `security`        | Security tab: write-only boolean, choice, and string.                                                             |
+| `team`            | Team tab: homogeneous arrays of fixed objects and strings as daisyUI collections.                                 |
+| `rtl-profile`     | `/daisyui/rtl` as loaded: the same form with its chrome mirrored.                                                 |
+| `arrays-empty`    | `/arrays`: the first tag is a card named by noun and position; every tag removed, the empty state stands in for the cards. |
 
 Axe runs over the example region (`[role="region"][aria-label="Example demo"]`:
 the form, its reset button where the page has one, and its status line) with
@@ -51,10 +81,9 @@ The theme is selected the way the site does it, through `localStorage`
 pointer is parked and CSS transitions are awaited, so a hover left by the last
 click is not measured mid-fade.
 
-The daisyUI form and the arrays page run as separate scenarios within a theme,
-so a failure on one page does not hide the other page's checkpoints. The check
-fails (exit code 1) on any violation, any failed step, or any uncaught page
-error.
+The four scenarios run separately within a theme, so a failure in one does not
+hide another's checkpoints. The check fails (exit code 1) on any violation, any
+failed step, or any uncaught page error.
 
 ## Running it
 
