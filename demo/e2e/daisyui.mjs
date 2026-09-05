@@ -1,8 +1,11 @@
 // Drives the demo's daisyUI-rendered pages in a real browser: runs axe-core at
-// named checkpoints in the light and dark themes, verifies finding-summary
-// focus-to-target and presence repair on the daisyUI-rendered controls of the
-// daisyUI form, and add, insert, move, and remove with their focus and
-// announcements on the daisyUI-rendered arrays of the arrays page.
+// named checkpoints in the light and dark themes, drives every registry widget
+// the daisyUI form renders (native and registry checkboxes, inputs with a
+// parse blocker and a rejected write, the radio group, the compound select,
+// the write-only widgets), verifies finding-summary focus-to-target and
+// presence repair on the daisyUI-rendered controls, and add, insert, move, and
+// remove with their focus and announcements on the daisyUI-rendered arrays of
+// the arrays page.
 //
 //   node daisyui.mjs --site <built demo directory>   # serves the bundle itself
 //   node daisyui.mjs --url http://127.0.0.1:8080     # against a running server
@@ -279,6 +282,85 @@ class ThemeRun {
     await openPage(page, baseUrl, "/daisyui", this.theme);
     await this.checkpoint("profile");
 
+    // --- The registry widgets on the Profile tab -----------------------------
+    // Everything below is browser-only behaviour of the edit hooks the widgets
+    // are mapped onto: the DOM state after a write, after a write the core
+    // rejects, and after a presence operation.
+
+    // The native checkbox writes the boolean through the edit hook. A rejected
+    // write would resynchronise the checkbox; a stable unchecked state means
+    // the core accepted it.
+    const active = control(page, "/active");
+    assert(await active.isChecked(), "the account starts active");
+    await active.click();
+    await eventually("the checkbox to be unchecked", async () => !(await active.isChecked()));
+
+    // The nullable registry Checkbox shows null as indeterminate. A click makes
+    // it a boolean, which the core reflects by offering set-null; set-null takes
+    // it back to indeterminate.
+    const newsletter = form(page).locator('[role="checkbox"][name="/newsletter"]');
+    assert((await newsletter.getAttribute("aria-checked")) === "mixed", "null shows as indeterminate");
+    await newsletter.click();
+    await eventually(
+      "the newsletter checkbox to be unchecked",
+      async () => (await newsletter.getAttribute("aria-checked")) === "false",
+    );
+    await affordance(page, "Set Product newsletter to null").click();
+    await eventually(
+      "the newsletter checkbox to be indeterminate again",
+      async () => (await newsletter.getAttribute("aria-checked")) === "mixed",
+    );
+    await newsletter.click();
+    await eventually(
+      "the newsletter checkbox to be unchecked once more",
+      async () => (await newsletter.getAttribute("aria-checked")) === "false",
+    );
+
+    // An unparseable edit stays in the input as typed: the core keeps it as an
+    // edit buffer behind a parse blocker, the field is invalid, and the error
+    // region the input references names the blocker.
+    const age = control(page, "/age");
+    await age.fill("abc");
+    await eventually("the age to be marked invalid", async () => (await age.getAttribute("aria-invalid")) === "true");
+    assert((await age.inputValue()) === "abc", "an unparseable edit is kept as typed");
+    const ageErrors = form(page).locator(`[id="${await age.getAttribute("aria-errormessage")}"]`);
+    await eventually(
+      "the error region to name the parse blocker",
+      async () => (await ageErrors.textContent())?.includes("Enter a valid integer."),
+    );
+    await age.fill("40");
+    await eventually("the age to be valid again", async () => (await age.getAttribute("aria-invalid")) === "false");
+
+    // A write the core rejects — an edit buffer over its resource limit — is
+    // resynchronised: the input returns to the last accepted value and the
+    // failure is reported to the host, which the demo logs to the console.
+    await age.fill("9".repeat(512 * 1024 + 1));
+    await eventually("the rejected write to be resynchronised", async () => (await age.inputValue()) === "40");
+    await eventually(
+      "the rejected write to be reported to the host",
+      async () => this.browserLog.some((entry) => entry.type === "error" && entry.text.startsWith("form operation failed")),
+    );
+
+    // The writes above reached form data: a submission shows them.
+    await form(page).locator('button[type="submit"]').click();
+    const submitted = page.locator('div[dir] > p[role="status"]');
+    await eventually("the submission to be shown", async () => (await submitted.count()) === 1);
+    const submittedText = await submitted.textContent();
+    for (const expected of ['"active": false', '"newsletter": false', '"age": 40']) {
+      assert(submittedText.includes(expected), `the submission should contain ${expected}: ${submittedText}`);
+    }
+    await this.checkpoint("profile-widgets");
+
+    // Back to the baseline for the scenarios below.
+    await page.getByRole("button", { name: "Reset to baseline", exact: true }).click();
+    await eventually(
+      "the baseline to be restored",
+      async () =>
+        (await active.isChecked()) &&
+        (await age.inputValue()) === "36" &&
+        (await newsletter.getAttribute("aria-checked")) === "mixed",
+    );
+
     // A two-character display name violates minLength; the daisyUI Input
     // reports the finding once the control has been left, and the summary
     // lists it at the same moment.
@@ -295,6 +377,26 @@ class ThemeRun {
 
     await selectTab(page, "Billing");
     await this.checkpoint("billing");
+
+    // --- The registry widgets on the Billing tab -----------------------------
+    // The radio group: clicking an item selects its option and unchecks the
+    // previous one.
+    const yearly = form(page).getByRole("radio", { name: "yearly", exact: true });
+    const monthly = form(page).getByRole("radio", { name: "monthly", exact: true });
+    assert((await yearly.getAttribute("aria-checked")) === "true", "yearly is the baseline cycle");
+    await monthly.click();
+    await eventually("monthly to be checked", async () => (await monthly.getAttribute("aria-checked")) === "true");
+    await eventually("yearly to be unchecked", async () => (await yearly.getAttribute("aria-checked")) === "false");
+
+    // The compound select: the trigger opens a listbox, choosing an option
+    // closes it, and the trigger shows the option's label.
+    const region = form(page).locator('button[name="/region"]');
+    assert((await region.textContent())?.includes("eu"), "eu is the baseline region");
+    await region.click();
+    await page.getByRole("option", { name: "us", exact: true }).click();
+    await eventually("the trigger to show the chosen option", async () => (await region.textContent())?.includes("us"));
+    await eventually("the listbox to close", async () => (await region.getAttribute("aria-expanded")) === "false");
+    await this.checkpoint("billing-widgets");
 
     // Submitting from another tab is blocked, and the blocked submit moves
     // focus to the summary.
@@ -345,6 +447,29 @@ class ThemeRun {
 
     await selectTab(page, "Security");
     await this.checkpoint("security");
+
+    // --- The write-only widgets on the Security tab --------------------------
+    // Write-only widgets never echo their value: the replacement select for the
+    // write-only boolean and the write-only choice rest on their placeholder
+    // after every write, and the write-only string is an empty password input.
+    const twoFactor = form(page).locator('select[name="/two_factor"]');
+    assert((await twoFactor.inputValue()) === "", "a write-only boolean rests on its placeholder");
+    await twoFactor.selectOption("false");
+    await eventually(
+      "the replacement select to rest on its placeholder after the write",
+      async () => (await twoFactor.inputValue()) === "",
+    );
+    const recovery = form(page).locator('select[name="/recovery_channel"]');
+    assert((await recovery.inputValue()) === "", "a write-only choice rests on its placeholder");
+    await recovery.selectOption({ label: "sms" });
+    await eventually(
+      "the write-only choice to rest on its placeholder after the write",
+      async () => (await recovery.inputValue()) === "",
+    );
+    const token = control(page, "/access_token");
+    assert((await token.getAttribute("type")) === "password", "a write-only string is a password input");
+    assert((await token.inputValue()) === "", "a write-only string shows nothing");
+    await this.checkpoint("security-widgets");
 
     await selectTab(page, "Team");
     await this.checkpoint("team");

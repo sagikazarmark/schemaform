@@ -3,9 +3,11 @@
 A browser check for the demo's daisyUI-rendered pages: Playwright drives
 `/daisyui`, `/daisyui/rtl`, and `/arrays` in the light and dark themes, runs
 [axe-core] at named checkpoints, and verifies the behaviours a custom renderer
-is most likely to break: finding-summary focus-to-target and presence repair on
-the controls, and focus after each mutation and its live-region announcement on
-the arrays.
+is most likely to break: what every registry widget shows after a write, after
+a write the core rejects, and after a presence operation; finding-summary
+focus-to-target; and focus after each mutation and its live-region announcement
+on the arrays. These are the behaviours the component's native tests cannot
+see, since they observe server-rendered markup rather than a DOM.
 
 It exists because the daisyUI controls, arrays, shell, and finding summary are
 not the built-in renderers. The adapter's own browser suite covers the
@@ -19,14 +21,17 @@ Per theme, in order, with an axe run at each checkpoint:
 | Checkpoint             | State                                                                                                        |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `profile`              | The page as loaded, Profile tab.                                                                             |
+| `profile-widgets`      | The native checkbox unchecked; the nullable registry `Checkbox` taken from indeterminate to unchecked, back to null through set-null, and unchecked again; `abc` typed into the age (kept as typed, `aria-invalid`, the error region names the parse blocker) then `40`; an over-limit edit rejected and resynchronised to `40`, with the failure logged; submitted, and the status line shows the three writes. Reset to baseline afterwards. |
 | `profile-invalid-name` | A two-character display name left behind: the control is `aria-invalid`, the summary lists the finding.      |
 | `billing`              | Billing tab: radio group, compound select, price, billing address fixed object.                              |
+| `billing-widgets`      | "monthly" clicked in the radio group (checked, "yearly" unchecked); the compound select opened and "us" chosen (trigger shows it, listbox closed). |
 | `blocked-submit`       | Submit clicked from Billing: blocked, focus moved to the finding summary.                                    |
 | `focus-to-target`      | The summary's finding button clicked: the Profile tab is revealed and the display name control has focus.    |
 | `presence-set`         | "Set Nickname" on the null nickname: an editable empty string, set-null and remove offered, text typed.      |
 | `presence-set-null`    | "Set Nickname to null": null again, set and remove offered.                                                  |
 | `presence-remove`      | "Remove Nickname": the value is gone, set and set-null offered. Set again afterwards.                        |
 | `security`             | Security tab: write-only boolean, choice, and string.                                                        |
+| `security-widgets`     | A value chosen in the write-only boolean's replacement select and in the write-only choice: both rest on their placeholder again; the write-only string is an empty password input. |
 | `team`                 | Team tab: homogeneous arrays of fixed objects and strings as daisyUI collections.                            |
 | `rtl-profile`          | `/daisyui/rtl` as loaded.                                                                                    |
 | `arrays`               | `/arrays` as loaded: the Tags and Team members collections as labelled groups of item cards.                 |
