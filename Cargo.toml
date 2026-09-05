@@ -27,20 +27,25 @@ dioxus-core = "=0.7.10"
 dioxus-elements = { package = "dioxus-html", version = "=0.7.10" }
 dioxus-signals = "=0.7.10"
 dioxus-web = { version = "=0.7.10", default-features = false }
-js-sys = "=0.3.103"
+# The wasm-bindgen stack and serde_json are minimum requirements, not exact pins:
+# the published crates must resolve alongside whatever version a consumer's
+# other dependencies already lock. The versions this workspace builds and tests
+# with are the lockfile's, which CI holds with `--locked`; the browser test
+# runner must match the *locked* wasm-bindgen, not the manifest's requirement.
+js-sys = "0.3.103"
 jsonptr = "0.8.1"
 jsonschema = { version = "=0.47.0", default-features = false, features = ["arbitrary-precision"] }
 num-bigint = "0.5.1"
 proptest = "1.7.0"
 referencing = "=0.47.0"
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "=1.0.151", features = ["arbitrary_precision"] }
+serde_json = { version = "1.0.151", features = ["arbitrary_precision"] }
 serde_path_to_error = "0.1.20"
 sha2 = "0.11.0"
-wasm-bindgen = "=0.2.126"
-wasm-bindgen-futures = "=0.4.76"
-wasm-bindgen-test = "=0.3.76"
-web-sys = "=0.3.103"
+wasm-bindgen = "0.2.126"
+wasm-bindgen-futures = "0.4.76"
+wasm-bindgen-test = "0.3.76"
+web-sys = "0.3.103"
 
 [workspace.metadata.release]
 release = false
