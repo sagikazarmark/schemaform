@@ -9870,11 +9870,15 @@ async fn an_item_edit_does_not_re_render_the_item_hosts() {
     );
 
     // A value that fails `minLength`: the control's findings change, still inside the control.
+    // The finding becomes visible once the control is left, as the default policy has it.
     dispatch_input(&first, "x");
     poll_dom(|| {
         (form_handle.reader().form_data().ok()? == json!({ "tags": ["x", "same"] })).then_some(())
     })
     .await;
+    first.focus().expect("the edited input should accept focus");
+    next_microtask().await;
+    first.blur().expect("the edited input should blur");
     poll_dom(|| (first.get_attribute("aria-invalid").as_deref() == Some("true")).then_some(()))
         .await;
     next_browser_task().await;
