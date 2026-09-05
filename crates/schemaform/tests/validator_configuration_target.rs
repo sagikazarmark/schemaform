@@ -95,9 +95,14 @@ fn dependency_and_validator_configuration_match_the_qualified_release() {
         "jsonschema = { version = \"=0.47.0\", default-features = false, features = [\"arbitrary-precision\"] }"
     ));
     assert!(WORKSPACE_MANIFEST.contains("referencing = \"=0.47.0\""));
+    // `serde_json` is qualified through the lockfile below rather than an exact manifest
+    // requirement: an exact requirement in the published crates would refuse to resolve in any
+    // consumer whose lockfile already holds a newer patch release, while the lockfile, held by
+    // `--locked` in CI, is what this workspace builds, tests, and fuzzes with. The requirement
+    // still names the qualified release as its minimum.
     assert!(
         WORKSPACE_MANIFEST.contains(
-            "serde_json = { version = \"=1.0.151\", features = [\"arbitrary_precision\"] }"
+            "serde_json = { version = \"1.0.151\", features = [\"arbitrary_precision\"] }"
         )
     );
     for (package, version) in [
