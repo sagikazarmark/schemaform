@@ -29,7 +29,7 @@ use schemaform_dioxus::{
     RenderEvent, RenderNodeKind, RenderObservation, RenderObserver,
     SchemaForm as RequiredSchemaForm, ShellContext, ShellRenderer, StructureRenderers,
     render::{BindFinding, FindingCollectionContext},
-    use_form,
+    use_choice_edit, use_form, use_text_edit,
 };
 use serde_json::json;
 use wasm_bindgen::JsCast;
@@ -9907,6 +9907,244 @@ async fn an_item_edit_does_not_re_render_the_item_hosts() {
 
     root.remove();
 }
+
+#[derive(Clone, PartialEq, Props)]
+struct HookControlProps {
+    context: ControlRenderContext,
+}
+
+/// A text control built on `use_text_edit` the way a UI-kit package builds one: the widget
+/// carries the element id — the element the hook resynchronises — reads the hook's value, and
+/// installs the hook's callbacks. Nothing of the built-in's markup is used.
+#[allow(non_snake_case)]
+fn HookInput(props: HookControlProps) -> Element {
+    let edit = use_text_edit(&props.context);
+    let presentation = props.context.presentation();
+    let control = props.context.control();
+    rsx! {
+        label { r#for: presentation.element_id.clone(), "{presentation.label}" }
+        input {
+            id: presentation.element_id.clone(),
+            name: control.name.clone(),
+            value: "{edit.value}",
+            readonly: edit.read_only,
+            "aria-invalid": presentation.invalid,
+            "aria-describedby": presentation.described_by(),
+            "data-hook-widget": "text",
+            oninput: move |event: FormEvent| edit.input.call(event.value()),
+            onblur: move |_| edit.blur.call(()),
+        }
+        {presentation.present_help()}
+        {presentation.present_findings()}
+    }
+}
+
+/// A choice control built on `use_choice_edit`: a `select` carrying the element id whose option
+/// values are the opaque identities, with a placeholder option selected while nothing is.
+#[allow(non_snake_case)]
+fn HookSelect(props: HookControlProps) -> Element {
+    let edit = use_choice_edit(&props.context);
+    let presentation = props.context.presentation();
+    let control = props.context.control();
+    let selected = edit
+        .selected
+        .cloned()
+        .map(|identity| identity.as_str().to_owned())
+        .unwrap_or_default();
+    let placeholder_selected = selected.is_empty();
+    let options = edit.options.clone();
+    let lookup = edit.options;
+    rsx! {
+        label { r#for: presentation.element_id.clone(), "{presentation.label}" }
+        select {
+            id: presentation.element_id.clone(),
+            name: control.name.clone(),
+            value: selected,
+            "aria-invalid": presentation.invalid,
+            "data-hook-widget": "choice",
+            onchange: move |event: FormEvent| {
+                let identity = lookup
+                    .iter()
+                    .find(|option| option.identity.as_str() == event.value())
+                    .map(|option| option.identity.clone());
+                edit.select.call(identity);
+            },
+            onblur: move |_| edit.blur.call(()),
+            option { value: "", disabled: true, selected: placeholder_selected, "" }
+            for option in options {
+                option {
+                    key: "{option.identity.as_str()}",
+                    value: option.identity.as_str().to_owned(),
+                    disabled: option.disabled,
+                    "{option.label}"
+                }
+            }
+        }
+        {presentation.present_findings()}
+    }
+}
+
+/// Dispatches every control to a hook-based custom widget: choices to [`HookSelect`], the rest to
+/// [`HookInput`]. The kind is definition-stable, so each node always renders the same child.
+struct HookRenderer;
+
+impl ControlRenderer for HookRenderer {
+    fn render(&self, context: ControlRenderContext) -> Element {
+        match context.control().kind {
+            schemaform_dioxus::ControlKind::Choice => rsx! { HookSelect { context } },
+            _ => rsx! { HookInput { context } },
+        }
+    }
+}
+
+fn hook_renderer_test_app(props: TestAppProps) -> Element {
+    let definition = use_hook(|| {
+        FormDefinition::compile(json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["quantity", "secret_mode"],
+            "properties": {
+                "quantity": { "type": "integer", "title": "Quantity", "minimum": 0 },
+                "secret_mode": {
+                    "type": "string",
+                    "title": "Secret mode",
+                    "enum": ["private", "public"],
+                    "writeOnly": true
+                }
+            }
+        }))
+        .expect("the hook-renderer data schema should compile")
+    });
+    let form = use_form(
+        definition,
+        json!({ "quantity": 1, "secret_mode": "private" }),
+    )
+    .expect("the hook-renderer form should be created");
+    let form_to_bind = form.clone();
+    let bound = use_hook(move || {
+        RenderConfiguration::builder()
+            .controls(ControlRegistry::with_builtins().matcher(
+                schemaform_dioxus::BUILTIN_CONTROL_PRIORITY + 10,
+                Arc::new(EveryControl),
+                Arc::new(HookRenderer),
+            ))
+            .build()
+            .bind(&form_to_bind)
+            .expect("the hook renderer should bind every control")
+    });
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+    let errors = props.errors.clone();
+
+    rsx! {
+        SchemaForm {
+            form: bound,
+            on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
+            on_error: move |error| errors.borrow_mut().push(error),
+        }
+    }
+}
+
+/// The edit hooks keep their DOM contract through a custom widget, not only through the
+/// built-ins: a write the core accepts reaches form data; an unparseable one stays in the widget
+/// as typed behind a parse blocker; a write the core rejects is reported and the widget carrying
+/// the element id is put back to the canonical text; and a write-only widget rests on its
+/// placeholder after every write. A widget that put the element id on a wrapper instead of the
+/// input would silently lose the last two, which is why this runs against a custom renderer.
+#[wasm_bindgen_test]
+async fn hook_based_custom_widgets_are_resynchronised_after_rejected_and_write_only_writes() {
+    let (
+        MountedTestApp {
+            root, form_handle, ..
+        },
+        errors,
+    ) = mount_test_app_with_errors(hook_renderer_test_app).await;
+    let quantity = input_with_binding(&root, "/quantity");
+    assert_eq!(
+        quantity.get_attribute("data-hook-widget").as_deref(),
+        Some("text"),
+        "the custom widget renders, not the built-in"
+    );
+    assert_eq!(quantity.value(), "1");
+    let form_data = || {
+        form_handle
+            .reader()
+            .form_data()
+            .expect("form should be readable")
+    };
+
+    // An accepted write reaches form data.
+    dispatch_input(&quantity, "7");
+    poll_dom(|| (form_data()["quantity"] == json!(7)).then_some(())).await;
+    assert_eq!(quantity.value(), "7");
+
+    // An unparseable write is kept as typed behind a parse blocker; the value is untouched.
+    dispatch_input(&quantity, "-");
+    poll_dom(|| (quantity.get_attribute("aria-invalid").as_deref() == Some("true")).then_some(()))
+        .await;
+    assert_eq!(quantity.value(), "-");
+    assert_eq!(form_data()["quantity"], json!(7));
+    assert_described_by_resolves(&quantity);
+    dispatch_input(&quantity, "7");
+    poll_dom(|| (quantity.get_attribute("aria-invalid").as_deref() == Some("false")).then_some(()))
+        .await;
+
+    // A write the core rejects — an edit buffer over its resource limit — is reported and the
+    // widget is put back to the canonical text synchronously.
+    let oversized = "9".repeat(512 * 1024 + 1);
+    dispatch_input(&quantity, &oversized);
+    assert_eq!(
+        quantity.value(),
+        "7",
+        "the hook resynchronises the element carrying the element id"
+    );
+    assert_eq!(form_data()["quantity"], json!(7));
+    assert!(
+        matches!(
+            errors.borrow().as_slice(),
+            [HandleError::UserOperation(
+                schemaform::form::UserOperationError::ResourceLimit(limit)
+            )] if limit.dimension() == "edit_buffer_bytes"
+        ),
+        "the rejected write reaches on_error: {:?}",
+        errors.borrow()
+    );
+
+    // A write-only choice rests on its placeholder after every write, accepted or not.
+    let secret_mode = select_with_binding(&root, "/secret_mode");
+    assert_eq!(
+        secret_mode.get_attribute("data-hook-widget").as_deref(),
+        Some("choice")
+    );
+    assert_eq!(secret_mode.value(), "");
+    assert_eq!(secret_mode.selected_index(), 0);
+    let public = select_options(&secret_mode)
+        .into_iter()
+        .find(|(_, label)| label == "public")
+        .map(|(value, _)| value)
+        .expect("the write-only choice offers its options");
+    dispatch_select_change(&secret_mode, &public);
+    assert_eq!(
+        secret_mode.value(),
+        "",
+        "a write-only widget never shows its value"
+    );
+    assert_eq!(secret_mode.selected_index(), 0);
+    poll_dom(|| (form_data()["secret_mode"] == json!("public")).then_some(())).await;
+    assert_eq!(
+        errors.borrow().len(),
+        1,
+        "the write-only write was accepted"
+    );
+
+    root.remove();
+}
+
+/// Returns the affordance button of `kind` that the custom renderer emitted for `input`. The
+/// selector requires the adapter's id prefix, so a renderer that drops the id is caught here.
 fn affordance_button(
     root: &web_sys::Element,
     input: &HtmlInputElement,
