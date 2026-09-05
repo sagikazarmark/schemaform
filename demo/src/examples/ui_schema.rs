@@ -144,7 +144,7 @@ pub fn AuthoredUiSchemaExample() -> Element {
                         .expect("form data should serialize"),
                 );
             },
-            on_error: move |error| eprintln!("form operation failed: {error}"),
+            on_error: move |error| crate::examples::report_form_error(&error),
         }
         StatusLine { status: submitted.read().clone() }
     }
@@ -167,11 +167,10 @@ fn definition() -> FormDefinition {
     });
     let ui_schema = parse_ui_schema_v1(UI_SCHEMA.as_bytes(), &CompilationProfile::default())
         .expect("the authored UI schema should parse");
-    let definition = FormDefinition::compiler(data_schema)
+    FormDefinition::compiler(data_schema)
         .ui_schema(ui_schema)
         .compile()
-        .expect("the authored UI schema should compile");
-    definition
+        .expect("the authored UI schema should compile")
 }
 
 #[cfg(test)]

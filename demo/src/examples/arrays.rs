@@ -50,7 +50,7 @@ pub fn ArraysExample() -> Element {
                         .expect("form data should serialize"),
                 );
             },
-            on_error: move |error| eprintln!("form operation failed: {error}"),
+            on_error: move |error| crate::examples::report_form_error(&error),
         }
         StatusLine { status: submitted.read().clone() }
     }

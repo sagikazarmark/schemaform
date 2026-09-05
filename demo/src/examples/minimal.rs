@@ -31,7 +31,7 @@ pub fn MinimalExample() -> Element {
                 let name = snapshot.form_data()["name"].as_str().unwrap_or_default();
                 greeting.set(format!("Hello, {name}!"));
             },
-            on_error: move |error| eprintln!("form operation failed: {error}"),
+            on_error: move |error| crate::examples::report_form_error(&error),
         }
         StatusLine { status: greeting.read().clone() }
     }

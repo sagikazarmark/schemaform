@@ -40,8 +40,9 @@ dioxus-primitives = { version = "0.0.1", git = "https://github.com/DioxusLabs/co
 ] }
 serde_json = "1"
 # `dioxus-web` uses `Window.location` but does not enable the corresponding
-# web-sys feature itself.
-web-sys = { version = "0.3", features = ["Location", "Window"] }
+# web-sys feature itself. `console` is where the examples report form operation
+# failures in the browser.
+web-sys = { version = "0.3", features = ["Location", "Window", "console"] }
 
 [dev-dependencies]
 # Native tests observe the daisyUI renderer through the markup it produces.

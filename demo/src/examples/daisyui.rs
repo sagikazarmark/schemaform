@@ -213,7 +213,7 @@ pub fn DaisyuiFormExample(#[props(default)] direction: WritingDirection) -> Elem
                 on_submit: move |snapshot: schemaform::SubmissionSnapshot| {
                     submitted.set(redacted_submission_text(snapshot.form_data()));
                 },
-                on_error: move |error| eprintln!("form operation failed: {error}"),
+                on_error: move |error| crate::examples::report_form_error(&error),
             }
             button {
                 class: "btn btn-sm btn-ghost",

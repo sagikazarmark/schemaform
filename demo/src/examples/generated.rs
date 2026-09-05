@@ -45,17 +45,18 @@ pub fn GeneratedControlsExample() -> Element {
                 form: bound,
                 on_submit: move |snapshot: schemaform::SubmissionSnapshot| {
                     let mut displayed = snapshot.form_data().clone();
-                    if let Some(object) = displayed.as_object_mut() {
-                        if let Some(access_token) = object.get_mut("access_token") {
-                            *access_token = serde_json::Value::String("[redacted]".to_owned());
-                        }
+                    if let Some(access_token) = displayed
+                        .as_object_mut()
+                        .and_then(|object| object.get_mut("access_token"))
+                    {
+                        *access_token = serde_json::Value::String("[redacted]".to_owned());
                     }
                     submitted.set(
                         serde_json::to_string_pretty(&displayed)
                             .expect("form data should serialize"),
                     );
                 },
-                on_error: move |error| eprintln!("form operation failed: {error}"),
+                on_error: move |error| crate::examples::report_form_error(&error),
             }
             button {
                 class: "btn btn-sm btn-ghost",
