@@ -23,9 +23,8 @@ schemaform = "0.1"
 schemaform-dioxus = "0.1"
 ```
 
-See [CHANGELOG.md](../../CHANGELOG.md) for what changed in each release,
-including the migration note for custom renderer authors in the unreleased
-0.2 section.
+See the [GitHub releases](https://github.com/sagikazarmark/schemaform/releases)
+for what changed in each release.
 
 ## Quick Start
 

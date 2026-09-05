@@ -56,10 +56,10 @@ two packages: the Dioxus-free `schemaform` core and the browser-CSR
 
 ## Status
 
-Both packages are published on crates.io and share one version; see
-[CHANGELOG.md](CHANGELOG.md) for what changed in each release. Browser latency
-and runtime-memory calibration remain future work, and no release makes a
-quantitative claim for either.
+Both packages are published on crates.io and share one version; see the
+[GitHub releases](https://github.com/sagikazarmark/schemaform/releases) for
+what changed in each release. Browser latency and runtime-memory calibration
+remain future work, and no release makes a quantitative claim for either.
 
 ## Quick Start
 
@@ -231,17 +231,24 @@ cargo run --locked -p browser-workload-pack -- check
 cargo test --locked -p schemaform-fuzz-harness
 ```
 
-### Release gates
+### Continuous integration and release
 
-Publication resolves one existing tag to an exact commit, and reusable native,
-fuzz, and browser workflows independently check out and verify that commit. It
-is gated on native workspace tests, both `SCHEMAFORM_PROPTEST_PROFILE=release`
-model tests, all seven two-hour-per-target release fuzz budgets plus
-retained-corpus replay, and the complete browser gate. Qualification logs, fuzz
-corpora and findings, replay logs, and browser evidence are retained for 90
-days.
+Every pull request and push to `main` runs the [Dagger](https://dagger.io)
+checks configured in `dagger.toml` against the locked dependency set:
+`rust:fmt`, `rust:build`, `rust:test`, `rust:clippy`, `rust:doc`, and
+`rust:audit` for this workspace, and `demo:build`, `demo:test`,
+`demo:accessibility` (Playwright with `axe-core` against the daisyUI page in
+both themes), and `demo:worker-bundle` for the `demo/` workspace. Pushes to
+`main` also deploy the demo.
 
-The interaction gate runs the browser-neutral real-DOM suite in every pinned
+The browser test suite above, the interaction matrix, the artifact-size gate,
+the evidence archive, and the `fuzz/` targets do not run in CI; run them by
+hand before cutting a release. Releases are cut from a clean `main` with
+[`cargo-release`](https://github.com/crate-ci/cargo-release): both crates take
+the shared workspace version, and the release commit and `v{version}` tag are
+signed.
+
+The interaction matrix runs the browser-neutral real-DOM suite in every pinned
 Chromium, Firefox, and WebKit cell at 320 and 1280 CSS pixels and 100 and 200
 percent zoom, injecting pinned `axe-core` at manifest-declared DOM checkpoints.
 Start the interactive test server:

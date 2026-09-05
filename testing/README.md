@@ -1,7 +1,7 @@
 # Testing layout
 
 The `testing/` tree contains test infrastructure and data shared across product
-crates, browser targets, or release workflows:
+crates, browser targets, or release checks:
 
 - `fixtures/business-schemas/` contains attributed, offline product-path data
   shared by the core and browser suites. It is not a mutation corpus.
@@ -43,5 +43,5 @@ cargo test --locked -p schemaform-fuzz-harness
 
 See `testing/browser/workload-pack/README.md` and
 `testing/fixtures/business-schemas/README.md` for the subsystem-specific
-contracts, and the repository [README](../README.md) for the release gates that
-consume them.
+contracts, and the repository [README](../README.md) for the CI checks and
+manual release checks that consume them.
