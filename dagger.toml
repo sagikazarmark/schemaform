@@ -5,10 +5,5 @@ source = "github.com/sagikazarmark/daggerverse-beta/rust"
 # (source bundle evidence), which the slim variants do not ship.
 settings.version = "1.98-trixie"
 
-# Repository-specific checks, e.g. compiling on the minimum supported Rust
-# version declared in Cargo.toml.
-[modules.schemaform]
-source = ".dagger/modules/schemaform"
-
 [modules.dagger-gha]
 source = "github.com/sagikazarmark/daggerverse-beta/dagger-gha"
