@@ -4,19 +4,15 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 use dioxus_field::{
-    ChangeOrigin, FieldContext, FieldControlOptions, FieldSurface, merge_attributes, use_binding,
-    use_field_meta, use_focus_registration,
+    ChangeOrigin, FieldControlOptions, FieldSurface, merge_attributes, use_binding, use_field_meta,
+    use_focus_registration,
 };
 use dioxus_primitives::dioxus_attributes::attributes;
 use schemaform_dioxus::{ControlRenderContext, use_boolean_edit};
 
-use super::mapping::{field_meta_values, use_boolean_binding, use_checkbox_binding};
-use super::parts::{
-    display_text, incompatible_description, kind_name, label_class, label_id, read_only_field,
-    supplements,
-};
+use super::mapping::{use_boolean_binding, use_checkbox_binding};
+use super::parts::{WidgetLayout, editable, editable_field, kind_name};
 use crate::components::checkbox::Checkbox;
-use crate::components::field::{Field, FieldLabel, FieldRow};
 use crate::components::native_select::{NativeSelect, NativeSelectOption};
 
 /// One daisyUI boolean control: the renderer's hook-safe child component.
@@ -34,74 +30,57 @@ pub(super) fn BooleanControl(context: ControlRenderContext) -> Element {
     let edit = use_boolean_edit(&context);
     let binding = use_boolean_binding(edit);
     let checkbox = use_checkbox_binding(edit);
-    let Some(projection) = context.node().read().ok().flatten() else {
-        return rsx! {};
-    };
-    let presentation = context.presentation();
-    let control = context.control();
-    if projection.read_only {
-        return read_only_field(presentation, control, display_text(&projection), &[]);
+    if let Err(rendered) = editable(&context) {
+        return rendered;
     }
-
+    let control = context.control();
     let kind = kind_name(control.kind);
-    let label = presentation.label.clone();
-    let meta = field_meta_values(presentation, control);
 
-    if let (Some(replacement), Some(labels)) = (
-        control.write_only_replacement.clone(),
-        control.boolean_labels.clone(),
-    ) {
+    if let Some(replacement) = control.write_only_replacement.clone() {
         // The value must not be echoed, so the widget is a replacement select that the edit hook
         // puts back on its placeholder after every write, as the built-in does.
-        let field_context = FieldContext::new(binding).with_meta_values(meta);
+        let labels = control
+            .boolean_labels
+            .clone()
+            .expect("the adapter localizes false and true labels for every boolean control");
         let options = vec![
             NativeSelectOption::new(false, labels.false_label).form_value("false"),
             NativeSelectOption::new(true, labels.true_label).form_value("true"),
         ];
-        return rsx! {
-            Field { context: field_context, "data-schemaform-daisyui": kind,
-                FieldLabel {
-                    id: label_id(presentation),
-                    class: label_class(presentation),
-                    "{replacement.label}"
-                }
+        return editable_field(
+            &context,
+            binding,
+            WidgetLayout::Stacked,
+            rsx! {
                 NativeSelect::<bool> {
                     options,
                     placeholder: replacement.placeholder,
                     "data-schemaform-control": kind,
                     "data-write-only-replacement": "",
                 }
-                {supplements(presentation)}
-            }
-        };
+            },
+        );
     }
 
-    let incompatible = incompatible_description(presentation, &projection);
     if control.nullable {
-        let field_context = FieldContext::new(checkbox).with_meta_values(meta);
-        return rsx! {
-            Field { context: field_context, "data-schemaform-daisyui": kind,
-                FieldRow {
-                    Checkbox { "data-schemaform-control": kind }
-                    FieldLabel { id: label_id(presentation), class: label_class(presentation), "{label}" }
-                }
-                {incompatible}
-                {supplements(presentation)}
-            }
-        };
+        return editable_field(
+            &context,
+            checkbox,
+            WidgetLayout::Row,
+            rsx! {
+                Checkbox { "data-schemaform-control": kind }
+            },
+        );
     }
 
-    let field_context = FieldContext::new(binding).with_meta_values(meta);
-    rsx! {
-        Field { context: field_context, "data-schemaform-daisyui": kind,
-            FieldRow {
-                NativeCheckbox { "data-schemaform-control": kind }
-                FieldLabel { id: label_id(presentation), class: label_class(presentation), "{label}" }
-            }
-            {incompatible}
-            {supplements(presentation)}
-        }
-    }
+    editable_field(
+        &context,
+        binding,
+        WidgetLayout::Row,
+        rsx! {
+            NativeCheckbox { "data-schemaform-control": kind }
+        },
+    )
 }
 
 /// A native checkbox styled with daisyUI's `checkbox` class and bound the way the registry's

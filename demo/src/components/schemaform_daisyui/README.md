@@ -4,15 +4,18 @@ A `schemaform-dioxus` renderer package that presents a form with the
 `dioxus-daisyui-components` registry and daisyUI classes. It fills three seams:
 
 - A **control renderer** for every control kind: strings, numbers, and integers
-  with `Field`, `FieldLabel`, `Input`, `FieldDescription`, and `FieldError`;
-  booleans with a native checkbox or the registry's `Checkbox`; choices with
-  `NativeSelect`, `RadioGroup`, or `Select`; constants as read-only output; and
-  presence operations as its `Button`.
+  with `Field`, `FieldLabel`, `Input`, and `FieldDescription`; booleans with a
+  native checkbox or the registry's `Checkbox`; choices with `NativeSelect`,
+  `RadioGroup`, or `Select`; constants as read-only output; and presence
+  operations as its `Button`.
 - A **structure bundle** with a `CollectionRenderer` that presents homogeneous
   arrays as a fieldset of item cards with joined square action buttons, and a
   `ShellRenderer` that lays the form out with a primary submit button.
 - A **finding presenter** that frames the form-wide summary as an alert of
   focus-to-target links and renders node-local findings as a stack.
+
+`SchemaformDaisyui` binds a form through all three at once; `controls()`,
+`structure()`, and `findings()` let a host compose them with its own slots.
 
 Only the structural nodes no seam exists for yet — layouts, groups, and tabs —
 still come from the adapter's built-in renderer. The demo styles those through
@@ -43,8 +46,13 @@ registry without changing shape:
   headless edit hooks and the structure seams; this demo builds them from the
   workspace instead.
 - `mod.rs`, `component.rs`, `mapping.rs`, `parts.rs`, `text.rs`, `boolean.rs`,
-  `choice.rs`, `constant.rs`, `collection.rs`, `shell.rs`, `findings.rs`, and
-  the test-only `test_support.rs` are what an install copies.
+  `choice.rs`, `constant.rs`, `collection.rs`, `shell.rs`, and `findings.rs`
+  are what an install copies. None of them contains test code.
+- The component's tests live in the demo's `tests/schemaform_daisyui/`: the
+  binding tests (`mapping.rs`) drive the `dioxus-field` bindings through a
+  capturing renderer without rendering markup, and the rest observe the markup
+  `dioxus-ssr` renders for a form bound through every seam. Browser-only
+  behaviour is covered by the Playwright suite in `demo/e2e/`.
 - The registry components live beside this one under `src/components/`,
   copied verbatim from the pinned revision and committed. CI never runs
   `dx components add`.
@@ -77,6 +85,17 @@ and the label is the localized replacement label. A constant is never an
 editable widget with a metadata-only field context; it is output, with the
 presence affordances that materialize or remove it.
 
+Every editable control shares one frame: the registry `Field` over the
+control's binding and metadata, the label (above the widget, or beside a
+checkable one in a `FieldRow`), the widget, the incompatible-value readout, and
+the supplements under it — help, the findings that are not field errors, the
+error region, and the presence affordances. The readout is
+`NodePresentation::incompatible_value`, shown for every kind: an input holding
+a number where the schema wants a string, a checkbox holding a string, and a
+select holding a value no option carries all tell the user what the replace
+affordance beside them discards. A widget symbol on a non-choice control
+changes nothing: the renderer dispatches on the control kind first.
+
 ## What it renders around the controls
 
 | Node | Presentation |
@@ -92,15 +111,6 @@ button in the moved row; every finding element carries its stable id, so ids the
 adapter hands out in `aria-describedby` resolve. Identity, keying, focus after a
 mutation, and announcements stay the adapter's: the renderers place what they
 are handed and never compose affordances themselves.
-
-A built-in fixed object rendered as an array item is flattened into its card —
-its own border, padding, and background removed and its legend made
-screen-reader-only — through Tailwind arbitrary variants on the card body that
-name the adapter's `schemaform-group` hook. That is the one place the component
-reaches for a class hook; it goes when a `FixedObjectRenderer` seam exists.
-
-The empty state's text is a fixed English string: the localized item noun the
-context carries is a name, not a word a sentence can be built around.
 
 ## What it maps
 
@@ -119,7 +129,8 @@ maps those onto the `dioxus-field` convention the registry speaks:
 | `NodePresentation::element_id` / `ControlFacets::name` | `FieldMetaValues::id` / `name` |
 | `ControlFacets::{required, disabled, touched, dirty}` | the same flags |
 | `NodePresentation::invalid` | `FieldMetaValues::invalid = Some(..)` |
-| blocking parse, validation, and external findings | `FieldMetaValues::errors` |
+| blocking parse, validation, and external findings | `FieldMetaValues::errors`, and the error region |
+| `NodeProjection::display_text()` | the text of a read-only or constant `output` |
 
 Every binding's identity is its edit's hook-stable handles (the value signal
 and the callbacks), so bindings built on later renders compare equal and the
@@ -128,23 +139,55 @@ registry widgets neither re-render per edit nor re-register focus. A native
 `RadioItem`'s value, is the option's opaque `ChoiceIdentity` string: the same
 string the edit hook writes back into the widget after a rejected write.
 
-`FieldError` renders `errors` only while the field is invalid, so it receives
-the findings that block submission and concern the entered value: parse
-blockers, validation findings, and blocking external findings. Every other
-finding — help text, capability findings, advisory external findings — is
-rendered as a `FieldDescription` carrying its stable id, so every id the
-adapter hands out resolves to an element. A blocking capability finding
-therefore still marks the field invalid but is read as a description, since it
-is about what the form can present rather than what the user typed.
+Findings are split the way the registry's `Field` addresses them. The findings
+that block submission and concern the entered value — parse blockers,
+validation findings, blocking external findings — are field errors: their text
+goes into `FieldMetaValues::errors`, and they are rendered in the **error
+region**, the element the control references through `aria-errormessage`, a
+polite live region under the id `{element_id}-errors`. The component renders
+that region itself rather than through the registry's `FieldError`, registering
+the same id with the field's metadata, so that each finding inside it is an
+element carrying the adapter's stable id. Every other finding — help text,
+capability findings, advisory external findings — is a `FieldDescription`
+carrying its stable id, which the control references through
+`aria-describedby`. A blocking capability finding therefore still marks the
+field invalid but is read as a description, since it is about what the form can
+present rather than what the user typed.
 
-Two registry behaviours to know about the compound `Select`: it reports focus
-exit one task after its trigger loses focus, so touched state lands one task
-later than with the native select; and it renders no hidden form participant,
-so a `daisyui:select` choice carries the control binding as the trigger's
-`name` but does not take part in native form submission. The native select and
-the radio group's hidden radios do.
+Two registry behaviours to know about: the compound `Select` and the
+`RadioGroup` report focus exit one task after they lose focus, so touched state
+lands one task later than with the native select; and the compound `Select`
+renders no hidden form participant, so a `daisyui:select` choice carries the
+control binding as the trigger's `name` but does not take part in native form
+submission. The native select and the radio group's hidden radios do.
+
+## State bridging
+
+The component itself has no state to bridge: the core owns every piece of form
+state, and nothing here holds any of its own. The mapping module turns the
+adapter's edit hooks into controlled `dioxus-field` bindings — read is the
+hook's value signal, write is the hook's callback — that the registry widgets
+consume as they would any host binding. The widgets never see form data, and a
+write the core rejects is undone by the hook resynchronising the widget's DOM
+state, not by state kept in this component.
 
 ## Usage
+
+The whole presentation, bound once when the component mounts:
+
+```rust
+use crate::components::schemaform_daisyui::SchemaformDaisyui;
+
+rsx! {
+    SchemaformDaisyui {
+        form,
+        on_submit: move |snapshot| { /* ... */ },
+        on_error: move |error| { /* ... */ },
+    }
+}
+```
+
+The seams composed by hand, when one of them should differ:
 
 ```rust
 use schemaform_dioxus::RenderConfiguration;
@@ -160,10 +203,11 @@ let bound = RenderConfiguration::builder()
     .bind(&form)?;
 ```
 
-The seams are independent: a host that keeps the built-in controls can still
-adopt `structure()` and the summary presenter, as the demo's other gallery pages
-do. Structure renderers are fixed when a form is bound; changing the bundle
-means rebinding.
+`schemaform_daisyui::configuration()` is that composition, ready to bind. The
+seams are independent: a host that keeps the built-in controls can still adopt
+`structure()` and the summary presenter, as the demo's other gallery pages do.
+Structure renderers are fixed when a form is bound; changing the bundle means
+rebinding.
 
 `controls()` starts from `ControlRegistry::with_builtins()`, registers the
 renderer through a matcher above the built-in priority that accepts every
@@ -186,5 +230,42 @@ named on a UI schema control:
 }
 ```
 
-A widget symbol on a non-choice control changes nothing: the renderer
-dispatches on the control kind first.
+## Deviations
+
+Where this component departs from the registry's conventions, and why:
+
+- **It is a renderer package, not one widget.** It exports trait
+  implementations and factory functions alongside its `#[component]`, and it
+  spans several files (`mapping.rs`, `parts.rs`, one file per control kind, the
+  collection, the shell, the presenter) rather than one `component.rs`.
+- **Fixed prose.** The empty state's text, "Nothing here yet.", is a fixed
+  English string: the localized item noun the context carries is a name, not a
+  word a sentence can be built around. An item card's title is the item noun
+  followed by its position (`Tags item 2`), a fixed word order.
+- **Its own ids.** Beside the ids the adapter reserves, the component derives
+  `{element_id}-label`, `{element_id}-errors`, `{element_id}-incompatible`,
+  `{element_id}-legend`, and `{row_id}-title` from the adapter's ids, and a
+  radio item's id from the control's element id and the option's identity.
+- **One class hook.** A built-in fixed object rendered as an array item is
+  flattened into its card — its own border, padding, and background removed and
+  its legend made screen-reader-only — through Tailwind arbitrary variants on
+  the card body that name the adapter's `schemaform-group` hook. That is the
+  one place the component reaches for a class hook, and it presumes a theme
+  that gives `.schemaform-group` a frame to remove; it goes when a
+  `FixedObjectRenderer` seam exists.
+- **Fixed utilities.** The collection, the shell, and the presenter emit their
+  layout utilities unconditionally; there is no appearance axis to switch them
+  off.
+
+## daisyUI classes deliberately not used
+
+- `validator` and `validator-hint`: they style a control from the browser's
+  constraint-validation pseudo-classes. Validity here comes from the core's
+  findings, not from native constraints, so they would disagree with
+  `aria-invalid` and duplicate the error region.
+- `tooltip` on the item action buttons: their full name is already exposed
+  through `aria-label`, and the visible label through `title`; a tooltip would
+  add a third, hover-only copy.
+- `badge` or `status` for findings: findings are text the control references
+  through `aria-describedby` and `aria-errormessage`; a badge would not be
+  read as the description of anything.

@@ -17,9 +17,11 @@ dx serve
 Open the URL printed by `dx`. For live CSS rebuilding, run `npm run watch`
 alongside `dx serve`.
 
-The native tests (example data schemas and the `schemaform_daisyui` mapping) run
-with `cargo test` from this directory; the Dagger pipeline runs them as the
-`test` check next to the wasm bundle.
+The native tests run with `cargo test` from this directory; the Dagger pipeline
+runs them as the `test` check next to the wasm bundle. The examples' tests sit
+beside the examples; the `schemaform_daisyui` component's tests live in
+`tests/schemaform_daisyui/` rather than in the component directory, so what a
+`dx components add` install would copy ships no test code.
 
 ## Browser check
 
@@ -52,6 +54,9 @@ locally served app.
   `schemaform_daisyui`, the daisyUI control renderer, structure bundle
   (collection and shell), and finding presenter built on them (see its README).
   They are committed; CI never runs `dx components add`.
+- `src/lib.rs` exposes those modules as a library so that `tests/` can mount
+  them; `src/main.rs` only launches the app. `tests/schemaform_daisyui/` holds
+  the component's native tests.
 - `style.css` is the Tailwind and daisyUI input that `npm run build` compiles
   into `assets/style.css`. It imports `src/forms.css`, the daisyUI theme for
   the `schemaform-*` class hooks of the built-in structure no renderer seam

@@ -1,19 +1,18 @@
-//! Presentation parts shared by every daisyUI control kind: the read-only field, the
-//! descriptions and errors under a widget, and the presence affordances.
+//! Presentation parts shared by every daisyUI control kind: the editable frame around a widget,
+//! the read-only field, the descriptions and errors under a widget, and the presence affordances.
 
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use dioxus::prelude::*;
-use dioxus_field::FieldContext;
-use schemaform::form::ScalarValueState;
+use dioxus_field::{Binding, FieldContext, FieldMeta, FieldMetaIdRegistration, use_field_meta};
 use schemaform_dioxus::{
-    ControlFacets, ControlKind, NodePresentation, NodeProjection,
+    ControlFacets, ControlKind, ControlRenderContext, NodePresentation, NodeProjection,
     render::{Affordance, FindingDescriptor, Help},
 };
 
 use super::mapping::{field_meta_values, is_field_error};
 use crate::components::button::{Button, ButtonSize};
-use crate::components::field::{Field, FieldDescription, FieldError, FieldLabel};
+use crate::components::field::{Field, FieldDescription, FieldLabel, FieldRow};
 
 /// The kind's name for the `data-schemaform-control` marker the built-in also emits.
 pub(super) fn kind_name(kind: ControlKind) -> &'static str {
@@ -54,23 +53,81 @@ pub(super) fn widget_label(presentation: &NodePresentation, control: &ControlFac
         .unwrap_or_else(|| presentation.label.clone())
 }
 
-/// The display text of a node that is not being edited: the retained edit buffer or canonical
-/// text, else the current data spelled as JSON, and nothing for a write-only value.
-pub(super) fn display_text(projection: &NodeProjection) -> String {
-    if projection.write_only && projection.edit_buffer.is_none() {
-        return String::new();
+/// The projection of a control something can edit, or the element to render instead: nothing
+/// while the node is gone, the read-only field while nothing edits the node.
+///
+/// Call it after the component's hooks, so the hook order is the same on every render. The
+/// read-only rule lives here once: a read-only node is noninteractive `output` of its display
+/// text with no presence affordances, as the built-in offers none for it.
+pub(super) fn editable(context: &ControlRenderContext) -> Result<NodeProjection, Element> {
+    let Some(projection) = context.node().read().ok().flatten() else {
+        return Err(rsx! {});
+    };
+    if projection.read_only {
+        return Err(read_only_field(
+            context.presentation(),
+            context.control(),
+            projection.display_text(),
+            &[],
+        ));
     }
-    projection.value.clone().unwrap_or_else(|| {
-        projection
-            .current_data
-            .as_ref()
-            .map(serde_json::Value::to_string)
-            .unwrap_or_default()
-    })
+    Ok(projection)
+}
+
+/// Where an editable widget sits relative to its label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum WidgetLayout {
+    /// The label above the widget, as for an input or a select.
+    Stacked,
+    /// A checkable widget beside its label in a `FieldRow`.
+    Row,
+}
+
+/// The frame every editable daisyUI control shares: the registry `Field` over `binding` carrying
+/// the control's metadata, the label, the widget, the incompatible-value readout, and the
+/// supplements under it.
+///
+/// The label is [`widget_label`]: the replacement action for a write-only control, else the
+/// node's label. The readout is [`NodePresentation::incompatible_value`], so a widget that cannot
+/// show the data it would replace (an input holding a number where the schema wants a string, a
+/// checkbox holding a string) still tells the user what the replace affordance discards.
+pub(super) fn editable_field<T: 'static>(
+    context: &ControlRenderContext,
+    binding: Binding<T>,
+    layout: WidgetLayout,
+    widget: Element,
+) -> Element {
+    let presentation = context.presentation();
+    let control = context.control();
+    let field_context =
+        FieldContext::new(binding).with_meta_values(field_meta_values(presentation, control));
+    let kind = kind_name(control.kind);
+    let label = widget_label(presentation, control);
+    let label_id = label_id(presentation);
+    let label_class = label_class(presentation);
+    rsx! {
+        Field { context: field_context, "data-schemaform-daisyui": kind,
+            match layout {
+                WidgetLayout::Stacked => rsx! {
+                    FieldLabel { id: label_id, class: label_class, "{label}" }
+                    {widget}
+                },
+                WidgetLayout::Row => rsx! {
+                    FieldRow {
+                        {widget}
+                        FieldLabel { id: label_id, class: label_class, "{label}" }
+                    }
+                },
+            }
+            {incompatible_description(presentation)}
+            {supplements(presentation)}
+        }
+    }
 }
 
 /// A description part per finding, each carrying the finding's stable id so every id the
-/// adapter hands out resolves to an element.
+/// adapter hands out resolves to an element, plus `data-finding` (the code) and `data-blocking`
+/// as the finding presenter emits them.
 fn finding_descriptions(findings: Vec<FindingDescriptor>) -> Element {
     rsx! {
         for finding in findings {
@@ -78,30 +135,32 @@ fn finding_descriptions(findings: Vec<FindingDescriptor>) -> Element {
                 key: "{finding.stable_id}",
                 id: Rc::from(finding.stable_id.as_str()),
                 class: if finding.blocking { "text-error" } else { "text-warning" },
+                "data-finding": finding.code.clone(),
+                "data-blocking": finding.blocking.to_string(),
                 "{finding.text}"
             }
         }
     }
 }
 
-/// The parts under an editable widget: help, the findings `FieldError` does not present, the
-/// error region, and the presence affordances.
+/// The parts under an editable widget: help, the findings that are not field errors as
+/// descriptions, the error region, and the presence affordances.
 ///
-/// `FieldError` presents the field errors from the metadata; the remaining findings are
-/// presented as further descriptions so every stable id still resolves to an element.
+/// Findings [`is_field_error`] accepts are presented in the error region the control references
+/// through `aria-errormessage`; every other finding is a description the control references
+/// through `aria-describedby`. Both kinds of element carry the finding's stable id.
 pub(super) fn supplements(presentation: &NodePresentation) -> Element {
     let help = presentation.help.clone();
-    let descriptions = presentation
+    let (errors, descriptions): (Vec<_>, Vec<_>) = presentation
         .findings
         .iter()
-        .filter(|finding| !is_field_error(finding))
         .cloned()
-        .collect::<Vec<_>>();
+        .partition(is_field_error);
     let errors_id = format!("{}-errors", presentation.element_id);
     rsx! {
         {help_description(help)}
         {finding_descriptions(descriptions)}
-        FieldError { id: Rc::from(errors_id.as_str()) }
+        FindingErrors { id: errors_id, findings: errors }
         {presence_affordances(&presentation.presence)}
     }
 }
@@ -115,30 +174,73 @@ fn help_description(help: Option<Help>) -> Element {
     }
 }
 
-/// The current data shown beside a widget that cannot show it itself, as the built-in shows it
-/// beside its checkbox: present while the value is incompatible, or null where null is not
-/// accepted, the core allows replacement, and the control is not write-only. The description
-/// carries a stable id and describes the widget, so the replace affordance beside it has context.
-pub(super) fn incompatible_description(
-    presentation: &NodePresentation,
-    projection: &NodeProjection,
-) -> Element {
-    let operations = projection.allowed_operations;
-    let incompatible = (matches!(
-        projection.value_state,
-        Some(ScalarValueState::Incompatible | ScalarValueState::Null)
-            if !operations.can_input_text() && operations.can_replace_value()
-    ) && !projection.write_only)
-        .then(|| {
-            projection
-                .current_data
-                .as_ref()
-                .map(serde_json::Value::to_string)
-                .unwrap_or_default()
+/// The error region of a field: the element the control's `aria-errormessage` references and a
+/// polite live region, as the registry's `FieldError` renders it, with one element per blocking
+/// finding carrying the finding's stable id.
+///
+/// The registry's `FieldError` reads its text from the field metadata and renders it without
+/// ids, so this part registers the same error id with the surrounding `Field`'s metadata and
+/// renders the findings itself. It is always mounted so the live region exists before the first
+/// error arrives; it is empty while nothing blocks.
+#[component]
+fn FindingErrors(id: String, findings: Vec<FindingDescriptor>) -> Element {
+    let meta = use_field_meta(None);
+    let id: Rc<str> = Rc::from(id.as_str());
+    use_error_id_registration(meta, Rc::clone(&id));
+    rsx! {
+        div {
+            id: id.to_string(),
+            class: "text-error",
+            "aria-live": "polite",
+            "data-schemaform-errors": "",
+            for finding in findings {
+                div {
+                    key: "{finding.stable_id}",
+                    id: finding.stable_id.clone(),
+                    "data-finding": finding.code.clone(),
+                    "data-blocking": "true",
+                    "{finding.text}"
+                }
+            }
+        }
+    }
+}
+
+/// Keeps `id` registered as the error element of `meta` for as long as this component lives,
+/// re-registering when either changes, as `dioxus-field`'s own parts do.
+fn use_error_id_registration(meta: FieldMeta, id: Rc<str>) {
+    let active = use_hook(|| Rc::new(RefCell::new(None::<ActiveErrorRegistration>)));
+    let should_replace = active
+        .borrow()
+        .as_ref()
+        .is_none_or(|active| active.meta != meta || active.id != id);
+    if should_replace {
+        let mut writable = meta;
+        let registration = writable.register_error_id(Rc::clone(&id));
+        active.borrow_mut().replace(ActiveErrorRegistration {
+            meta,
+            id,
+            _registration: registration,
         });
+    }
+}
+
+struct ActiveErrorRegistration {
+    meta: FieldMeta,
+    id: Rc<str>,
+    _registration: FieldMetaIdRegistration,
+}
+
+/// The current data shown beside a widget that cannot show it itself, as the built-in shows it
+/// beside its checkbox: [`NodePresentation::incompatible_value`], present while the value is
+/// incompatible, or null where null is not accepted, the core allows replacement, and the
+/// control is not write-only. The description carries a stable id and describes the widget, so
+/// the replace affordance beside it has context.
+pub(super) fn incompatible_description(presentation: &NodePresentation) -> Element {
+    let value = presentation.incompatible_value.clone();
     let id = format!("{}-incompatible", presentation.element_id);
     rsx! {
-        if let Some(value) = incompatible {
+        if let Some(value) = value {
             FieldDescription {
                 id: Rc::from(id.as_str()),
                 class: "text-warning",

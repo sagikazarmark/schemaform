@@ -7,23 +7,22 @@ use std::{cell::RefCell, rc::Rc};
 use dioxus::core::{NoOpMutations, ScopeId, VirtualDom};
 use dioxus::prelude::*;
 use schemaform::{FormDefinition, InstanceIdentity};
-use schemaform_dioxus::{
-    CollectionActions, ControlActions, FormHandle, RenderConfiguration, SchemaForm, use_form,
-};
+use schemaform_dioxus::{CollectionActions, ControlActions, FormHandle, SchemaForm, use_form};
 use serde_json::json;
 
-use super::{controls, findings, structure};
+use demo::components::schemaform_daisyui::configuration;
 
 /// A form with the two array shapes the collection renderer presents — string items and
 /// fixed-object items — plus a validated string, bound through every daisyUI seam this component
-/// exports: the control registry, the structure bundle, and the finding presenter in both slots.
+/// exports (`configuration()`: the control registry, the structure bundle, and the finding
+/// presenter in both slots).
 ///
 /// `name` has a `minLength`, so leaving it too short provokes a summary finding. `tags` is
 /// optional with a seed default and no `minItems`, so the container presence operations have a
 /// target, it can be emptied, and `maxItems` withdraws append. `team` is required with
 /// `minItems`, so its sole item cannot be removed and emptying it from the host provokes an
 /// array-level finding.
-pub(super) fn arrays_app(props: TestAppProps) -> Element {
+pub(crate) fn arrays_app(props: TestAppProps) -> Element {
     let definition = use_hook(|| {
         FormDefinition::compile(json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -72,12 +71,7 @@ pub(super) fn arrays_app(props: TestAppProps) -> Element {
         .borrow_mut()
         .get_or_insert_with(|| form.clone());
     let bound = use_hook(move || {
-        RenderConfiguration::builder()
-            .controls(controls())
-            .structure(structure())
-            .summary_presenter(findings())
-            .local_presenter(findings())
-            .build()
+        configuration()
             .bind(&form)
             .expect("the daisyUI seams should bind the arrays form")
     });
@@ -89,8 +83,8 @@ pub(super) fn arrays_app(props: TestAppProps) -> Element {
 /// Props of a test application: a slot the application fills with its form handle on first
 /// render, so a test can drive the form the way a host would.
 #[derive(Clone, Props)]
-pub(super) struct TestAppProps {
-    pub(super) handle: Rc<RefCell<Option<FormHandle>>>,
+pub(crate) struct TestAppProps {
+    pub(crate) handle: Rc<RefCell<Option<FormHandle>>>,
 }
 
 impl PartialEq for TestAppProps {
@@ -100,14 +94,14 @@ impl PartialEq for TestAppProps {
 }
 
 /// The rendered form: the form handle plus the markup, observed as a browser would see it.
-pub(super) struct RenderedForm {
+pub(crate) struct RenderedForm {
     dom: VirtualDom,
-    pub(super) handle: FormHandle,
+    pub(crate) handle: FormHandle,
 }
 
 impl RenderedForm {
     /// Mounts `app` and settles it.
-    pub(super) fn mount(app: fn(TestAppProps) -> Element) -> Self {
+    pub(crate) fn mount(app: fn(TestAppProps) -> Element) -> Self {
         let handle = Rc::new(RefCell::new(None));
         let mut dom = VirtualDom::new_with_props(
             app,
@@ -127,42 +121,42 @@ impl RenderedForm {
 
     /// Field parts register their ids while they render and `Field` syncs metadata in an
     /// effect, so the control's ARIA references land on the renders that follow.
-    pub(super) fn settle(&mut self) {
+    pub(crate) fn settle(&mut self) {
         for _ in 0..4 {
             self.dom.render_immediate(&mut NoOpMutations);
         }
     }
 
-    pub(super) fn html(&self) -> String {
+    pub(crate) fn html(&self) -> String {
         dioxus_ssr::render(&self.dom)
     }
 
     /// Runs `operation` inside the Dioxus runtime, the way an event handler would, then settles
     /// the DOM. Collection operations announce through adapter-owned signals and so need the
     /// runtime; scalar control actions do not.
-    pub(super) fn drive<R>(&mut self, operation: impl FnOnce() -> R) -> R {
+    pub(crate) fn drive<R>(&mut self, operation: impl FnOnce() -> R) -> R {
         let result = self.dom.in_scope(ScopeId::ROOT, operation);
         self.settle();
         result
     }
 
     /// The first tag `accept` accepts, in document order.
-    pub(super) fn find(&self, accept: impl Fn(&Tag) -> bool) -> Option<Tag> {
+    pub(crate) fn find(&self, accept: impl Fn(&Tag) -> bool) -> Option<Tag> {
         tags(&self.html()).into_iter().find(accept)
     }
 
     /// Every tag `accept` accepts, in document order.
-    pub(super) fn find_all(&self, accept: impl Fn(&Tag) -> bool) -> Vec<Tag> {
+    pub(crate) fn find_all(&self, accept: impl Fn(&Tag) -> bool) -> Vec<Tag> {
         tags(&self.html()).into_iter().filter(accept).collect()
     }
 
     /// The tag carrying `id`.
-    pub(super) fn by_id(&self, id: &str) -> Option<Tag> {
+    pub(crate) fn by_id(&self, id: &str) -> Option<Tag> {
         self.find(|tag| tag.attribute("id") == Some(id))
     }
 
     /// The text of the element that `aria-labelledby` of the element with `id` references.
-    pub(super) fn labelled_by_text(&self, id: &str) -> String {
+    pub(crate) fn labelled_by_text(&self, id: &str) -> String {
         let label_id = self
             .by_id(id)
             .and_then(|tag| tag.attribute("aria-labelledby").map(str::to_owned))
@@ -178,7 +172,7 @@ impl RenderedForm {
     }
 
     /// The `(value, text, selected)` of every option of the select named `name`, in order.
-    pub(super) fn options(&self, name: &str) -> Vec<(String, String, bool)> {
+    pub(crate) fn options(&self, name: &str) -> Vec<(String, String, bool)> {
         let html = self.html();
         let start = html
             .find(&format!("name=\"{name}\""))
@@ -209,7 +203,7 @@ impl RenderedForm {
     }
 
     /// The attributes of the first tag whose `name` attribute is `name`.
-    pub(super) fn control(&self, name: &str) -> Tag {
+    pub(crate) fn control(&self, name: &str) -> Tag {
         let html = self.html();
         tags(&html)
             .into_iter()
@@ -218,7 +212,7 @@ impl RenderedForm {
     }
 
     /// The DOM id the adapter assigned to the control bound at `name`.
-    pub(super) fn control_id(&self, name: &str) -> String {
+    pub(crate) fn control_id(&self, name: &str) -> String {
         self.control(name)
             .attribute("id")
             .unwrap_or_else(|| panic!("the control named {name} should carry an id"))
@@ -227,7 +221,7 @@ impl RenderedForm {
 
     /// The scalar-control actions of the node bound at `pointer`, for driving it through the
     /// form handle the way a host would.
-    pub(super) fn actions_at(&self, pointer: &str) -> ControlActions {
+    pub(crate) fn actions_at(&self, pointer: &str) -> ControlActions {
         self.handle
             .node(self.identity_at(pointer))
             .expect("the form should be readable")
@@ -236,7 +230,7 @@ impl RenderedForm {
     }
 
     /// The collection actions of the array bound at `pointer`.
-    pub(super) fn collection_actions_at(&self, pointer: &str) -> CollectionActions {
+    pub(crate) fn collection_actions_at(&self, pointer: &str) -> CollectionActions {
         self.handle
             .node(self.identity_at(pointer))
             .expect("the form should be readable")
@@ -245,7 +239,7 @@ impl RenderedForm {
     }
 
     /// The instance identity of the node bound at `pointer`.
-    pub(super) fn identity_at(&self, pointer: &str) -> InstanceIdentity {
+    pub(crate) fn identity_at(&self, pointer: &str) -> InstanceIdentity {
         let root = self
             .handle
             .reader()
@@ -277,27 +271,27 @@ impl RenderedForm {
 
 /// One start tag from the rendered markup.
 #[derive(Debug)]
-pub(super) struct Tag {
-    pub(super) element: String,
+pub(crate) struct Tag {
+    pub(crate) element: String,
     attributes: Vec<(String, String)>,
 }
 
 impl Tag {
-    pub(super) fn attribute(&self, name: &str) -> Option<&str> {
+    pub(crate) fn attribute(&self, name: &str) -> Option<&str> {
         self.attributes
             .iter()
             .find(|(key, _)| key == name)
             .map(|(_, value)| value.as_str())
     }
 
-    pub(super) fn classes(&self) -> Vec<&str> {
+    pub(crate) fn classes(&self) -> Vec<&str> {
         self.attribute("class")
             .map(|class| class.split_whitespace().collect())
             .unwrap_or_default()
     }
 
     /// Whether the tag carries every class in `expected`.
-    pub(super) fn has_classes(&self, expected: &[&str]) -> bool {
+    pub(crate) fn has_classes(&self, expected: &[&str]) -> bool {
         let classes = self.classes();
         expected.iter().all(|class| classes.contains(class))
     }
@@ -306,7 +300,7 @@ impl Tag {
 /// Every start tag in `html`, with its attributes. Dioxus SSR writes text values in double
 /// quotes with the quote character escaped, so a quote always ends such a value, and writes
 /// boolean values bare (`required=true`).
-pub(super) fn tags(html: &str) -> Vec<Tag> {
+pub(crate) fn tags(html: &str) -> Vec<Tag> {
     let mut tags = Vec::new();
     let mut rest = html;
     while let Some(start) = rest.find('<') {
@@ -372,7 +366,7 @@ fn ids(html: &str) -> Vec<String> {
 
 /// The markup inside the element carrying `id`: from the end of its start tag to its matching
 /// end tag, found by counting the element's own nested start and end tags.
-pub(super) fn inner_html(html: &str, id: &str) -> String {
+pub(crate) fn inner_html(html: &str, id: &str) -> String {
     let start = html
         .find(&format!("id=\"{id}\""))
         .unwrap_or_else(|| panic!("an element with id {id} should exist:\n{html}"));
@@ -413,7 +407,7 @@ pub(super) fn inner_html(html: &str, id: &str) -> String {
 }
 
 /// The text content directly inside the first element carrying `id`, up to its first child tag.
-pub(super) fn text_of(html: &str, id: &str) -> String {
+pub(crate) fn text_of(html: &str, id: &str) -> String {
     let start = html
         .find(&format!("id=\"{id}\""))
         .unwrap_or_else(|| panic!("an element with id {id} should exist:\n{html}"));
@@ -427,7 +421,7 @@ pub(super) fn text_of(html: &str, id: &str) -> String {
 
 /// Asserts that every id referenced by an ARIA relationship attribute or a `for` in `html`
 /// resolves to an element, and returns how many references were checked.
-pub(super) fn assert_aria_references_resolve(html: &str) -> usize {
+pub(crate) fn assert_aria_references_resolve(html: &str) -> usize {
     let ids = ids(html);
     let mut references = 0;
     for tag in tags(html) {

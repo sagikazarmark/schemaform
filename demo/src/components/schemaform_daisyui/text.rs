@@ -1,15 +1,11 @@
-//! The daisyUI string, number, and integer control.
+//! The daisyUI text control: strings, numbers, and integers.
 
 use dioxus::prelude::*;
-use dioxus_field::FieldContext;
 use dioxus_primitives::dioxus_attributes::attributes;
 use schemaform_dioxus::{ControlKind, ControlRenderContext, use_text_edit};
 
-use super::mapping::{field_meta_values, use_text_binding};
-use super::parts::{
-    display_text, kind_name, label_class, label_id, read_only_field, supplements, widget_label,
-};
-use crate::components::field::{Field, FieldLabel};
+use super::mapping::use_text_binding;
+use super::parts::{WidgetLayout, editable, editable_field, kind_name};
 use crate::components::input::Input;
 
 /// The `inputmode` hint for a text control kind, as the built-in emits it.
@@ -25,7 +21,9 @@ fn input_mode(kind: ControlKind) -> &'static str {
 ///
 /// `Field` receives a fresh context on every render whose binding compares equal across renders
 /// (its identity is the edit's hook-stable handles) and whose metadata values it syncs itself,
-/// so the registry parts re-render only when the node's presentation actually changes.
+/// so the registry parts re-render only when the node's presentation actually changes. A
+/// write-only control is a password input labelled with its replacement action, so the value it
+/// holds is never shown.
 ///
 /// A read-only node renders as noninteractive `output` rather than an `Input` that merely
 /// rejects edits, as the built-in does; the facets' `read_only` also covers a node the core will
@@ -34,19 +32,11 @@ fn input_mode(kind: ControlKind) -> &'static str {
 pub(super) fn TextControl(context: ControlRenderContext) -> Element {
     let edit = use_text_edit(&context);
     let binding = use_text_binding(edit);
-    let Some(projection) = context.node().read().ok().flatten() else {
-        return rsx! {};
-    };
-    let presentation = context.presentation();
-    let control = context.control();
-    if projection.read_only {
-        return read_only_field(presentation, control, display_text(&projection), &[]);
+    if let Err(rendered) = editable(&context) {
+        return rendered;
     }
-
-    let field_context =
-        FieldContext::new(binding).with_meta_values(field_meta_values(presentation, control));
+    let control = context.control();
     let kind = kind_name(control.kind);
-    let label = widget_label(presentation, control);
     let placeholder = control
         .write_only_replacement
         .as_ref()
@@ -60,15 +50,17 @@ pub(super) fn TextControl(context: ControlRenderContext) -> Element {
         readonly: edit.read_only,
         placeholder,
         "data-schemaform-control": kind,
+        "data-write-only-replacement": control.write_only.then_some(""),
         oncompositionstart: move |_| edit.composition_start.call(()),
         oncompositionend: move |_| edit.composition_end.call(()),
     });
 
-    rsx! {
-        Field { context: field_context, "data-schemaform-daisyui": kind,
-            FieldLabel { id: label_id(presentation), class: label_class(presentation), "{label}" }
+    editable_field(
+        &context,
+        binding,
+        WidgetLayout::Stacked,
+        rsx! {
             Input { attributes: input_attributes }
-            {supplements(presentation)}
-        }
-    }
+        },
+    )
 }

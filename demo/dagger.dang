@@ -72,10 +72,10 @@ type Demo {
   """
   Run the demo's native tests.
 
-  The gallery's example data schemas and the `schemaform_daisyui` tests (binding
-  round trips, the errors/invalid partition, renderer selection, and the
-  collection, shell, and finding-presenter markup) run here; the wasm bundle
-  above never executes them.
+  The gallery's example data schemas and the `schemaform_daisyui` tests in
+  `tests/schemaform_daisyui/` (binding round trips, the errors/invalid
+  partition, renderer selection, and the control, collection, shell, and
+  finding-presenter markup) run here; the wasm bundle above never executes them.
   """
   test: String! @check {
     self
