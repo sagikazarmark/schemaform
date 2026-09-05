@@ -95,14 +95,7 @@ impl CollectionRenderer for DaisyuiCollection {
                 }
                 div { class: items_class, {context.items} }
                 if let Some(append) = context.append {
-                    Button {
-                        id: append.id.clone(),
-                        r#type: "button",
-                        size: ButtonSize::Sm,
-                        class: "btn-outline {append_class}",
-                        onclick: move |_| append.invoke.call(()),
-                        "{append.label}"
-                    }
+                    {append_button(append, append_class)}
                 }
                 div { class: announcement_class, {context.announcement} }
                 {findings}
@@ -156,6 +149,21 @@ impl CollectionRenderer for DaisyuiCollection {
     }
 }
 
+/// The append affordance as an outline button below the items.
+fn append_button(append: Affordance, class: &'static str) -> Element {
+    let invoke = append.clone();
+    rsx! {
+        Button {
+            id: append.id.clone(),
+            r#type: "button",
+            size: ButtonSize::Sm,
+            class: "btn-outline {class}",
+            onclick: move |_| invoke.invoke(),
+            "{append.label}"
+        }
+    }
+}
+
 /// One item affordance as a square icon button in the item's `join`.
 ///
 /// The button carries the affordance id (focus after a move targets it), the positional
@@ -167,6 +175,7 @@ fn item_affordance(affordance: Affordance, appearance: Appearance) -> Element {
         .clone()
         .unwrap_or_else(|| affordance.label.clone());
     let glyph = icon_path(affordance.kind);
+    let invoke = affordance.clone();
     rsx! {
         Button {
             key: "{affordance.id}",
@@ -176,7 +185,7 @@ fn item_affordance(affordance: Affordance, appearance: Appearance) -> Element {
             class: "join-item btn-square",
             "aria-label": name,
             title: affordance.label.clone(),
-            onclick: move |_| affordance.invoke.call(()),
+            onclick: move |_| invoke.invoke(),
             if let Some(path) = glyph {
                 {icon(path, appearance.utilities("size-4"))}
             } else {

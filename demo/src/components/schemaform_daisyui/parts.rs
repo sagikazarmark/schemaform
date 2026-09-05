@@ -270,17 +270,25 @@ pub(super) fn presence_affordances(presence: &[Affordance], appearance: Appearan
         if !presence.is_empty() {
             div { class: appearance.utilities("flex flex-wrap gap-2"),
                 for affordance in presence {
-                    Button {
-                        key: "{affordance.id}",
-                        id: affordance.id.clone(),
-                        r#type: "button",
-                        size: ButtonSize::Sm,
-                        "aria-label": affordance.accessible_name.clone(),
-                        onclick: move |_| affordance.invoke.call(()),
-                        "{affordance.label}"
-                    }
+                    {presence_button(affordance)}
                 }
             }
+        }
+    }
+}
+
+/// One presence affordance as a small daisyUI button carrying its id.
+fn presence_button(affordance: Affordance) -> Element {
+    let invoke = affordance.clone();
+    rsx! {
+        Button {
+            key: "{affordance.id}",
+            id: affordance.id.clone(),
+            r#type: "button",
+            size: ButtonSize::Sm,
+            "aria-label": affordance.accessible_name.clone(),
+            onclick: move |_| invoke.invoke(),
+            "{affordance.label}"
         }
     }
 }
