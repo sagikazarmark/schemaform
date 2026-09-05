@@ -27,11 +27,13 @@ dioxus-core = "=0.7.10"
 dioxus-elements = { package = "dioxus-html", version = "=0.7.10" }
 dioxus-signals = "=0.7.10"
 dioxus-web = { version = "=0.7.10", default-features = false }
-# The wasm-bindgen stack and serde_json are minimum requirements, not exact pins:
-# the published crates must resolve alongside whatever version a consumer's
-# other dependencies already lock. The versions this workspace builds and tests
-# with are the lockfile's, which CI holds with `--locked`; the browser test
-# runner must match the *locked* wasm-bindgen, not the manifest's requirement.
+# The wasm-bindgen stack is a minimum requirement, not an exact pin: the
+# published adapter must resolve alongside whatever version a consumer's other
+# dependencies already lock. The versions this workspace builds and tests with
+# are the lockfile's, which CI holds with `--locked`; the browser test runner
+# must match the *locked* wasm-bindgen, not the manifest's requirement.
+# `jsonschema`, `referencing`, and `serde_json` stay exact: together they are
+# the qualified validator release (`crates/schemaform/tests/validator_configuration_target.rs`).
 js-sys = "0.3.103"
 jsonptr = "0.8.1"
 jsonschema = { version = "=0.47.0", default-features = false, features = ["arbitrary-precision"] }
@@ -39,7 +41,7 @@ num-bigint = "0.5.1"
 proptest = "1.7.0"
 referencing = "=0.47.0"
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.151", features = ["arbitrary_precision"] }
+serde_json = { version = "=1.0.151", features = ["arbitrary_precision"] }
 serde_path_to_error = "0.1.20"
 sha2 = "0.11.0"
 wasm-bindgen = "0.2.126"
