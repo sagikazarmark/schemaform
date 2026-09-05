@@ -296,7 +296,7 @@ impl ControlRenderer for AffordanceRenderer {
                     id: affordance.id.clone(),
                     r#type: "button",
                     "data-affordance": format!("{:?}", affordance.kind),
-                    onclick: move |_| affordance.invoke.call(()),
+                    onclick: move |_| affordance.invoke(),
                     "{affordance.label}"
                 }
             }
@@ -972,7 +972,7 @@ impl ShellRenderer for TestShell {
                     r#type: "button",
                     "data-test-shell-submit": "",
                     "data-affordance": format!("{:?}", submit.kind),
-                    onclick: move |_| submit.invoke.call(()),
+                    onclick: move |_| submit.invoke(),
                     "{submit.label}"
                 }
             }
@@ -1028,7 +1028,7 @@ fn test_affordance_button(affordance: schemaform_dioxus::Affordance) -> Element 
             r#type: "button",
             "data-test-affordance": format!("{:?}", affordance.kind),
             "aria-label": affordance.accessible_name.clone(),
-            onclick: move |_| affordance.invoke.call(()),
+            onclick: move |_| affordance.invoke(),
             "{affordance.label}"
         }
     }
@@ -9908,6 +9908,169 @@ async fn an_item_edit_does_not_re_render_the_item_hosts() {
         *item_calls.borrow() >= item_baseline + 3,
         "appending an item re-renders every item host through its count prop"
     );
+
+    root.remove();
+}
+
+/// A collection renderer that does what the contract tells renderers not to do: it keeps the
+/// first item's remove affordance in state that outlives the item, and offers a button that
+/// invokes the retained copy. The built-in item buttons render as well, so the item can be
+/// removed the ordinary way first.
+#[derive(Clone)]
+struct StashingCollection {
+    stash: Rc<RefCell<Option<schemaform_dioxus::Affordance>>>,
+}
+
+impl CollectionRenderer for StashingCollection {
+    fn collection(&self, context: CollectionContext) -> Element {
+        let stash = self.stash.clone();
+        rsx! {
+            section {
+                id: context.presentation.element_id.clone(),
+                "data-test-count": "{context.count}",
+                {context.announcement}
+                {context.items}
+                button {
+                    id: "stale-invoke",
+                    r#type: "button",
+                    onclick: move |_| {
+                        if let Some(retained) = stash.borrow().clone() {
+                            retained.invoke();
+                        }
+                    },
+                    "invoke the retained affordance"
+                }
+            }
+        }
+    }
+
+    fn collection_item(&self, context: CollectionItemContext) -> Element {
+        if context.position == 1
+            && let Some(remove) = context.remove.clone()
+        {
+            self.stash.borrow_mut().get_or_insert(remove);
+        }
+        rsx! {
+            div { "data-test-item": "",
+                {context.children}
+                if let Some(remove) = context.remove {
+                    {test_affordance_button(remove)}
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct StashingCollectionAppProps {
+    handle: Rc<RefCell<Option<FormHandle>>>,
+    errors: Rc<RefCell<Vec<HandleError>>>,
+    stash: Rc<RefCell<Option<schemaform_dioxus::Affordance>>>,
+}
+
+fn stashing_collection_test_app(props: StashingCollectionAppProps) -> Element {
+    let definition = use_hook(|| {
+        FormDefinition::compile(json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "title": "Tags",
+                    "items": { "type": "string", "title": "Tag" }
+                }
+            }
+        }))
+        .expect("the stashing-collection data schema should compile")
+    });
+    let form = use_form(definition, json!({ "tags": ["first", "second"] }))
+        .expect("the stashing-collection form should be created");
+    let renderer = StashingCollection {
+        stash: props.stash.clone(),
+    };
+    let form_to_bind = form.clone();
+    let bound = use_hook(move || {
+        RenderConfiguration::builder()
+            .structure(StructureRenderers::default().with_collection(renderer))
+            .build()
+            .bind(&form_to_bind)
+            .expect("the built-in item control should bind under the stashing collection")
+    });
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+    let errors = props.errors.clone();
+
+    rsx! {
+        SchemaForm {
+            form: bound,
+            on_submit: move |_| {},
+            on_error: move |error| errors.borrow_mut().push(error),
+        }
+    }
+}
+
+/// An affordance retained past its item's removal is stale: invoking it performs nothing and
+/// reports `StaleAffordance` to `on_error`, and the application keeps running. Before the guard
+/// this reached a callback whose scope was gone and aborted the page.
+#[wasm_bindgen_test]
+async fn a_retained_affordance_of_a_removed_item_reports_stale_in_the_browser() {
+    let root = mount_test_root();
+    let handle = Rc::new(RefCell::new(None));
+    let errors: Rc<RefCell<Vec<HandleError>>> = Rc::new(RefCell::new(Vec::new()));
+    let stash = Rc::new(RefCell::new(None));
+    let vdom = VirtualDom::new_with_props(
+        stashing_collection_test_app,
+        StashingCollectionAppProps {
+            handle: handle.clone(),
+            errors: errors.clone(),
+            stash: stash.clone(),
+        },
+    );
+    launch_test_vdom(&root, vdom).await;
+    let form_handle = handle
+        .borrow()
+        .clone()
+        .expect("the mounted application should expose its handle");
+    let form_data = || {
+        form_handle
+            .reader()
+            .form_data()
+            .expect("form should be readable")
+    };
+    let first = input_with_binding(&root, "/tags/0");
+    let retained = poll_dom(|| stash.borrow().clone()).await;
+    assert_eq!(retained.kind, schemaform_dioxus::AffordanceKind::RemoveItem);
+
+    // Remove the first item the ordinary way: through the button the renderer placed for it,
+    // and wait for the render that unmounts its host — between the core removing the item and
+    // that render, the callback is still live and the core itself rejects the unknown item.
+    let collection = root
+        .query_selector("section[data-test-count]")
+        .expect("the collection selector should be valid")
+        .expect("the collection should render");
+    element_by_id(&format!("{}-remove", first.id())).click();
+    poll_dom(|| (form_data() == json!({ "tags": ["second"] })).then_some(())).await;
+    poll_dom(|| {
+        (collection.get_attribute("data-test-count").as_deref() == Some("1")).then_some(())
+    })
+    .await;
+    next_browser_task().await;
+    assert!(errors.borrow().is_empty());
+
+    // The retained copy's scope is gone with the item host.
+    element_by_id("stale-invoke").click();
+    poll_dom(|| (!errors.borrow().is_empty()).then_some(())).await;
+    assert_eq!(*errors.borrow(), vec![HandleError::StaleAffordance]);
+    assert_eq!(form_data(), json!({ "tags": ["second"] }));
+
+    // The page is alive: a live affordance still works afterwards.
+    let second = input_with_binding(&root, "/tags/0");
+    element_by_id(&format!("{}-remove", second.id())).click();
+    poll_dom(|| (form_data() == json!({ "tags": [] })).then_some(())).await;
+    assert_eq!(errors.borrow().len(), 1);
 
     root.remove();
 }

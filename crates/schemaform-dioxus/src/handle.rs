@@ -975,6 +975,9 @@ pub enum HandleError {
     Disposed,
     /// The handle was re-entered while its synchronous form state was already borrowed.
     BorrowConflict,
+    /// A [`crate::Affordance`] was invoked after the scope that computed it was dropped: its
+    /// node was removed, or the form was rebound. Nothing was performed.
+    StaleAffordance,
 }
 
 impl fmt::Display for HandleError {
@@ -991,6 +994,7 @@ impl Error for HandleError {
             Self::ExternalFindings(error) => Some(error),
             Self::Disposed => None,
             Self::BorrowConflict => None,
+            Self::StaleAffordance => None,
         }
     }
 }

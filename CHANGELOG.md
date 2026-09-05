@@ -50,6 +50,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   | no presence affordances for custom controls | render one element per `context.presentation().presence` affordance, keeping its `id`, and call `affordance.invoke.call(())` |
   | `let _ = actions.input_text(..)` (dropped errors) | `context.report(actions.input_text(..))` |
 
+- `Affordance::invoke` is a method rather than a public `Callback` field, and
+  an affordance now knows whether the scope that computed it is still mounted.
+  Invoking one after that scope is gone — an item affordance retained past the
+  item's removal, or any affordance retained across a rebind — performs nothing
+  and reports the new `HandleError::StaleAffordance` to `SchemaForm::on_error`,
+  where it previously reached a dropped Dioxus callback and aborted the
+  application. Call sites change from `affordance.invoke.call(())` to
+  `affordance.invoke()`; `Affordance::present()` does so already.
+
 ### Added
 
 - `use_text_edit(&ControlRenderContext) -> TextEdit`, the first headless edit
@@ -225,14 +234,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `schemaform-dioxus` declares `wasm-bindgen`, `web-sys`, `js-sys`, and
-  `wasm-bindgen-futures` as minimum requirements rather than exact pins, so
-  the crate resolves alongside whatever version of that stack a consumer's
-  other dependencies already lock. The versions this workspace builds and
-  tests with are unchanged: they are the lockfile's, which CI holds with
-  `--locked`. `jsonschema`, `referencing`, and `serde_json` stay exact, as one
-  qualified validator release; a consumer whose lockfile already holds a newer
-  `serde_json` needs `cargo update -p serde_json --precise 1.0.151` once.
+- The published crates declare `serde_json` and the wasm-bindgen stack
+  (`wasm-bindgen`, `web-sys`, `js-sys`, `wasm-bindgen-futures`) as minimum
+  requirements rather than exact pins, so they resolve alongside whatever
+  versions a consumer's other dependencies already lock; cargo refuses rather
+  than downgrades when a locked version meets a new exact requirement. The
+  versions this workspace builds, tests, and fuzzes with are unchanged: they
+  are the lockfile's, which CI holds with `--locked`, and the qualified
+  validator release is now asserted on the lockfile. `jsonschema` and
+  `referencing` stay exact: their releases change validation behaviour, and
+  almost no consumer depends on them independently.
 - The renderer contract documents that `Affordance::invoke` is owned by the
   scope that computed it, so invoking an affordance retained past its node's
   removal panics inside Dioxus, and that the `Element` fields of

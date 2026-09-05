@@ -126,13 +126,15 @@ pub fn SchemaForm(props: SchemaFormProps) -> Element {
     operation_errors.set(Some(props.on_error));
     let form_id = props.form.inner.form_id.clone();
     let submit = use_submit_callback(&props);
-    let submit_affordance = render::Affordance {
-        kind: render::AffordanceKind::Submit,
-        label: localize_builtin(&props.form, BuiltinMessage::Submit),
-        id: format!("{form_id}-submit"),
-        accessible_name: None,
-        invoke: submit,
-    };
+    let scope = render::use_affordance_scope();
+    let submit_affordance = render::Affordance::new(
+        render::AffordanceKind::Submit,
+        localize_builtin(&props.form, BuiltinMessage::Submit),
+        format!("{form_id}-submit"),
+        None,
+        submit,
+        &scope,
+    );
     let contents = props
         .form
         .inner
@@ -1486,6 +1488,7 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
         .as_ref()
         .and_then(|reader| reader.read().ok().flatten());
     let operation_errors = dioxus_core::try_consume_context::<OperationErrorHandler>();
+    let scope = render::use_affordance_scope();
     let announcement = use_signal(|| (0_u64, None::<ArrayAnnouncement>));
     let mut pending_announcement = use_signal(|| None::<(u64, ArrayAnnouncement)>);
     let mut focus_target = use_signal(|| None::<ArrayFocusRequest>);
@@ -1606,6 +1609,7 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
             materialize,
             replace,
             remove_value,
+            scope: scope.clone(),
         },
     );
     let presentation = node_presentation(
@@ -1617,17 +1621,20 @@ fn HomogeneousArray(props: HomogeneousArrayProps) -> Element {
     );
 
     let append_id = format!("{element_id}-append");
-    let append = operations.can_append_item().then(|| render::Affordance {
-        kind: render::AffordanceKind::Append,
-        label: localize_builtin(
-            &props.form,
-            BuiltinMessage::ArrayAdd {
-                item_label: item_label.clone(),
-            },
-        ),
-        id: append_id.clone(),
-        accessible_name: None,
-        invoke: append,
+    let append = operations.can_append_item().then(|| {
+        render::Affordance::new(
+            render::AffordanceKind::Append,
+            localize_builtin(
+                &props.form,
+                BuiltinMessage::ArrayAdd {
+                    item_label: item_label.clone(),
+                },
+            ),
+            append_id.clone(),
+            None,
+            append,
+            &scope,
+        )
     });
 
     // One keyed host scope per item, keyed by instance identity: DOM identity follows the item
@@ -1779,6 +1786,7 @@ fn CollectionItemHost(props: CollectionItemHostProps) -> Element {
         .flatten();
     let collection = reader.as_ref().map(handle::NodeReader::collection_actions);
     let operation_errors = dioxus_core::try_consume_context::<OperationErrorHandler>();
+    let scope = render::use_affordance_scope();
     let feedback = props.feedback;
     let item = props.item;
     let position = props.position;
@@ -1893,12 +1901,15 @@ fn CollectionItemHost(props: CollectionItemHostProps) -> Element {
                       suffix: &str,
                       label: BuiltinMessage,
                       accessible_name: BuiltinMessage,
-                      invoke: Callback<()>| render::Affordance {
-        kind,
-        label: localize_builtin(&props.form, label),
-        id: format!("{stem}-{suffix}"),
-        accessible_name: Some(localize_builtin(&props.form, accessible_name)),
-        invoke,
+                      operation: Callback<()>| {
+        render::Affordance::new(
+            kind,
+            localize_builtin(&props.form, label),
+            format!("{stem}-{suffix}"),
+            Some(localize_builtin(&props.form, accessible_name)),
+            operation,
+            &scope,
+        )
     };
     let context = render::CollectionItemContext {
         row_id: array_item_row_id(&stem),
@@ -2721,13 +2732,15 @@ fn value_state_attribute(state: Option<schemaform::form::ScalarValueState>) -> &
 ///
 /// The callbacks keep their identity across renders, so a renderer that stores an
 /// [`render::Affordance`] does not accumulate a new callback per keystroke and a child component
-/// that memoizes on the affordance keeps calling a live callback.
-#[derive(Clone, Copy)]
+/// that memoizes on the affordance keeps calling a live callback; the scope token tells a stale
+/// affordance from a live one.
+#[derive(Clone)]
 struct ScalarPresenceCallbacks {
     set: Callback<()>,
     set_null: Callback<()>,
     remove_value: Callback<()>,
     replace: Callback<()>,
+    scope: render::AffordanceScope,
 }
 
 /// Creates the presence callbacks for one scalar control.
@@ -2764,6 +2777,7 @@ fn use_scalar_presence_callbacks(
         set_null: callback(|actions, _| Some(actions.set_null())),
         remove_value: callback(|actions, _| Some(actions.remove_value())),
         replace: callback(|actions, seed| seed.map(|value| actions.replace_value(value.clone()))),
+        scope: render::use_affordance_scope(),
     }
 }
 
@@ -2794,40 +2808,44 @@ fn scalar_presence_affordances(
         )
         && has_seed
     {
-        presence.push(Affordance {
-            kind: AffordanceKind::Set,
-            label: localize_builtin(form, BuiltinMessage::PresenceSet { label: label() }),
-            id: format!("{element_id}-set-value"),
-            accessible_name: None,
-            invoke: callbacks.set,
-        });
+        presence.push(Affordance::new(
+            AffordanceKind::Set,
+            localize_builtin(form, BuiltinMessage::PresenceSet { label: label() }),
+            format!("{element_id}-set-value"),
+            None,
+            callbacks.set,
+            &callbacks.scope,
+        ));
     }
     if operations.can_set_null() {
-        presence.push(Affordance {
-            kind: AffordanceKind::SetNull,
-            label: localize_builtin(form, BuiltinMessage::PresenceSetNull { label: label() }),
-            id: format!("{element_id}-set-null"),
-            accessible_name: None,
-            invoke: callbacks.set_null,
-        });
+        presence.push(Affordance::new(
+            AffordanceKind::SetNull,
+            localize_builtin(form, BuiltinMessage::PresenceSetNull { label: label() }),
+            format!("{element_id}-set-null"),
+            None,
+            callbacks.set_null,
+            &callbacks.scope,
+        ));
     }
     if operations.can_remove_value() {
-        presence.push(Affordance {
-            kind: AffordanceKind::RemoveValue,
-            label: localize_builtin(form, BuiltinMessage::PresenceRemove { label: label() }),
-            id: format!("{element_id}-remove-value"),
-            accessible_name: None,
-            invoke: callbacks.remove_value,
-        });
+        presence.push(Affordance::new(
+            AffordanceKind::RemoveValue,
+            localize_builtin(form, BuiltinMessage::PresenceRemove { label: label() }),
+            format!("{element_id}-remove-value"),
+            None,
+            callbacks.remove_value,
+            &callbacks.scope,
+        ));
     }
     if operations.can_replace_value() && has_seed {
-        presence.push(Affordance {
-            kind: AffordanceKind::Replace,
-            label: localize_builtin(form, BuiltinMessage::PresenceReplace { label: label() }),
-            id: format!("{element_id}-replace-value"),
-            accessible_name: None,
-            invoke: callbacks.replace,
-        });
+        presence.push(Affordance::new(
+            AffordanceKind::Replace,
+            localize_builtin(form, BuiltinMessage::PresenceReplace { label: label() }),
+            format!("{element_id}-replace-value"),
+            None,
+            callbacks.replace,
+            &callbacks.scope,
+        ));
     }
     presence
 }
@@ -2837,6 +2855,7 @@ struct ContainerPresenceCallbacks {
     materialize: Callback<()>,
     replace: Callback<()>,
     remove_value: Callback<()>,
+    scope: render::AffordanceScope,
 }
 
 /// Computes the presence affordances the core allows for one container right now.
@@ -2858,31 +2877,34 @@ fn container_presence_affordances(
     let label = || projection.label.clone();
     let mut presence = Vec::new();
     if operations.can_materialize() {
-        presence.push(Affordance {
-            kind: AffordanceKind::Materialize,
-            label: localize_builtin(form, BuiltinMessage::PresenceAdd { label: label() }),
-            id: format!("{element_id}-materialize"),
-            accessible_name: None,
-            invoke: callbacks.materialize,
-        });
+        presence.push(Affordance::new(
+            AffordanceKind::Materialize,
+            localize_builtin(form, BuiltinMessage::PresenceAdd { label: label() }),
+            format!("{element_id}-materialize"),
+            None,
+            callbacks.materialize,
+            &callbacks.scope,
+        ));
     }
     if operations.can_replace_value() && has_seed {
-        presence.push(Affordance {
-            kind: AffordanceKind::Replace,
-            label: localize_builtin(form, BuiltinMessage::PresenceReplace { label: label() }),
-            id: format!("{element_id}-replace-value"),
-            accessible_name: None,
-            invoke: callbacks.replace,
-        });
+        presence.push(Affordance::new(
+            AffordanceKind::Replace,
+            localize_builtin(form, BuiltinMessage::PresenceReplace { label: label() }),
+            format!("{element_id}-replace-value"),
+            None,
+            callbacks.replace,
+            &callbacks.scope,
+        ));
     }
     if operations.can_remove_value() {
-        presence.push(Affordance {
-            kind: AffordanceKind::RemoveValue,
-            label: localize_builtin(form, BuiltinMessage::PresenceRemove { label: label() }),
-            id: format!("{element_id}-remove-value"),
-            accessible_name: None,
-            invoke: callbacks.remove_value,
-        });
+        presence.push(Affordance::new(
+            AffordanceKind::RemoveValue,
+            localize_builtin(form, BuiltinMessage::PresenceRemove { label: label() }),
+            format!("{element_id}-remove-value"),
+            None,
+            callbacks.remove_value,
+            &callbacks.scope,
+        ));
     }
     presence
 }

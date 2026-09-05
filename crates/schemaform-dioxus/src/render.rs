@@ -401,17 +401,18 @@ pub enum AffordanceKind {
 /// affordance is present exactly while the core allows its operation.
 ///
 /// Two affordances compare equal when their `kind`, `label`, `id`, and `accessible_name` are
-/// equal. `invoke` is excluded because an affordance's behaviour is fixed by its node and
-/// kind, so a component that memoizes on an affordance and keeps an earlier `invoke` performs
-/// the same operation — for as long as the node that produced it is mounted.
+/// equal. The operation is excluded because an affordance's behaviour is fixed by its node and
+/// kind, so a component that memoizes on an affordance and keeps an earlier one performs the
+/// same operation for as long as the node that produced it is mounted.
 ///
-/// `invoke` is owned by the scope that computed it: the control host for presence affordances,
-/// the item host for item affordances, the collection for the append affordance, and the form
-/// for the submit affordance. Invoking it after that scope has been dropped (an item affordance
-/// retained past the item's removal, for example) panics inside Dioxus. Renderers therefore
-/// place affordances in the render that hands them out and do not store them in state that
-/// outlives the node — a collection-level context menu, say, must be rebuilt from the current
-/// contexts rather than from affordances captured earlier.
+/// An affordance belongs to the scope that computed it: the control host for presence
+/// affordances, the item host for item affordances, the collection for the append affordance,
+/// and the form for the submit affordance. Once that scope is gone — an item affordance retained
+/// past the item's removal, or any affordance retained across a rebind — [`Affordance::invoke`]
+/// performs nothing and reports [`HandleError::StaleAffordance`] to the host's
+/// `SchemaForm::on_error`, like every other failed operation. Renderers still do best to place
+/// affordances in the render that hands them out rather than in state that outlives the node,
+/// so a stale one is a reported mistake rather than a silent no-op.
 #[derive(Clone)]
 #[non_exhaustive]
 pub struct Affordance {
@@ -436,13 +437,69 @@ pub struct Affordance {
     /// `label` as text or renders an icon. The four item affordances carry `Some`; presence,
     /// append, and submit affordances carry `None`.
     pub accessible_name: Option<String>,
-    /// Performs the operation and reports failures to the host's `SchemaForm::on_error`.
-    ///
-    /// Install this on an event callback rather than calling it during rendering.
-    pub invoke: Callback<()>,
+    /// The operation, owned by the scope that computed the affordance.
+    operation: Callback<()>,
+    /// Where the affordance came from: whether that scope still lives, and where its failures go.
+    scope: AffordanceScope,
+}
+
+/// The Dioxus scope an affordance was computed in: a liveness token that dies with the scope's
+/// hooks, and the route the scope reports operation failures through.
+///
+/// Created once per host component with [`use_affordance_scope`], so every affordance the host
+/// hands out on any render shares one token, and the token outlives none of the callbacks the
+/// affordances carry.
+#[derive(Clone)]
+pub(crate) struct AffordanceScope {
+    alive: std::rc::Weak<()>,
+    errors: Option<crate::OperationErrorHandler>,
+}
+
+/// The [`AffordanceScope`] of the calling component. A hook: call it unconditionally.
+pub(crate) fn use_affordance_scope() -> AffordanceScope {
+    let token = dioxus::prelude::use_hook(|| Rc::new(()));
+    AffordanceScope {
+        alive: Rc::downgrade(&token),
+        errors: dioxus_core::try_consume_context::<crate::OperationErrorHandler>(),
+    }
 }
 
 impl Affordance {
+    /// An affordance of `kind` for the node `scope`'s component hosts, performing `operation`.
+    pub(crate) fn new(
+        kind: AffordanceKind,
+        label: String,
+        id: String,
+        accessible_name: Option<String>,
+        operation: Callback<()>,
+        scope: &AffordanceScope,
+    ) -> Self {
+        Self {
+            kind,
+            label,
+            id,
+            accessible_name,
+            operation,
+            scope: scope.clone(),
+        }
+    }
+
+    /// Performs the operation and reports failures to the host's `SchemaForm::on_error`.
+    ///
+    /// Install this on an event callback rather than calling it during rendering. When the
+    /// scope that computed the affordance has since been dropped — its node was removed, or the
+    /// form was rebound — nothing is performed and [`HandleError::StaleAffordance`] is reported
+    /// instead.
+    pub fn invoke(&self) {
+        if self.scope.alive.upgrade().is_none() {
+            if let Some(errors) = &self.scope.errors {
+                errors.report(HandleError::StaleAffordance);
+            }
+            return;
+        }
+        self.operation.call(());
+    }
+
     /// Renders the affordance as the built-in does: a `button[type="button"]` carrying
     /// [`Affordance::id`], the built-in's marker attribute for its kind (`data-set-value`,
     /// `data-set-null`, `data-remove-value`, `data-replace-value`, `data-materialize`,
@@ -475,7 +532,7 @@ impl Affordance {
                 "data-remove-item": marker(AffordanceKind::RemoveItem),
                 "data-submit": marker(AffordanceKind::Submit),
                 "aria-label": affordance.accessible_name.clone(),
-                onclick: move |_| affordance.invoke.call(()),
+                onclick: move |_| affordance.invoke(),
                 "{affordance.label}"
             }
         }

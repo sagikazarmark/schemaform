@@ -177,7 +177,7 @@ fn invoke_presence(
         .find(|affordance| affordance.kind == kind)
         .unwrap_or_else(|| panic!("{name} should offer the {kind:?} affordance right now"))
         .clone();
-    dom.in_scope(ScopeId::ROOT, || affordance.invoke.call(()));
+    dom.in_scope(ScopeId::ROOT, || affordance.invoke());
     dom.render_immediate(&mut dioxus_core::NoOpMutations);
 }
 
@@ -304,7 +304,7 @@ fn report_routes_failures_to_on_error_and_returns_the_success_value() {
             .try_transact(|_| {
                 // The host holds the form borrow: every node operation fails with a conflict.
                 assert_eq!(level.report(actions.set_null()), None);
-                set.invoke.call(());
+                set.invoke();
                 Ok::<_, ()>(())
             })
             .expect("the outer transaction should complete without mutation");

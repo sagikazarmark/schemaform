@@ -57,7 +57,7 @@ impl ControlRenderer for Renderer {
                 affordance.label.as_str(),
                 affordance.id.as_str(),
                 affordance.accessible_name.as_deref(),
-                affordance.invoke,
+                Affordance::invoke as fn(&Affordance),
                 affordance.clone() == *affordance,
             )
         });
@@ -138,7 +138,7 @@ impl ShellRenderer for Shell {
             context.submit.label.as_str(),
             context.submit.id.as_str(),
             context.submit.accessible_name.as_deref(),
-            context.submit.invoke,
+            Affordance::invoke as fn(&Affordance),
             context.clone() == context,
         );
         dioxus::prelude::rsx! {
@@ -156,10 +156,12 @@ impl CollectionRenderer for Collection {
             &context.presentation,
             context.item_label.as_str(),
             context.count,
-            context
-                .append
-                .as_ref()
-                .map(|append| (append.kind == AffordanceKind::Append, append.invoke)),
+            context.append.as_ref().map(|append| {
+                (
+                    append.kind == AffordanceKind::Append,
+                    Affordance::invoke as fn(&Affordance),
+                )
+            }),
             &context.extensions,
             context.clone() == context,
         );
@@ -183,7 +185,11 @@ impl CollectionRenderer for Collection {
                 &context.move_down,
                 &context.remove,
             ]
-            .map(|affordance| affordance.as_ref().map(|affordance| affordance.invoke)),
+            .map(|affordance| {
+                affordance
+                    .as_ref()
+                    .map(|_| Affordance::invoke as fn(&Affordance))
+            }),
             context.clone() == context,
         );
         dioxus::prelude::rsx! {

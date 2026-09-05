@@ -53,7 +53,7 @@ impl ShellRenderer for CapturingShell {
             button {
                 id: submit.id.clone(),
                 r#type: "button",
-                onclick: move |_| submit.invoke.call(()),
+                onclick: move |_| submit.invoke(),
                 "{submit.label}"
             }
         }
@@ -229,7 +229,7 @@ fn a_ready_submit_through_the_shell_affordance_yields_a_submission_snapshot() {
     let mut mounted = MountedShell::mount();
     let submit = mounted.captured().submit;
 
-    mounted.drive(|| submit.invoke.call(()));
+    mounted.drive(|| submit.invoke());
 
     let snapshot = mounted
         .submitted
@@ -250,7 +250,7 @@ fn a_blocked_submit_through_the_shell_affordance_yields_no_snapshot_and_records_
     mounted.settle();
     let submit = mounted.captured().submit;
 
-    mounted.drive(|| submit.invoke.call(()));
+    mounted.drive(|| submit.invoke());
 
     assert!(mounted.submitted.borrow().is_none());
     assert!(mounted.errors.borrow().is_empty());
@@ -276,7 +276,7 @@ fn a_held_form_borrow_during_submit_surfaces_borrow_conflict_through_on_error() 
         handle
             .try_transact(|_| {
                 // The host holds the form borrow: submission cannot reach the core.
-                submit.invoke.call(());
+                submit.invoke();
                 Ok::<_, ()>(())
             })
             .expect("the outer transaction should complete without mutation");

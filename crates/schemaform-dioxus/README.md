@@ -104,7 +104,7 @@ renderer everything it needs, pre-localized:
   `AffordanceKind` is non-exhaustive and also carries the container and
   collection kinds handed to structure renderers), localized `label`, the `id`
   the triggering element must carry, an optional `accessible_name` to use as
-  `aria-label` when it is `Some`, and `invoke`, a callback that performs the
+  `aria-label` when it is `Some`, and an `invoke()` method that performs the
   core operation and reports failures to `on_error` itself. The list holds
   exactly the operations the built-in would offer: set only while the value is
   missing or null and a creation seed exists, replace only while the core
@@ -203,7 +203,7 @@ impl ControlRenderer for TextRenderer {
                     key: "{affordance.id}",
                     id: affordance.id.clone(),
                     r#type: "button",
-                    onclick: move |_| affordance.invoke.call(()),
+                    onclick: move |_| affordance.invoke(),
                     "{affordance.label}"
                 }
             }
@@ -402,7 +402,7 @@ impl ShellRenderer for CardShell {
                     id: submit.id.clone(),
                     class: "btn btn-primary",
                     r#type: "button",
-                    onclick: move |_| submit.invoke.call(()),
+                    onclick: move |_| submit.invoke(),
                     "{submit.label}"
                 }
             }
@@ -476,16 +476,20 @@ control that owns the edited node and not the item host. A renderer that needs
 per-item state renders a child component (both contexts are `PartialEq`, with
 the caveat above) rather than carrying state between the two calls.
 
-An affordance's `invoke` is owned by the scope that computed it — the item host
-for item affordances, the collection for `append`. Place affordances in the
-render that hands them out; invoking one retained past its node's removal
-panics inside Dioxus.
+An affordance belongs to the scope that computed it — the item host for item
+affordances, the collection for `append`, the control host for presence, the
+form for submit. Once that scope is gone (the item was removed, or the form was
+rebound), `invoke()` performs nothing and reports
+`HandleError::StaleAffordance` to `on_error`, like any other failed operation.
+Renderers still do best to place affordances in the render that hands them out
+rather than in state that outlives the node; the report is how a mistake there
+shows up, not a mechanism to rely on.
 
 `Affordance::present()` renders an affordance exactly as the built-ins do: a
 `button[type="button"]` with the affordance `id`, the built-in's `data-*`
-marker for its kind, `aria-label` from `accessible_name`, and `invoke` on
+marker for its kind, `aria-label` from `accessible_name`, and `invoke()` on
 `onclick`. A renderer that wants its own markup renders the fields itself and
-keeps the `id`, the accessible name, and the `invoke` on an event handler.
+keeps the `id`, the accessible name, and `invoke()` on an event handler.
 
 `BuiltinCollection` is the public built-in: a `fieldset[data-schemaform-array]`
 with legend, help, presence buttons, item rows, append button, live region, and
@@ -507,7 +511,7 @@ fn action(affordance: Affordance) -> Element {
             class: "btn btn-sm",
             r#type: "button",
             "aria-label": affordance.accessible_name.clone(),
-            onclick: move |_| affordance.invoke.call(()),
+            onclick: move |_| affordance.invoke(),
             "{affordance.label}"
         }
     }

@@ -172,8 +172,9 @@ impl MountedCollection {
 
     /// Invokes `affordance` the way an event handler would, then settles the DOM.
     fn drive(&mut self, affordance: &Affordance) {
-        let invoke = affordance.invoke;
-        self.dom.in_scope(ScopeId::ROOT, move || invoke.call(()));
+        let affordance = affordance.clone();
+        self.dom
+            .in_scope(ScopeId::ROOT, move || affordance.invoke());
         self.settle();
     }
 
@@ -388,8 +389,8 @@ fn a_held_form_borrow_during_an_affordance_surfaces_borrow_conflict_through_on_e
         handle
             .try_transact(|_| {
                 // The host holds the form borrow: the affordances cannot reach the core.
-                append.invoke.call(());
-                remove.invoke.call(());
+                append.invoke();
+                remove.invoke();
                 Ok::<_, ()>(())
             })
             .expect("the outer transaction should complete without mutation");
@@ -401,6 +402,37 @@ fn a_held_form_borrow_during_an_affordance_surfaces_borrow_conflict_through_on_e
         vec![HandleError::BorrowConflict, HandleError::BorrowConflict]
     );
     assert_eq!(mounted.tags(), ["a", "b"]);
+}
+
+/// An affordance belongs to the scope that computed it. Once that scope is gone — here, the item
+/// host of a removed item — invoking a retained affordance performs nothing and reports
+/// `StaleAffordance` through `on_error`, rather than reaching a dropped callback. A moved item
+/// keeps its host, so its retained affordances stay live and act on the same item.
+#[test]
+fn a_retained_affordance_of_a_removed_item_reports_stale_instead_of_acting() {
+    let mut mounted = MountedCollection::mount();
+    let items = mounted.items();
+    let first_remove = items[0].remove.clone().expect("remove allowed");
+    let second_move_up = items[1]
+        .move_up
+        .clone()
+        .expect("the second item can move up");
+
+    // Moving keeps the host: the affordance retained before the move still acts on its item.
+    mounted.drive(&second_move_up);
+    assert_eq!(mounted.tags(), ["b", "a"]);
+    assert!(mounted.errors.borrow().is_empty());
+
+    // Removing the item drops its host, and with it the scope its affordances came from. The
+    // retained remove still targets item `a`, now at position 2.
+    mounted.drive(&first_remove);
+    assert_eq!(mounted.tags(), ["b"]);
+    assert_eq!(mounted.items().len(), 1);
+
+    mounted.drive(&first_remove);
+    assert_eq!(*mounted.errors.borrow(), vec![HandleError::StaleAffordance]);
+    assert_eq!(mounted.tags(), ["b"], "a stale affordance performs nothing");
+    assert_eq!(mounted.items().len(), 1);
 }
 
 #[test]
