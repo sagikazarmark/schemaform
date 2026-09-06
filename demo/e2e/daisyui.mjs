@@ -145,6 +145,16 @@ function collection(page, label) {
   return form(page).getByRole("group", { name: label, exact: true });
 }
 
+// How daisyUI draws a checkbox's mark right now: the computed style of the
+// `::before` pseudo-element that is the check or the indeterminate dash. The
+// mark is visible at `opacity` 1 and its shape is the `clipPath`.
+async function markOf(checkbox) {
+  return checkbox.evaluate((element) => {
+    const before = getComputedStyle(element, "::before");
+    return { opacity: before.opacity, clipPath: before.clipPath };
+  });
+}
+
 // Waits for the collection's adapter-owned live region to announce `text`.
 async function expectAnnouncement(page, label, text) {
   const status = collection(page, label).locator("[data-array-status]");
@@ -520,15 +530,25 @@ class ThemeRun {
     await active.click();
     await eventually("the checkbox to be unchecked", async () => !(await active.isChecked()));
 
-    // The nullable registry Checkbox shows null as indeterminate. A click makes
-    // it a boolean, which the core reflects by offering set-null; set-null takes
-    // it back to indeterminate.
+    // The nullable registry Checkbox shows null as indeterminate, drawn with
+    // the same mark as a native indeterminate checkbox. A click checks it, as
+    // activating an indeterminate checkbox does, which the core reflects by
+    // offering the clear (set-null) affordance; clearing takes it back to
+    // indeterminate, and a click checks it again. daisyUI transitions the mark
+    // between shapes, so each shape is awaited rather than read at the flip.
     const newsletter = form(page).locator('[role="checkbox"][name="/newsletter"]');
     assert((await newsletter.getAttribute("aria-checked")) === "mixed", "null shows as indeterminate");
+    const indeterminateMark = await eventually(
+      "the indeterminate mark to be drawn",
+      async () => {
+        const mark = await markOf(newsletter);
+        return mark.opacity === "1" ? mark : null;
+      },
+    );
     await newsletter.click();
     await eventually(
-      "the newsletter checkbox to be unchecked",
-      async () => (await newsletter.getAttribute("aria-checked")) === "false",
+      "the newsletter checkbox to be checked",
+      async () => (await newsletter.getAttribute("aria-checked")) === "true",
     );
     await affordance(page, "Clear Product newsletter").click();
     await eventually(
@@ -537,8 +557,15 @@ class ThemeRun {
     );
     await newsletter.click();
     await eventually(
-      "the newsletter checkbox to be unchecked once more",
-      async () => (await newsletter.getAttribute("aria-checked")) === "false",
+      "the newsletter checkbox to be checked once more",
+      async () => (await newsletter.getAttribute("aria-checked")) === "true",
+    );
+    await eventually(
+      "the checked mark to be drawn in a shape of its own",
+      async () => {
+        const mark = await markOf(newsletter);
+        return mark.opacity === "1" && mark.clipPath !== indeterminateMark.clipPath ? mark : null;
+      },
     );
 
     // Both writes reached form data: a submission shows them.
@@ -546,7 +573,7 @@ class ThemeRun {
     const submitted = page.locator('div[dir] > p[role="status"]');
     await eventually("the submission to be shown", async () => (await submitted.count()) === 1);
     const submittedText = await submitted.textContent();
-    for (const expected of ['"active": false', '"newsletter": false']) {
+    for (const expected of ['"active": false', '"newsletter": true']) {
       assert(submittedText.includes(expected), `the submission should contain ${expected}: ${submittedText}`);
     }
     await this.checkpoint("profile-widgets");

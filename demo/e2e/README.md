@@ -62,7 +62,7 @@ its page afresh.
 
 | Checkpoint        | State                                                                                                             |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `profile-widgets` | `/daisyui`: the native checkbox unchecked; the nullable registry `Checkbox` taken from indeterminate to unchecked, back to null through set-null, and unchecked again; submitted, and the status line shows both writes. |
+| `profile-widgets` | `/daisyui`: the native checkbox unchecked; the nullable registry `Checkbox` taken from indeterminate to checked by a click, back to null through "Clear", and checked again, with the indeterminate and checked marks both drawn and distinct; submitted, and the status line shows both writes. |
 | `billing`         | Billing tab: radio group, compound select, price, billing address fixed object.                                   |
 | `billing-widgets` | "monthly" clicked in the radio group (checked, "yearly" unchecked); the compound select opened and "us" chosen (trigger shows it, listbox closed). |
 | `security`        | Security tab: write-only boolean, choice, and string.                                                             |

@@ -85,10 +85,14 @@ The null option of a nullable choice is an ordinary option in all three choice
 widgets, labelled by the adapter's `schemaform.choice.null` message ("None" by
 default); selecting it sets null. A non-nullable boolean keeps the built-in's
 native semantics on purpose: a native checkbox is what browsers, assistive
-technology, and the existing tests expect. The nullable checkbox reaches null
-through the set-null presence affordance, since a click from either boolean
-state yields a boolean; the `CheckboxState` mapping lives in this component
-only, never in the published crates.
+technology, and the existing tests expect. The nullable checkbox shows null as
+the indeterminate state, drawn with daisyUI's indeterminate mark (the site
+stylesheet re-targets it from `:indeterminate` to `aria-checked="mixed"`, which
+is how a `button` spells the state). A click from null checks the box, as
+activating an indeterminate checkbox does; null is reached through the set-null
+presence affordance, since a click from either state yields a boolean. The
+`CheckboxState` mapping lives in this component only, never in the published
+crates.
 
 Write-only booleans and choices never echo their value: the widget rests on the
 replacement placeholder, the edit hook puts it back there after every write,

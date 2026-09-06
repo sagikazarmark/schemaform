@@ -88,6 +88,41 @@ fn a_nullable_boolean_is_the_registry_checkbox_showing_null_as_indeterminate() {
 }
 
 #[test]
+fn clicking_a_null_checkbox_checks_it_and_clicking_again_unchecks_it() {
+    let mut rendered = mount();
+    assert_eq!(
+        rendered.control("/newsletter").attribute("aria-checked"),
+        Some("mixed")
+    );
+
+    // Null is the indeterminate state, and activating an indeterminate checkbox checks it, as
+    // a native indeterminate checkbox and the WAI-ARIA mixed-state checkbox pattern do; the
+    // first click must not land on unchecked, which daisyUI draws the same as indeterminate.
+    rendered.click("/newsletter");
+
+    assert_eq!(
+        rendered.control("/newsletter").attribute("aria-checked"),
+        Some("true"),
+        "one click on the null checkbox should check it"
+    );
+    assert_eq!(
+        rendered.handle.reader().form_data().unwrap()["newsletter"],
+        json!(true)
+    );
+
+    rendered.click("/newsletter");
+
+    assert_eq!(
+        rendered.control("/newsletter").attribute("aria-checked"),
+        Some("false")
+    );
+    assert_eq!(
+        rendered.handle.reader().form_data().unwrap()["newsletter"],
+        json!(false)
+    );
+}
+
+#[test]
 fn a_write_only_boolean_is_a_replacement_select_that_never_shows_its_value() {
     let rendered = mount();
 

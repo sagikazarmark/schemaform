@@ -1,10 +1,20 @@
 //! The native test harness the component's tests share: a form mounted in a `VirtualDom` and
 //! observed through its server-rendered markup, as a browser would see it, plus a start-tag parser
-//! over that markup.
+//! over that markup. The harness also records which element the runtime knows each named control
+//! as, so a test can dispatch a user's click to a widget's own listener rather than driving the
+//! form through its handle.
 
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    any::Any,
+    cell::RefCell,
+    collections::{BTreeMap, HashMap},
+    rc::Rc,
+};
 
-use dioxus::core::{NoOpMutations, ScopeId, VirtualDom};
+use dioxus::core::{
+    AttributeValue, ElementId, Event, ScopeId, Template, VirtualDom, WriteMutations,
+};
+use dioxus::html::{PlatformEventData, SerializedHtmlEventConverter, SerializedMouseData};
 use dioxus::prelude::*;
 use schemaform::{CompilationProfile, FormDefinition, InstanceIdentity, json::parse_ui_schema_v1};
 use schemaform_dioxus::{
@@ -230,6 +240,84 @@ impl PartialEq for TestAppProps {
 pub(crate) struct RenderedForm {
     dom: VirtualDom,
     pub(crate) handle: FormHandle,
+    /// The dynamic text attributes of every element the DOM currently holds, by the element id
+    /// the runtime dispatches events to.
+    elements: Elements,
+}
+
+/// A mutation writer that keeps only what a test needs to target an element for an event: the
+/// dynamic text attributes the DOM set on it and the events it listens for, until the DOM
+/// removes it. Static template attributes never reach a writer, so an element is found by an
+/// attribute the renderer computed, such as `name`.
+#[derive(Default)]
+struct Elements {
+    attributes: HashMap<ElementId, BTreeMap<&'static str, String>>,
+    listeners: HashMap<ElementId, Vec<&'static str>>,
+}
+
+impl Elements {
+    /// The element carrying `name="{name}"` that listens for `event`.
+    fn named_listening(&self, name: &str, event: &str) -> Option<ElementId> {
+        self.attributes
+            .iter()
+            .filter(|(_, attributes)| attributes.get("name").is_some_and(|value| value == name))
+            .map(|(id, _)| *id)
+            .find(|id| {
+                self.listeners
+                    .get(id)
+                    .is_some_and(|events| events.contains(&event))
+            })
+    }
+
+    fn forget(&mut self, id: ElementId) {
+        self.attributes.remove(&id);
+        self.listeners.remove(&id);
+    }
+}
+
+impl WriteMutations for Elements {
+    fn append_children(&mut self, _id: ElementId, _m: usize) {}
+    fn assign_node_id(&mut self, _path: &'static [u8], _id: ElementId) {}
+    fn create_placeholder(&mut self, _id: ElementId) {}
+    fn create_text_node(&mut self, _value: &str, _id: ElementId) {}
+    fn load_template(&mut self, _template: Template, _index: usize, _id: ElementId) {}
+    fn replace_node_with(&mut self, id: ElementId, _m: usize) {
+        self.forget(id);
+    }
+    fn replace_placeholder_with_nodes(&mut self, _path: &'static [u8], _m: usize) {}
+    fn insert_nodes_after(&mut self, _id: ElementId, _m: usize) {}
+    fn insert_nodes_before(&mut self, _id: ElementId, _m: usize) {}
+    fn set_attribute(
+        &mut self,
+        name: &'static str,
+        _ns: Option<&'static str>,
+        value: &AttributeValue,
+        id: ElementId,
+    ) {
+        let attributes = self.attributes.entry(id).or_default();
+        match value {
+            AttributeValue::Text(value) => {
+                attributes.insert(name, value.clone());
+            }
+            AttributeValue::None => {
+                attributes.remove(name);
+            }
+            _ => {}
+        }
+    }
+    fn set_node_text(&mut self, _value: &str, _id: ElementId) {}
+    fn create_event_listener(&mut self, name: &'static str, id: ElementId) {
+        self.listeners.entry(id).or_default().push(name);
+    }
+    fn remove_event_listener(&mut self, name: &'static str, id: ElementId) {
+        if let Some(events) = self.listeners.get_mut(&id) {
+            events.retain(|event| *event != name);
+        }
+    }
+    fn remove_node(&mut self, id: ElementId) {
+        self.forget(id);
+    }
+    fn push_root(&mut self, _id: ElementId) {}
 }
 
 impl RenderedForm {
@@ -242,12 +330,17 @@ impl RenderedForm {
                 handle: handle.clone(),
             },
         );
-        dom.rebuild_in_place();
+        let mut elements = Elements::default();
+        dom.rebuild(&mut elements);
         let handle = handle
             .borrow()
             .clone()
             .expect("the test app should expose its form handle");
-        let mut rendered = Self { dom, handle };
+        let mut rendered = Self {
+            dom,
+            handle,
+            elements,
+        };
         rendered.settle();
         rendered
     }
@@ -256,8 +349,25 @@ impl RenderedForm {
     /// effect, so the control's ARIA references land on the renders that follow.
     pub(crate) fn settle(&mut self) {
         for _ in 0..4 {
-            self.dom.render_immediate(&mut NoOpMutations);
+            self.dom.render_immediate(&mut self.elements);
         }
+    }
+
+    /// Clicks the element carrying `name="{name}"` that listens for clicks, the way a browser
+    /// dispatches a user's click to its listener, then settles the DOM.
+    pub(crate) fn click(&mut self, name: &str) {
+        let id = self
+            .elements
+            .named_listening(name, "click")
+            .unwrap_or_else(|| panic!("an element named {name} should listen for clicks"));
+        dioxus::html::set_event_converter(Box::new(SerializedHtmlEventConverter));
+        let data: Rc<dyn Any> = Rc::new(PlatformEventData::new(Box::new(
+            SerializedMouseData::default(),
+        )));
+        self.dom
+            .runtime()
+            .handle_event("click", Event::new(data, true), id);
+        self.settle();
     }
 
     pub(crate) fn html(&self) -> String {

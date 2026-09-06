@@ -75,3 +75,25 @@
     min-height: 28rem;
   }
 }
+
+/* daisyUI draws the indeterminate mark for `.checkbox:indeterminate`, a state only a native
+ * `<input type="checkbox">` can be in. The registry's Checkbox is a `<button role="checkbox">`,
+ * which spells the same state as `aria-checked="mixed"` and would otherwise look unchecked.
+ * These are daisyUI 5's `:indeterminate` declarations re-targeted at that attribute; they sit
+ * in the `utilities` layer above daisyUI's nested `daisyui.*` layers so the mark's `opacity`
+ * wins over the base rule that hides it. */
+@layer utilities {
+  .checkbox[aria-checked="mixed"] {
+    background-color: var(
+      --input-color,
+      color-mix(in oklab, var(--color-base-content) 20%, #0000)
+    );
+  }
+
+  .checkbox[aria-checked="mixed"]:before {
+    opacity: 1;
+    clip-path: polygon(20% 100%, 20% 80%, 50% 80%, 50% 80%, 80% 80%, 80% 100%);
+    translate: 0 -35%;
+    rotate: 0deg;
+  }
+}
