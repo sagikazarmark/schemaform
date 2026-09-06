@@ -503,7 +503,8 @@ impl Validator {
 /// under `minLength`, and it stamps every error a validator emits with the absolute location of
 /// that registration. A `maxLength` error beside a `minLength` therefore arrives naming
 /// `.../minLength` absolutely while its `schema_path` still ends in `maxLength`. The two agree
-/// everywhere else, so the trailing segment is restored here until upstream stamps per keyword.
+/// everywhere else, so the trailing segment is restored here until upstream stamps per keyword
+/// (<https://github.com/Stranger6667/jsonschema/issues/1579>).
 fn reported_absolute_keyword_location<'a>(
     absolute: &'a str,
     error: &ValidationError<'_>,
