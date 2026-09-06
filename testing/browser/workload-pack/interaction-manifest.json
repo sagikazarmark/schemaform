@@ -152,7 +152,7 @@
           "presence-null"
         ],
         "aria_required": [
-          "textbox \"Value\": \"null\"",
+          "textbox \"Value\"",
           "button \"Remove Value\""
         ]
       },
@@ -176,7 +176,7 @@
         ],
         "aria_required": [
           "textbox \"Value\"",
-          "button \"Set Value to null\""
+          "button \"Clear Value\""
         ]
       },
       {
@@ -225,7 +225,7 @@
         ],
         "aria_required": [
           "combobox \"Choice\"",
-          "option \"null\" [selected]",
+          "option \"None\" [selected]",
           "status \"Region\": EU"
         ]
       },

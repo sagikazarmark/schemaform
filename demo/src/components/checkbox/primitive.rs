@@ -2,8 +2,11 @@
 //!
 //! Adapted from `DioxusLabs/components`' `primitives/src/checkbox.rs` at
 //! revision `bf007c15d0cf4d04d3181cc46cf12325aa773955`, under MIT OR
-//! Apache-2.0. This copy makes the form participant's name optional. Remove it
-//! once the pinned Primitive can omit the attribute itself.
+//! Apache-2.0. This copy makes the form participant's name optional, and
+//! activates an indeterminate checkbox into the checked state, as a native
+//! indeterminate checkbox and the WAI-ARIA mixed-state checkbox pattern do,
+//! where the upstream `Not` impl lands on unchecked. Remove it once the pinned
+//! Primitive can omit the attribute and toggles the same way itself.
 
 use std::{
     rc::Rc,
@@ -168,9 +171,12 @@ fn data_state(state: CheckboxState) -> &'static str {
     }
 }
 
+/// The state a click or Space takes `state` to. Indeterminate activates into checked, as a
+/// native checkbox with `indeterminate` set and the WAI-ARIA mixed-state checkbox do: the
+/// user is asserting the box, not clearing it.
 fn toggle(state: CheckboxState) -> CheckboxState {
     match state {
-        CheckboxState::Unchecked => CheckboxState::Checked,
-        CheckboxState::Checked | CheckboxState::Indeterminate => CheckboxState::Unchecked,
+        CheckboxState::Unchecked | CheckboxState::Indeterminate => CheckboxState::Checked,
+        CheckboxState::Checked => CheckboxState::Unchecked,
     }
 }

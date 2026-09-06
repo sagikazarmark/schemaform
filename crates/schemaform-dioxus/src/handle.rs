@@ -803,6 +803,14 @@ impl NodeProjection {
     /// controls show it: the retained edit buffer or canonical spelling in [`Self::value`],
     /// else [`Self::current_data`] spelled as JSON, else nothing.
     ///
+    /// JSON null is spelled as nothing rather than `null`: a text widget shows this text as
+    /// what the user edits, and the core accepts input straight into a nullable text control
+    /// that is null, so a spelled-out `null` would be extended by the first keystroke. The
+    /// value state (`data-value-state="null"` on the built-ins) and the presence affordances
+    /// carry the distinction from an empty string; where null is not accepted, the built-ins
+    /// also show it beside the replace affordance as
+    /// [`NodePresentation::incompatible_value`](crate::render::NodePresentation::incompatible_value).
+    ///
     /// A write-only value is never spelled out; only an in-progress edit buffer is shown, so a
     /// renderer that presents a read-only or constant node through this method keeps the
     /// write-only rule without restating it.
@@ -813,6 +821,7 @@ impl NodeProjection {
         self.value.clone().unwrap_or_else(|| {
             self.current_data
                 .as_ref()
+                .filter(|data| !data.is_null())
                 .map(Value::to_string)
                 .unwrap_or_default()
         })

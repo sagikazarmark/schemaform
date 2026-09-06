@@ -22,10 +22,11 @@ use crate::components::native_select::{NativeSelect, NativeSelectOption};
 /// value it holds is never shown; the tri-state binding never reads a value for it either. A
 /// nullable boolean is the registry's `Checkbox` bound to the tri-state view of the edit, so
 /// JSON null shows as the indeterminate state and the set-null affordance is how it is reached;
-/// a click from either boolean state makes it a boolean again, as the widget defines toggling.
-/// A non-nullable boolean is a native checkbox carrying daisyUI's `checkbox` class, which keeps
-/// the built-in's native semantics; its two-state view of the edit is the tri-state binding with
-/// null read as unchecked, which such a node never holds.
+/// a click from null checks the box, as an indeterminate checkbox activates, and a click from
+/// either boolean state makes it the other boolean. A non-nullable boolean is a native checkbox
+/// carrying daisyUI's `checkbox` class, which keeps the built-in's native semantics; its
+/// two-state view of the edit is the tri-state binding with null read as unchecked, which such a
+/// node never holds.
 #[component]
 pub(super) fn BooleanControl(context: ControlRenderContext, appearance: Appearance) -> Element {
     let edit = use_boolean_edit(&context);

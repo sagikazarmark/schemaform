@@ -88,6 +88,41 @@ fn a_nullable_boolean_is_the_registry_checkbox_showing_null_as_indeterminate() {
 }
 
 #[test]
+fn clicking_a_null_checkbox_checks_it_and_clicking_again_unchecks_it() {
+    let mut rendered = mount();
+    assert_eq!(
+        rendered.control("/newsletter").attribute("aria-checked"),
+        Some("mixed")
+    );
+
+    // Null is the indeterminate state, and activating an indeterminate checkbox checks it, as
+    // a native indeterminate checkbox and the WAI-ARIA mixed-state checkbox pattern do; the
+    // first click must not land on unchecked, which daisyUI draws the same as indeterminate.
+    rendered.click("/newsletter");
+
+    assert_eq!(
+        rendered.control("/newsletter").attribute("aria-checked"),
+        Some("true"),
+        "one click on the null checkbox should check it"
+    );
+    assert_eq!(
+        rendered.handle.reader().form_data().unwrap()["newsletter"],
+        json!(true)
+    );
+
+    rendered.click("/newsletter");
+
+    assert_eq!(
+        rendered.control("/newsletter").attribute("aria-checked"),
+        Some("false")
+    );
+    assert_eq!(
+        rendered.handle.reader().form_data().unwrap()["newsletter"],
+        json!(false)
+    );
+}
+
+#[test]
 fn a_write_only_boolean_is_a_replacement_select_that_never_shows_its_value() {
     let rendered = mount();
 
@@ -128,7 +163,7 @@ fn a_choice_is_a_daisyui_native_select_over_opaque_identities_with_the_null_opti
         .iter()
         .map(|(_, label, _)| label.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(labels, vec!["", "null", "starter", "team"]);
+    assert_eq!(labels, vec!["", "None", "starter", "team"]);
     let selected = options
         .iter()
         .filter(|(_, _, selected)| *selected)
@@ -161,7 +196,7 @@ fn a_choice_is_a_daisyui_native_select_over_opaque_identities_with_the_null_opti
         .filter(|(_, _, selected)| *selected)
         .map(|(_, label, _)| label)
         .collect::<Vec<_>>();
-    assert_eq!(selected, vec!["null"]);
+    assert_eq!(selected, vec!["None"]);
 }
 
 #[test]
@@ -247,7 +282,7 @@ fn the_radio_widget_symbol_selects_a_daisyui_radio_group_with_one_item_per_optio
         .and_then(|item| item.attribute("id"))
         .expect("the null item should be checked")
         .to_owned();
-    assert_eq!(rendered.labelled_by_text(&checked_id), "null");
+    assert_eq!(rendered.labelled_by_text(&checked_id), "None");
     assert_eq!(
         rendered
             .find(|tag| tag.attribute("role") == Some("radiogroup"))
@@ -310,10 +345,11 @@ fn the_select_widget_symbol_selects_the_daisyui_compound_select() {
     rendered.settle();
     assert!(rendered.html().contains(">us</span></button>"));
 
-    // The null option is an option like any other: selecting null shows its label.
+    // The null option is an option like any other: selecting null shows its label, which is the
+    // adapter's localized message rather than the JSON spelling.
     actions.set_null().expect("region should accept null");
     rendered.settle();
-    assert!(rendered.html().contains(">null</span></button>"));
+    assert!(rendered.html().contains(">None</span></button>"));
 }
 
 #[test]
@@ -369,6 +405,25 @@ fn help_is_described_by_and_every_aria_reference_resolves_to_an_element() {
     );
 
     assert!(assert_aria_references_resolve(&html) > 0);
+}
+
+#[test]
+fn a_null_text_control_is_an_empty_input_whose_presence_affordances_say_it_is_null() {
+    let rendered = mount();
+
+    // The input shows what the user edits, so null is nothing rather than the spelling `null`,
+    // which the first keystroke would extend; the "Set Nickname" affordance beside it is how
+    // the form tells null from an empty string.
+    let nickname = rendered.control("/nickname");
+    assert_eq!(nickname.element, "input");
+    assert_eq!(nickname.attribute("value"), Some(""));
+    let nickname_id = rendered.control_id("/nickname");
+    assert!(
+        rendered
+            .by_id(&format!("{nickname_id}-set-value"))
+            .is_some(),
+        "a null nickname offers its set affordance"
+    );
 }
 
 #[test]

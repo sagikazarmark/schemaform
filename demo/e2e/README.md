@@ -49,7 +49,7 @@ its page afresh.
 | `blocked-submit`       | Submit clicked from the Billing tab: blocked, focus moved to the finding summary.                             |
 | `focus-to-target`      | The summary's finding button clicked: the Profile tab is revealed and the display name control has focus.    |
 | `presence-set`         | "Set Nickname" on the null nickname: an editable empty string, set-null and remove offered, text typed.      |
-| `presence-set-null`    | "Set Nickname to null": null again, set and remove offered.                                                  |
+| `presence-set-null`    | "Clear Nickname" (set null): null again, set and remove offered.                                             |
 | `presence-remove`      | "Remove Nickname": the value is gone, set and set-null offered. Set again afterwards.                        |
 | `security-write-only`  | Security tab: a value chosen in the write-only boolean's replacement select and in the write-only choice, both resting on their placeholder again; the write-only string an empty password input. |
 | `arrays`               | `/arrays` as loaded: the Tags and Team members collections as labelled groups.                               |
@@ -62,7 +62,7 @@ its page afresh.
 
 | Checkpoint        | State                                                                                                             |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `profile-widgets` | `/daisyui`: the native checkbox unchecked; the nullable registry `Checkbox` taken from indeterminate to unchecked, back to null through set-null, and unchecked again; submitted, and the status line shows both writes. |
+| `profile-widgets` | `/daisyui`: the native checkbox unchecked; the nullable registry `Checkbox` taken from indeterminate to checked by a click, back to null through "Clear", and checked again, with the indeterminate and checked marks both drawn and distinct; submitted, and the status line shows both writes. |
 | `billing`         | Billing tab: radio group, compound select, price, billing address fixed object.                                   |
 | `billing-widgets` | "monthly" clicked in the radio group (checked, "yearly" unchecked); the compound select opened and "us" chosen (trigger shows it, listbox closed). |
 | `security`        | Security tab: write-only boolean, choice, and string.                                                             |
