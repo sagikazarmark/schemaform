@@ -320,7 +320,9 @@ callbacks plus a read signal derived through a memo over the node.
   write-only control.
 - `options: Vec<ChoiceOption>` lists the options in the core's compiled order
   (the null option first), each with an opaque `identity`, a `label` localized
-  through the configured `Localizer`, `is_null`, and `disabled`, which is true
+  through the configured `Localizer` (the null option's label is the adapter's
+  `schemaform.choice.null` message, "None" by default, since the core spells it
+  as JSON), `is_null`, and `disabled`, which is true
   when selecting the option right now would be rejected by the core (the null
   option while set null is not allowed; another option while neither set nor
   replace is allowed). The current option is never disabled.

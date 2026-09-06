@@ -49,7 +49,7 @@ its page afresh.
 | `blocked-submit`       | Submit clicked from the Billing tab: blocked, focus moved to the finding summary.                             |
 | `focus-to-target`      | The summary's finding button clicked: the Profile tab is revealed and the display name control has focus.    |
 | `presence-set`         | "Set Nickname" on the null nickname: an editable empty string, set-null and remove offered, text typed.      |
-| `presence-set-null`    | "Set Nickname to null": null again, set and remove offered.                                                  |
+| `presence-set-null`    | "Clear Nickname" (set null): null again, set and remove offered.                                             |
 | `presence-remove`      | "Remove Nickname": the value is gone, set and set-null offered. Set again afterwards.                        |
 | `security-write-only`  | Security tab: a value chosen in the write-only boolean's replacement select and in the write-only choice, both resting on their placeholder again; the write-only string an empty password input. |
 | `arrays`               | `/arrays` as loaded: the Tags and Team members collections as labelled groups.                               |

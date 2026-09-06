@@ -942,6 +942,7 @@ enum BuiltinMessage {
     WriteOnlyReplacementPlaceholder { label: String },
     BooleanFalse,
     BooleanTrue,
+    ChoiceNull,
     WriteOnlyNotSet { label: String },
     WriteOnlyNeedsReplacement { label: String },
     WriteOnlySet { label: String },
@@ -1089,7 +1090,7 @@ impl BuiltinMessage {
             ),
             Self::PresenceSetNull { label } => (
                 "schemaform.presence.set-null.label",
-                format!("Set {label} to null"),
+                format!("Clear {label}"),
                 serde_json::json!({ "label": label }),
             ),
             Self::PresenceRemove { label } => (
@@ -1120,6 +1121,13 @@ impl BuiltinMessage {
             Self::BooleanTrue => (
                 "schemaform.boolean.true",
                 "True".to_owned(),
+                serde_json::json!({}),
+            ),
+            // The core spells a choice control's null option as JSON (`null`), which is not a
+            // label for a person; the adapter labels it like the boolean values above.
+            Self::ChoiceNull => (
+                "schemaform.choice.null",
+                "None".to_owned(),
                 serde_json::json!({}),
             ),
             Self::WriteOnlyNotSet { label } => (
@@ -3674,7 +3682,7 @@ mod tests {
                     label: "Field".to_owned(),
                 },
                 "schemaform.presence.set-null.label",
-                "Set Field to null",
+                "Clear Field",
                 json!({ "label": "Field" }),
             ),
             (
@@ -3719,6 +3727,12 @@ mod tests {
                 BuiltinMessage::BooleanTrue,
                 "schemaform.boolean.true",
                 "True",
+                json!({}),
+            ),
+            (
+                BuiltinMessage::ChoiceNull,
+                "schemaform.choice.null",
+                "None",
                 json!({}),
             ),
             (

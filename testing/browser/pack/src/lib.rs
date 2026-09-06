@@ -3070,7 +3070,7 @@ fn accessibility_checkpoints() -> Vec<AccessibilityCheckpoint> {
             "presence-compatible",
             "scalar_presence_controls_repair_explicitly_without_render_time_mutation",
             &["presence-compatible"],
-            &["textbox \"Value\"", "button \"Set Value to null\""],
+            &["textbox \"Value\"", "button \"Clear Value\""],
         ),
         accessibility_checkpoint(
             "integer-parse-blocked",
@@ -3106,7 +3106,7 @@ fn accessibility_checkpoints() -> Vec<AccessibilityCheckpoint> {
             &["choice-control"],
             &[
                 "combobox \"Choice\"",
-                "option \"null\" [selected]",
+                "option \"None\" [selected]",
                 "status \"Region\": EU",
             ],
         ),

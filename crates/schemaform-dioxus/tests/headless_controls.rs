@@ -128,13 +128,17 @@ impl ControlMatcher for HookedControls {
 }
 
 /// Localizes exactly one keyless authored label, proving choice labels pass through the
-/// configured localizer; everything else falls back.
+/// configured localizer, and the null option's built-in message, proving it is keyed;
+/// everything else falls back.
 struct HeadlessLocalizer;
 
 impl Localizer for HeadlessLocalizer {
     fn localize(&self, message: &MessageDescriptor) -> String {
         if message.key.is_none() && message.fallback == "public" {
             return "Public".to_owned();
+        }
+        if message.key.as_deref() == Some("schemaform.choice.null") {
+            return "Not chosen".to_owned();
         }
         message.fallback.clone()
     }
@@ -667,11 +671,13 @@ fn choice_options_carry_localized_labels_the_null_flag_and_disabled_state() {
             .map(|option| (option.label.clone(), option.is_null, option.disabled))
             .collect::<Vec<_>>()
     };
-    // The core lists the null option first; "public" is the one label the localizer maps.
+    // The core lists the null option first; its label is the adapter's `schemaform.choice.null`
+    // message rather than the core's JSON spelling, and "public" is the one authored label the
+    // localizer maps.
     assert_eq!(
         describe("/mode"),
         [
-            ("null".to_owned(), true, false),
+            ("Not chosen".to_owned(), true, false),
             ("private".to_owned(), false, false),
             ("Public".to_owned(), false, false),
         ]

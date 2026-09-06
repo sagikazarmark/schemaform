@@ -600,7 +600,9 @@ pub struct ChoiceOption {
     /// Opaque identity to hand back to [`ChoiceEdit::select`]; its
     /// [`ChoiceIdentity::as_str`] form is a safe DOM value.
     pub identity: ChoiceIdentity,
-    /// Localized plain-text label.
+    /// Localized plain-text label: the core's compiled label through the configured
+    /// localizer, or for the null option the adapter's `schemaform.choice.null` message
+    /// (`None` by default), since the core spells that option as JSON.
     pub label: String,
     /// Whether this option selects JSON null.
     pub is_null: bool,
@@ -707,8 +709,11 @@ pub fn use_choice_edit(context: &ControlRenderContext) -> ChoiceEdit {
         let reader = context.node().clone();
         let form = context.presentation().form().clone();
         use_memo(move || {
-            choice_state_of(reader.read(), |label| {
-                crate::localize_text(&form, None, label)
+            choice_state_of(reader.read(), |label| match label {
+                ChoiceLabel::Null => {
+                    crate::localize_builtin(&form, crate::BuiltinMessage::ChoiceNull)
+                }
+                ChoiceLabel::Compiled(label) => crate::localize_text(&form, None, label),
             })
         })
     };
@@ -762,8 +767,11 @@ impl ChoiceEditTarget {
     /// holds the borrow that also rejects the write. Decisions never read labels, so a fresh
     /// read leaves them unlocalized.
     fn current_state(&self) -> Option<ChoiceState> {
-        choice_state_of(self.node.read_untracked(), str::to_owned)
-            .or_else(|| self.state.peek().clone())
+        choice_state_of(self.node.read_untracked(), |label| match label {
+            ChoiceLabel::Null => String::new(),
+            ChoiceLabel::Compiled(label) => label.to_owned(),
+        })
+        .or_else(|| self.state.peek().clone())
     }
 
     fn select(&self, identity: Option<ChoiceIdentity>) {
@@ -801,11 +809,19 @@ impl ChoiceEditTarget {
     }
 }
 
+/// What `choice_state_of` asks its caller to localize for one option: the null option is the
+/// adapter's own message, since the core spells its label as JSON (`null`), which is not a
+/// label for a person; every other option carries the core's compiled plain-text label.
+enum ChoiceLabel<'a> {
+    Null,
+    Compiled(&'a str),
+}
+
 /// The choice state of a node read, with labels passed through `localize`, or `None` when the
 /// node could not be read.
 fn choice_state_of(
     read: Result<Option<NodeProjection>, HandleError>,
-    mut localize: impl FnMut(&str) -> String,
+    mut localize: impl FnMut(ChoiceLabel<'_>) -> String,
 ) -> Option<ChoiceState> {
     let projection = read.ok().flatten()?;
     let operations = projection.allowed_operations;
@@ -830,10 +846,15 @@ fn choice_state_of(
             } else {
                 operations.can_set_value() || operations.can_replace_value()
             };
+            let label = localize(if is_null {
+                ChoiceLabel::Null
+            } else {
+                ChoiceLabel::Compiled(&option.label)
+            });
             ChoiceEntry {
                 option: ChoiceOption {
                     identity: option.identity.clone(),
-                    label: localize(&option.label),
+                    label,
                     is_null,
                     disabled: !current && !allowed,
                 },

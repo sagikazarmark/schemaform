@@ -82,7 +82,8 @@ registry without changing shape:
 | any read-only node | read-only `output` inside the same `Field` |
 
 The null option of a nullable choice is an ordinary option in all three choice
-widgets; selecting it sets null. A non-nullable boolean keeps the built-in's
+widgets, labelled by the adapter's `schemaform.choice.null` message ("None" by
+default); selecting it sets null. A non-nullable boolean keeps the built-in's
 native semantics on purpose: a native checkbox is what browsers, assistive
 technology, and the existing tests expect. The nullable checkbox reaches null
 through the set-null presence affordance, since a click from either boolean

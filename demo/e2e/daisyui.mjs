@@ -152,11 +152,12 @@ async function expectAnnouncement(page, label, text) {
 }
 
 // The presence affordances the core currently allows for a control, by label:
-// "Set {label}", "Set {label} to null", "Remove {label}", each offered or not.
+// "Set {label}", "Clear {label}" (set null), "Remove {label}", each offered or
+// not.
 async function expectAffordances(page, label, { set, setNull, remove }) {
   const expected = [
     [`Set ${label}`, set],
-    [`Set ${label} to null`, setNull],
+    [`Clear ${label}`, setNull],
     [`Remove ${label}`, remove],
   ];
   for (const [text, offered] of expected) {
@@ -381,7 +382,7 @@ class ThemeRun {
     await eventually("the nickname edit to apply", async () => (await nickname.inputValue()) === "Countess");
     await this.checkpoint("presence-set");
 
-    await affordance(page, "Set Nickname to null").click();
+    await affordance(page, "Clear Nickname").click();
     await expectAffordances(page, "Nickname", { set: true, setNull: false, remove: true });
     await this.checkpoint("presence-set-null");
 
@@ -529,7 +530,7 @@ class ThemeRun {
       "the newsletter checkbox to be unchecked",
       async () => (await newsletter.getAttribute("aria-checked")) === "false",
     );
-    await affordance(page, "Set Product newsletter to null").click();
+    await affordance(page, "Clear Product newsletter").click();
     await eventually(
       "the newsletter checkbox to be indeterminate again",
       async () => (await newsletter.getAttribute("aria-checked")) === "mixed",
