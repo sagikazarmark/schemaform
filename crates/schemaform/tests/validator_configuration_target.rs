@@ -92,9 +92,9 @@ fn locked_version(package: &str) -> Option<&str> {
 #[test]
 fn dependency_and_validator_configuration_match_the_qualified_release() {
     assert!(WORKSPACE_MANIFEST.contains(
-        "jsonschema = { version = \"=0.47.0\", default-features = false, features = [\"arbitrary-precision\"] }"
+        "jsonschema = { version = \"=0.54.0\", default-features = false, features = [\"arbitrary-precision\"] }"
     ));
-    assert!(WORKSPACE_MANIFEST.contains("referencing = \"=0.47.0\""));
+    assert!(WORKSPACE_MANIFEST.contains("referencing = \"=0.54.0\""));
     // `serde_json` is qualified through the lockfile below rather than an exact manifest
     // requirement: an exact requirement in the published crates would refuse to resolve in any
     // consumer whose lockfile already holds a newer patch release, while the lockfile, held by
@@ -106,11 +106,11 @@ fn dependency_and_validator_configuration_match_the_qualified_release() {
         )
     );
     for (package, version) in [
-        ("jsonschema", "0.47.0"),
-        ("jsonschema-regex", "0.47.0"),
-        ("referencing", "0.47.0"),
+        ("jsonschema", "0.54.0"),
+        ("jsonschema-regex", "0.54.0"),
+        ("referencing", "0.54.0"),
         ("serde_json", "1.0.151"),
-        ("fancy-regex", "0.18.0"),
+        ("fancy-regex", "0.19.0"),
         ("regex", "1.13.1"),
     ] {
         assert_eq!(
@@ -197,7 +197,7 @@ fn resolved_validator_features_disable_defaults_and_enable_arbitrary_precision()
             "-e",
             "features",
             "-i",
-            "jsonschema@0.47.0",
+            "jsonschema@0.54.0",
         ])
         .output()
         .expect("cargo tree should inspect the resolved validator feature graph");
