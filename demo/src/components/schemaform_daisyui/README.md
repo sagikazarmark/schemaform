@@ -86,9 +86,9 @@ widgets, labelled by the adapter's `schemaform.choice.null` message ("None" by
 default); selecting it sets null. A non-nullable boolean keeps the built-in's
 native semantics on purpose: a native checkbox is what browsers, assistive
 technology, and the existing tests expect. The nullable checkbox shows null as
-the indeterminate state, drawn with daisyUI's indeterminate mark (the site
-stylesheet re-targets it from `:indeterminate` to `aria-checked="mixed"`, which
-is how a `button` spells the state). A click from null checks the box, as
+the indeterminate state, drawn with daisyUI's indeterminate mark (daisyUI 5.7.25
+and later draw it for `aria-checked="mixed"`, which is how a `button` spells the
+state, as well as for `:indeterminate`). A click from null checks the box, as
 activating an indeterminate checkbox does; null is reached through the set-null
 presence affordance, since a click from either state yields a boolean. The
 `CheckboxState` mapping lives in this component only, never in the published
