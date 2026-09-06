@@ -6,37 +6,37 @@
     {
       "name": "field",
       "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
-      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+      "rev": "8bfd667ee335b4438f39808d6e9155dc808f18f4"
     },
     {
       "name": "input",
       "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
-      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+      "rev": "8bfd667ee335b4438f39808d6e9155dc808f18f4"
     },
     {
       "name": "checkbox",
       "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
-      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+      "rev": "8bfd667ee335b4438f39808d6e9155dc808f18f4"
     },
     {
       "name": "native_select",
       "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
-      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+      "rev": "8bfd667ee335b4438f39808d6e9155dc808f18f4"
     },
     {
       "name": "radio_group",
       "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
-      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+      "rev": "8bfd667ee335b4438f39808d6e9155dc808f18f4"
     },
     {
       "name": "select",
       "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
-      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+      "rev": "8bfd667ee335b4438f39808d6e9155dc808f18f4"
     },
     {
       "name": "button",
       "git": "https://github.com/sagikazarmark/dioxus-daisyui-components.git",
-      "rev": "bb04b3e0d563d21c458fdd050ecd95f671c91408"
+      "rev": "8bfd667ee335b4438f39808d6e9155dc808f18f4"
     }
   ],
   "cargoDependencies": [
