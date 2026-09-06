@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::HashMap};
+use std::{borrow::Cow, cmp::Ordering, collections::HashMap};
 
 use jsonschema::{
     Keyword, PatternOptions, ValidationError, error::ValidationErrorKind, paths::Location,
@@ -49,18 +49,18 @@ struct CardinalityKeyword {
 
 struct AnnotationKeyword;
 
-impl Keyword for AnnotationKeyword {
-    fn validate<'i>(&self, _instance: &'i Value) -> Result<(), ValidationError<'i>> {
+impl<'i> Keyword<'i> for AnnotationKeyword {
+    fn validate(&self, _instance: &'i Value) -> Result<(), ValidationError<'i>> {
         Ok(())
     }
 
-    fn is_valid(&self, _instance: &Value) -> bool {
+    fn is_valid(&self, _instance: &'i Value) -> bool {
         true
     }
 }
 
-impl Keyword for CardinalityKeyword {
-    fn validate<'i>(&self, instance: &'i Value) -> Result<(), ValidationError<'i>> {
+impl<'i> Keyword<'i> for CardinalityKeyword {
+    fn validate(&self, instance: &'i Value) -> Result<(), ValidationError<'i>> {
         if self.is_valid(instance) {
             Ok(())
         } else {
@@ -70,7 +70,7 @@ impl Keyword for CardinalityKeyword {
         }
     }
 
-    fn is_valid(&self, instance: &Value) -> bool {
+    fn is_valid(&self, instance: &'i Value) -> bool {
         let Some(values) = instance.as_array() else {
             return true;
         };
@@ -153,11 +153,17 @@ impl ExactNonnegativeInteger {
     }
 }
 
+/// A custom keyword boxed for registration with the validator.
+///
+/// The keyword is generic over the instance lifetime, so the factory hands back a
+/// higher-ranked trait object rather than one tied to a single instance.
+type BoxedKeyword = Box<dyn for<'i> Keyword<'i>>;
+
 fn min_items_factory<'a>(
     _parent: &'a serde_json::Map<String, Value>,
     value: &'a Value,
     _path: Location,
-) -> Result<Box<dyn Keyword>, ValidationError<'a>> {
+) -> Result<BoxedKeyword, ValidationError<'a>> {
     cardinality_factory(value, CardinalityComparison::Minimum)
 }
 
@@ -165,7 +171,7 @@ fn max_items_factory<'a>(
     _parent: &'a serde_json::Map<String, Value>,
     value: &'a Value,
     _path: Location,
-) -> Result<Box<dyn Keyword>, ValidationError<'a>> {
+) -> Result<BoxedKeyword, ValidationError<'a>> {
     cardinality_factory(value, CardinalityComparison::Maximum)
 }
 
@@ -173,14 +179,14 @@ fn annotation_factory<'a>(
     _parent: &'a serde_json::Map<String, Value>,
     _value: &'a Value,
     _path: Location,
-) -> Result<Box<dyn Keyword>, ValidationError<'a>> {
+) -> Result<BoxedKeyword, ValidationError<'a>> {
     Ok(Box::new(AnnotationKeyword))
 }
 
 fn cardinality_factory(
     value: &Value,
     comparison: CardinalityComparison,
-) -> Result<Box<dyn Keyword>, ValidationError<'static>> {
+) -> Result<BoxedKeyword, ValidationError<'static>> {
     let bound = ExactNonnegativeInteger::parse(value).ok_or_else(|| {
         ValidationError::schema("array cardinality bound must be a nonnegative integer")
     })?;
@@ -436,11 +442,12 @@ impl Validator {
 
     fn schema_location(&self, error: &ValidationError<'_>) -> SchemaLocation {
         if let Some(absolute) = error.absolute_keyword_location() {
+            let absolute = reported_absolute_keyword_location(absolute.as_str(), error);
             if let Some((_, anchor_pointer, suffix)) = self
                 .anchor_locations
                 .iter()
                 .filter_map(|(prefix, pointer)| {
-                    absolute.as_str().strip_prefix(prefix).and_then(|suffix| {
+                    absolute.strip_prefix(prefix).and_then(|suffix| {
                         (suffix.is_empty() || suffix.starts_with('/')).then_some((
                             prefix.len(),
                             pointer,
@@ -451,9 +458,8 @@ impl Validator {
                 .max_by_key(|(prefix_length, _, _)| *prefix_length)
             {
                 let resource = absolute
-                    .as_str()
                     .split_once('#')
-                    .map_or(absolute.as_str(), |(resource, _)| resource);
+                    .map_or(&*absolute, |(resource, _)| resource);
                 let suffix = crate::resources::decode_uri_fragment(suffix)
                     .unwrap_or_else(|| suffix.to_owned());
                 if let (Ok(resource), Ok(pointer)) = (
@@ -464,9 +470,8 @@ impl Validator {
                 }
             }
             let (resource, encoded_pointer) = absolute
-                .as_str()
                 .split_once('#')
-                .map_or((absolute.as_str(), None), |(resource, pointer)| {
+                .map_or((&*absolute, None), |(resource, pointer)| {
                     (resource, Some(pointer))
                 });
             let pointer = encoded_pointer
@@ -490,6 +495,26 @@ impl Validator {
                 .expect("validator keyword locations are JSON Pointers"),
         )
     }
+}
+
+/// The absolute keyword location `jsonschema` reports for `error`, naming the keyword that failed.
+///
+/// `jsonschema` 0.52.1 fused sibling `minLength` and `maxLength` into one validator registered
+/// under `minLength`, and it stamps every error a validator emits with the absolute location of
+/// that registration. A `maxLength` error beside a `minLength` therefore arrives naming
+/// `.../minLength` absolutely while its `schema_path` still ends in `maxLength`. The two agree
+/// everywhere else, so the trailing segment is restored here until upstream stamps per keyword
+/// (<https://github.com/Stranger6667/jsonschema/issues/1579>).
+fn reported_absolute_keyword_location<'a>(
+    absolute: &'a str,
+    error: &ValidationError<'_>,
+) -> Cow<'a, str> {
+    if matches!(error.kind(), ValidationErrorKind::MaxLength { .. })
+        && let Some(prefix) = absolute.strip_suffix("/minLength")
+    {
+        return Cow::Owned(format!("{prefix}/maxLength"));
+    }
+    Cow::Borrowed(absolute)
 }
 
 fn evaluator_failed(kind: &ValidationErrorKind) -> bool {
@@ -881,6 +906,53 @@ mod tests {
             ),
             json!({ "omitted": true })
         );
+    }
+
+    #[cfg_attr(
+        all(target_arch = "wasm32", target_os = "unknown"),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
+    #[cfg_attr(not(all(target_arch = "wasm32", target_os = "unknown")), test)]
+    fn fused_length_bounds_report_the_failing_keyword_location() {
+        let registry = Registry::new()
+            .draft(Draft::Draft202012)
+            .prepare()
+            .expect("the empty registry should prepare");
+        let validator = build_validator(
+            &json!({
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "properties": {
+                    "value": { "type": "string", "minLength": 20, "maxLength": 5 }
+                }
+            }),
+            "https://schemas.example/length.json",
+            &registry,
+        )
+        .expect("the length schema should compile");
+
+        let instance = json!({ "value": "secretvalue" });
+        let errors: Vec<_> = validator.iter_errors(&instance).collect();
+        let mut keywords: Vec<_> = errors.iter().map(|error| error.kind().keyword()).collect();
+        keywords.sort_unstable();
+        assert_eq!(keywords, ["maxLength", "minLength"]);
+        for error in &errors {
+            let keyword = error.kind().keyword();
+            let reported = error
+                .absolute_keyword_location()
+                .expect("length keyword errors carry an absolute location");
+            // The qualified `jsonschema` stamps both bounds with the `minLength` registration.
+            // Once a release stamps `maxLength` with its own location this assertion fails,
+            // which is the cue to delete `reported_absolute_keyword_location`.
+            assert_eq!(
+                reported.as_str(),
+                "https://schemas.example/length.json#/properties/value/minLength",
+                "the qualified validator no longer misattributes {keyword}; drop the workaround"
+            );
+            assert_eq!(
+                reported_absolute_keyword_location(reported.as_str(), error),
+                format!("https://schemas.example/length.json#/properties/value/{keyword}")
+            );
+        }
     }
 
     #[cfg_attr(
