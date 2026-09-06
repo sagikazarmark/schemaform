@@ -372,6 +372,25 @@ fn help_is_described_by_and_every_aria_reference_resolves_to_an_element() {
 }
 
 #[test]
+fn a_null_text_control_is_an_empty_input_whose_presence_affordances_say_it_is_null() {
+    let rendered = mount();
+
+    // The input shows what the user edits, so null is nothing rather than the spelling `null`,
+    // which the first keystroke would extend; the "Set Nickname" affordance beside it is how
+    // the form tells null from an empty string.
+    let nickname = rendered.control("/nickname");
+    assert_eq!(nickname.element, "input");
+    assert_eq!(nickname.attribute("value"), Some(""));
+    let nickname_id = rendered.control_id("/nickname");
+    assert!(
+        rendered
+            .by_id(&format!("{nickname_id}-set-value"))
+            .is_some(),
+        "a null nickname offers its set affordance"
+    );
+}
+
+#[test]
 fn presence_affordances_render_as_daisyui_buttons_carrying_their_ids() {
     let rendered = mount();
     let nickname = rendered.control_id("/nickname");

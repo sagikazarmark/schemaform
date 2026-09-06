@@ -3054,7 +3054,7 @@ fn accessibility_checkpoints() -> Vec<AccessibilityCheckpoint> {
             "presence-null",
             "scalar_presence_controls_repair_explicitly_without_render_time_mutation",
             &["presence-null"],
-            &["textbox \"Value\": \"null\"", "button \"Remove Value\""],
+            &["textbox \"Value\"", "button \"Remove Value\""],
         ),
         accessibility_checkpoint(
             "presence-incompatible",

@@ -236,7 +236,9 @@ controls render through the same hook and the same public context.
 
 - `value: ReadSignal<String>` is the text the widget should show right now: the
   composition buffer while composing, else the edit buffer, else the canonical
-  text, and empty for a write-only control without an edit buffer. It is
+  text (empty while the value is JSON null, since the core accepts input
+  straight into a nullable text control), and empty for a write-only control
+  without an edit buffer. It is
   derived through a memo that subscribes to the node, so the first render after
   a transition already shows the new text without the component itself reading
   the node.
@@ -333,8 +335,9 @@ callbacks plus a read signal derived through a memo over the node.
 A widget maps its DOM value back to an identity by looking it up in `options`
 with `ChoiceIdentity::as_str`. Constant controls have no hook: render read-only
 output from `presentation()`, `control()`, and the node projection's
-`display_text()`, which spells the current value as the built-in does and keeps
-a write-only value hidden.
+`display_text()`, which spells the current value as the built-in does (JSON
+null as nothing, since a text widget shows this text as what the user edits)
+and keeps a write-only value hidden.
 
 The built-in scalar control is itself a `ControlRenderer` built on these hooks
 and the public context. `ControlRegistry::with_builtins()` registers

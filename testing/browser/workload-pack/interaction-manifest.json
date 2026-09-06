@@ -152,7 +152,7 @@
           "presence-null"
         ],
         "aria_required": [
-          "textbox \"Value\": \"null\"",
+          "textbox \"Value\"",
           "button \"Remove Value\""
         ]
       },

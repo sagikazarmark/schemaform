@@ -161,6 +161,7 @@ fn initial_form_data() -> serde_json::Value {
         "name": "Ada",
         "secret": "hunter2",
         "note": "fixed",
+        "nickname": null,
         "enabled": false,
         "flag": true,
         "secret_flag": true,
@@ -185,6 +186,7 @@ fn headless_app(props: HeadlessAppProps) -> Element {
                 "name": { "type": "string", "title": "Name", "minLength": 2 },
                 "secret": { "type": "string", "title": "Secret", "writeOnly": true },
                 "note": { "type": "string", "title": "Note", "readOnly": true },
+                "nickname": { "type": ["string", "null"], "title": "Nickname" },
                 "enabled": { "type": "boolean", "title": "Enabled" },
                 "flag": { "type": ["boolean", "null"], "title": "Flag" },
                 "secret_flag": { "type": "boolean", "title": "Secret flag", "writeOnly": true },
@@ -519,6 +521,23 @@ fn write_only_values_are_not_echoed_and_read_only_controls_are_read_only() {
 
     assert!(!mounted.edit("/quantity").read_only);
     assert!(!mounted.edit("/name").read_only);
+}
+
+#[test]
+fn a_null_text_value_displays_as_empty_text_and_input_replaces_it() {
+    let mut mounted = MountedHeadless::mount();
+
+    // The core allows text input straight into a nullable string that is null, so the text the
+    // widget shows is the text the user edits: nothing, not the JSON spelling `null`, which a
+    // keystroke would otherwise extend into the string "nullx".
+    assert_eq!(mounted.value("/nickname"), "");
+
+    let edit = mounted.edit("/nickname");
+    mounted.drive(|| edit.input.call("x".to_owned()));
+
+    assert_eq!(mounted.form_data()["nickname"], json!("x"));
+    assert_eq!(mounted.value("/nickname"), "x");
+    assert!(mounted.errors.borrow().is_empty());
 }
 
 #[test]
