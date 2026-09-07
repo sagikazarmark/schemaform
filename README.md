@@ -9,7 +9,7 @@ framework-neutral form engine plus an accessible browser adapter.**
 
 Schemaform builds forms whose structure is discovered at runtime from
 application-trusted JSON Schema Draft 2020-12 documents. The repository contains
-two packages: the Dioxus-free `schemaform` core and the browser-CSR
+two packages: the Dioxus-free `schemaform` core and the client-side
 `schemaform-dioxus` adapter.
 
 | Package | What it does |

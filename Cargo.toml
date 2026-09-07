@@ -26,7 +26,10 @@ dioxus = { version = "=0.7.10", default-features = false, features = ["hooks", "
 dioxus-core = "=0.7.10"
 dioxus-elements = { package = "dioxus-html", version = "=0.7.10" }
 dioxus-signals = "=0.7.10"
-dioxus-web = { version = "=0.7.10", default-features = false }
+# `document` gives the browser runtime a `Document` provider for the adapter's DOM bridge; with
+# default features off, dioxus-web 0.7.10 also needs `web-sys/Location` for the history provider
+# this feature compiles, which each wasm32 dev-dependency block enables alongside it.
+dioxus-web = { version = "=0.7.10", default-features = false, features = ["document"] }
 # The wasm-bindgen stack and serde_json are minimum requirements, not exact
 # pins: the published crates must resolve alongside whatever version a
 # consumer's other dependencies already lock, and cargo refuses rather than

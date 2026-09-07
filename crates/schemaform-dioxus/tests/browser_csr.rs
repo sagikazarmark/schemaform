@@ -28,6 +28,7 @@ use schemaform_dioxus::{
     HandleError, HandleTransactionError, Localizer, PreparedExtension, RenderConfiguration,
     RenderEvent, RenderNodeKind, RenderObservation, RenderObserver,
     SchemaForm as RequiredSchemaForm, ShellContext, ShellRenderer, StructureRenderers,
+    TargetFocusAction,
     render::{BindFinding, FindingCollectionContext},
     use_choice_edit, use_form, use_text_edit,
 };
@@ -4259,7 +4260,7 @@ async fn scalar_array_structural_actions_preserve_dom_identity_focus_and_announc
     .await;
     let inserted_input: HtmlInputElement = inserted.get(1).unwrap().dyn_into().unwrap();
     let inserted_id = inserted_input.id();
-    assert_focused(&inserted_input);
+    wait_for_input_focus(&inserted_input, "insert before").await;
     assert_eq!(
         status.text_content().as_deref(),
         Some("Tags item inserted at position 2.")
@@ -5248,7 +5249,7 @@ async fn duplicate_fixed_object_array_lifecycle_updates_dom_keys_by_item_identit
     );
     assert!(!first_node.is_same_node(Some(&restored_first_node)));
     assert!(second_node.is_same_node(Some(&restored_second_node)));
-    assert_focused(&restored_second);
+    wait_for_input_focus(&restored_second, "reset").await;
     assert!(form_handle.node(appended_identity).unwrap().is_none());
     let reset_second = form_handle
         .node(second_identity)
@@ -5594,19 +5595,19 @@ async fn builtins_present_read_only_and_write_only_data_without_losing_submissio
     dispatch_input(&nested_secret, "nested replacement");
 
     dispatch_select_change(&secret_enabled, "false");
-    assert_eq!(secret_enabled.value(), "");
+    poll_dom(|| (secret_enabled.value() == "").then_some(())).await;
     assert_eq!(secret_enabled.selected_index(), 0);
     assert_eq!(select_options(&secret_enabled), secret_enabled_options);
     dispatch_select_change(&secret_mode, "choice-0");
-    assert_eq!(secret_mode.value(), "");
+    poll_dom(|| (secret_mode.value() == "").then_some(())).await;
     assert_eq!(secret_mode.selected_index(), 0);
     assert_eq!(select_options(&secret_mode), secret_mode_options);
 
     dispatch_select_change(&secret_enabled, "true");
-    assert_eq!(secret_enabled.value(), "");
+    poll_dom(|| (secret_enabled.value() == "").then_some(())).await;
     assert_eq!(secret_enabled.selected_index(), 0);
     dispatch_select_change(&secret_mode, "choice-1");
-    assert_eq!(secret_mode.value(), "");
+    poll_dom(|| (secret_mode.value() == "").then_some(())).await;
     assert_eq!(secret_mode.selected_index(), 0);
     let replace_region = secret_region
         .parent_element()
@@ -6209,7 +6210,9 @@ async fn arbitrary_precision_integer_browser_trace_matches_the_core_facade() {
         Some(rendered_finding.id().as_str())
     );
     dispatch_submit(&form);
-    next_microtask().await;
+    // The summary already has focus from the previous blocked submission, so the wait below cannot
+    // observe this request landing; focus settles within a task, so yield one before refocusing.
+    next_browser_task().await;
     assert!(submitted.borrow().is_none());
     wait_for_summary_focus(&root).await;
     input
@@ -7035,14 +7038,11 @@ async fn open_object_warning_is_accessible_and_does_not_block_browser_submission
         .dyn_into::<web_sys::HtmlElement>()
         .expect("the focus action should be an HTML button")
         .click();
-    next_microtask().await;
-    let focused = web_sys::window()
-        .expect("the browser should have a window")
-        .document()
-        .expect("the browser should have a document")
-        .active_element()
-        .expect("the summary focus action should focus the form");
-    assert_eq!(focused.id(), warning.closest("form").unwrap().unwrap().id());
+    wait_for_focus_on(
+        &warning.closest("form").unwrap().unwrap().id(),
+        "the summary warning focus action",
+    )
+    .await;
 
     let name = input_with_binding(&root, "/name");
     dispatch_input(&name, "Grace");
@@ -7254,14 +7254,7 @@ async fn nested_local_reference_edits_validates_and_submits_in_the_browser() {
         .dyn_into::<web_sys::HtmlElement>()
         .expect("the nested warning summary action should be an HTML button");
     summary_action.click();
-    next_microtask().await;
-    let focused = web_sys::window()
-        .expect("the browser should have a window")
-        .document()
-        .expect("the browser should have a document")
-        .active_element()
-        .expect("the nested warning summary action should focus its group");
-    assert_eq!(focused.id(), group.id());
+    wait_for_focus_on(&group.id(), "the nested warning summary action").await;
     assert_eq!(
         group
             .query_selector("legend")
@@ -8569,13 +8562,7 @@ async fn external_visibility_parse_feedback_and_submission_focus_follow_core_pol
         .query_selector("[data-finding-summary]")
         .expect("the summary selector should be valid")
         .expect("the form should expose a finding summary");
-    let focused = web_sys::window()
-        .expect("the browser should have a window")
-        .document()
-        .expect("the browser should have a document")
-        .active_element()
-        .expect("blocked submission should focus the summary");
-    assert_eq!(focused.id(), summary.id());
+    wait_for_focus_on(&summary.id(), "blocked submission").await;
     accessibility_checkpoint(
         "external-parse-blocked",
         "external_visibility_parse_feedback_and_submission_focus_follow_core_policy",
@@ -8787,6 +8774,7 @@ async fn locale_and_presenter_changes_update_only_reactive_plain_text_presentati
     })
     .await;
     let array_status_node: web_sys::Node = array_status.clone().into();
+    wait_for_input_focus(&input_with_binding(&root, "/tags/1"), "append").await;
     let locale_button: web_sys::HtmlElement = root
         .query_selector("[data-change-locale]")
         .unwrap()
@@ -8908,16 +8896,7 @@ async fn locale_and_presenter_changes_update_only_reactive_plain_text_presentati
         .dyn_into()
         .unwrap();
     summary_action.click();
-    assert_eq!(
-        web_sys::window()
-            .unwrap()
-            .document()
-            .unwrap()
-            .active_element()
-            .unwrap()
-            .id(),
-        current_input.id()
-    );
+    wait_for_focus_on(&current_input.id(), "the localized summary action").await;
 
     let local_button: web_sys::HtmlElement = root
         .query_selector("[data-change-local-presenter]")
@@ -9106,7 +9085,7 @@ async fn oversized_input_reports_typed_error_and_resynchronizes_before_submissio
 
     dispatch_paste_input(&input, &oversized);
 
-    assert_eq!(input.value(), "1");
+    poll_dom(|| (input.value() == "1").then_some(())).await;
     assert_eq!(
         form_handle
             .reader()
@@ -9239,9 +9218,11 @@ async fn every_builtin_user_operation_failure_reaches_schema_form_on_error() {
         })
         .expect("the outer transaction should complete without mutation");
 
-    assert_eq!(text.value(), "canonical");
-    assert!(!checkbox.checked());
-    assert_eq!(choice.value(), canonical_choice);
+    poll_dom(|| {
+        (text.value() == "canonical" && !checkbox.checked() && choice.value() == canonical_choice)
+            .then_some(())
+    })
+    .await;
     assert_eq!(
         form_handle.reader().form_data().unwrap(),
         json!({ "text": "canonical", "enabled": false, "choice": "a", "items": ["one", "two"] })
@@ -9288,6 +9269,199 @@ async fn custom_renderer_reported_failures_reach_schema_form_on_error() {
         *errors.borrow(),
         vec![HandleError::BorrowConflict, HandleError::BorrowConflict]
     );
+
+    root.remove();
+}
+
+thread_local! {
+    /// Finding codes and focus actions the capturing summary presenter has rendered, newest last.
+    static CAPTURED_FOCUS_ACTIONS: RefCell<Vec<(String, TargetFocusAction)>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+/// A summary presenter that keeps a clone of every focus action it renders, so a test can invoke
+/// one from outside any Dioxus event handler.
+struct CapturingSummaryPresenter;
+
+impl FindingCollectionPresenter for CapturingSummaryPresenter {
+    fn render(&self, context: FindingCollectionContext) -> Element {
+        let entries = context
+            .entries()
+            .map(|entry| (entry.finding().clone(), entry.target_focus().clone()))
+            .collect::<Vec<_>>();
+        CAPTURED_FOCUS_ACTIONS.with(|captured| {
+            captured.borrow_mut().extend(
+                entries
+                    .iter()
+                    .map(|(finding, action)| (finding.code.clone(), action.clone())),
+            );
+        });
+        rsx! {
+            ul {
+                "data-capturing-summary": "",
+                for (finding, action) in entries {
+                    li {
+                        id: finding.stable_id,
+                        "data-finding-code": finding.code,
+                        button {
+                            r#type: "button",
+                            onclick: move |_| action.focus(),
+                            "{finding.text}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn capturing_summary_test_app(props: TestAppProps) -> Element {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+            "name": { "type": "string", "title": "Name", "minLength": 3 }
+        }
+    }))
+    .expect("the capturing-summary data schema should compile");
+    let form = use_form(definition, json!({ "name": "Li" }))
+        .expect("the capturing-summary form should be created");
+    let bound = RenderConfiguration::builder()
+        .summary_presenter(Arc::new(CapturingSummaryPresenter))
+        .build()
+        .bind(&form)
+        .expect("the capturing-summary form should bind");
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+
+    rsx! {
+        SchemaForm {
+            form: bound,
+            on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
+        }
+    }
+}
+
+/// A host may hold a `TargetFocusAction` and invoke it from any JavaScript callback, not only
+/// from a Dioxus event handler: a `setTimeout` callback has no Dioxus runtime on the stack.
+#[wasm_bindgen_test]
+async fn target_focus_action_focuses_from_outside_the_dioxus_runtime() {
+    CAPTURED_FOCUS_ACTIONS.with(|captured| captured.borrow_mut().clear());
+    let MountedTestApp {
+        root, submitted, ..
+    } = mount_test_app(capturing_summary_test_app).await;
+    let name = input_with_binding(&root, "/name");
+    let form: HtmlFormElement = root
+        .query_selector("form")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+
+    dispatch_submit(&form);
+    poll_dom(|| {
+        root.query_selector("[data-capturing-summary] li[data-finding-code='minLength']")
+            .ok()
+            .flatten()
+    })
+    .await;
+    assert!(submitted.borrow().is_none());
+    let action = CAPTURED_FOCUS_ACTIONS
+        .with(|captured| {
+            captured
+                .borrow()
+                .iter()
+                .rev()
+                .find(|(code, _)| code == "minLength")
+                .map(|(_, action)| action.clone())
+        })
+        .expect("the summary presenter should have received the minLength focus action");
+    assert_ne!(
+        web_sys::window()
+            .unwrap()
+            .document()
+            .unwrap()
+            .active_element()
+            .map(|element| element.id()),
+        Some(name.id())
+    );
+
+    let callback = wasm_bindgen::closure::Closure::once_into_js(move || action.focus());
+    web_sys::window()
+        .unwrap()
+        .set_timeout_with_callback(callback.unchecked_ref())
+        .expect("the outside-runtime callback should be scheduled");
+    next_browser_task().await;
+    wait_for_focus_on(&name.id(), "focus from a setTimeout callback").await;
+
+    root.remove();
+}
+
+/// Canonical text a host may legitimately hold: every character class that would break a script
+/// if it were spliced into JavaScript source rather than delivered as data.
+const HOSTILE_CANONICAL_TEXT: &str =
+    "He said \"hi\" \\ 'yo' </script> ${x} `back` \u{2028}\u{2029} end";
+
+fn hostile_text_test_app(props: TestAppProps) -> Element {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+            "text": { "type": "string", "title": "Text" }
+        }
+    }))
+    .expect("the hostile-text data schema should compile");
+    let form = use_form(definition, json!({ "text": HOSTILE_CANONICAL_TEXT }))
+        .expect("the hostile-text form should be created");
+    let bound = RenderConfiguration::default()
+        .bind(&form)
+        .expect("the hostile-text form should bind");
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+    let errors = props.errors.clone();
+
+    rsx! {
+        SchemaForm {
+            form: bound,
+            on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
+            on_error: move |error| errors.borrow_mut().push(error),
+        }
+    }
+}
+
+/// After the core rejects a write, the widget gets the canonical text back byte for byte, however
+/// hostile that text would be to a script that embedded it.
+#[wasm_bindgen_test]
+async fn rejected_write_resynchronises_hostile_canonical_text_verbatim() {
+    let (
+        MountedTestApp {
+            root, form_handle, ..
+        },
+        errors,
+    ) = mount_test_app_with_errors(hostile_text_test_app).await;
+    let text = input_with_binding(&root, "/text");
+    assert_eq!(text.value(), HOSTILE_CANONICAL_TEXT);
+
+    form_handle
+        .try_transact(|_| {
+            dispatch_input(&text, "rejected");
+            Ok::<_, ()>(())
+        })
+        .expect("the outer transaction should complete without mutation");
+
+    poll_dom(|| (text.value() == HOSTILE_CANONICAL_TEXT).then_some(())).await;
+    assert_eq!(
+        form_handle.reader().form_data().unwrap(),
+        json!({ "text": HOSTILE_CANONICAL_TEXT })
+    );
+    assert_eq!(*errors.borrow(), vec![HandleError::BorrowConflict]);
 
     root.remove();
 }
@@ -10260,14 +10434,10 @@ async fn hook_based_custom_widgets_are_resynchronised_after_rejected_and_write_o
         .await;
 
     // A write the core rejects — an edit buffer over its resource limit — is reported and the
-    // widget is put back to the canonical text synchronously.
+    // widget is put back to the canonical text.
     let oversized = "9".repeat(512 * 1024 + 1);
     dispatch_input(&quantity, &oversized);
-    assert_eq!(
-        quantity.value(),
-        "7",
-        "the hook resynchronises the element carrying the element id"
-    );
+    poll_dom(|| (quantity.value() == "7").then_some(())).await;
     assert_eq!(form_data()["quantity"], json!(7));
     assert!(
         matches!(
@@ -10294,11 +10464,7 @@ async fn hook_based_custom_widgets_are_resynchronised_after_rejected_and_write_o
         .map(|(value, _)| value)
         .expect("the write-only choice offers its options");
     dispatch_select_change(&secret_mode, &public);
-    assert_eq!(
-        secret_mode.value(),
-        "",
-        "a write-only widget never shows its value"
-    );
+    poll_dom(|| (secret_mode.value() == "").then_some(())).await;
     assert_eq!(secret_mode.selected_index(), 0);
     poll_dom(|| (form_data()["secret_mode"] == json!("public")).then_some(())).await;
     assert_eq!(

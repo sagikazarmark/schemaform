@@ -291,7 +291,7 @@ impl TextEditTarget {
     }
 
     fn resynchronize(&self) {
-        crate::resynchronize_control_value(&self.node.element_id, &self.canonical_text());
+        crate::dom::resynchronize_control_value(&self.node.element_id, &self.canonical_text());
     }
 
     /// Buffers `text` while composing; otherwise applies it through the core and restores
@@ -500,7 +500,7 @@ impl BooleanEditTarget {
         };
         let succeeded = self.node.report(result);
         if !succeeded || state.is_some_and(|state| state.write_only) {
-            crate::resynchronize_boolean(
+            crate::dom::resynchronize_boolean(
                 &self.node.element_id,
                 state.and_then(|state| state.checked),
             );
@@ -805,7 +805,7 @@ impl ChoiceEditTarget {
 
     fn resynchronize(&self, state: &ChoiceState) {
         let selected = state.selected.as_ref().map_or("", ChoiceIdentity::as_str);
-        crate::resynchronize_control_value(&self.node.element_id, selected);
+        crate::dom::resynchronize_control_value(&self.node.element_id, selected);
     }
 }
 

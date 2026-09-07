@@ -1,7 +1,7 @@
 [package]
 name = "schemaform-dioxus"
 version.workspace = true
-description = "Browser-CSR Dioxus adapter for runtime JSON Schema forms"
+description = "Client-side Dioxus adapter for runtime JSON Schema forms"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -11,20 +11,14 @@ homepage.workspace = true
 [dependencies]
 schemaform = { workspace = true }
 
-dioxus = { workspace = true }
+# `document` provides `document::eval`, the platform-neutral bridge every DOM touch (focus,
+# rejected-write resynchronisation) goes through. The host's renderer must supply a `Document`
+# provider; `dioxus-web` does so behind its `document` feature, which is on by default.
+dioxus = { workspace = true, features = ["document"] }
 dioxus-core = { workspace = true }
 dioxus-elements = { workspace = true }
 dioxus-signals = { workspace = true }
 serde_json = { workspace = true }
-
-[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
-wasm-bindgen = { workspace = true }
-web-sys = { workspace = true, features = [
-    "Document",
-    "Element",
-    "HtmlElement",
-    "Window",
-] }
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies]
 browser-workload-pack = { workspace = true }
@@ -52,6 +46,7 @@ web-sys = { workspace = true, features = [
     "InputEventInit",
     "KeyboardEvent",
     "KeyboardEventInit",
+    "Location",
     "Node",
     "NodeList",
     "Window",

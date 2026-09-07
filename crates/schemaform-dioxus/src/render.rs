@@ -11,6 +11,7 @@ use std::{
     },
 };
 
+use dioxus::document::Document;
 use dioxus::prelude::{Callback, Element, ReadableExt, Signal, WritableExt};
 use schemaform::{
     DefinitionNodeId, ExtensionNamespace, Form, FormDefinition, InstanceIdentity, WidgetSymbol,
@@ -1091,19 +1092,35 @@ pub enum FindingKind {
     Indeterminate,
 }
 
-/// Browser action that reveals containing tabs and focuses a finding target.
+/// Action that reveals containing tabs and focuses a finding target.
 ///
-/// Focus is best-effort and meaningful only in the supported browser-CSR target. On other
-/// targets this operation is a no-op. Call it from an interaction callback, not while rendering.
-#[derive(Clone, PartialEq, Eq)]
+/// Focus is best-effort and runs through the platform's [`dioxus::document::Document`], so it
+/// behaves the same in a browser and in a desktop or mobile WebView. The action captures that
+/// document when it is created, so a host may invoke it from any callback, including one with no
+/// Dioxus runtime on the stack. Call it from an interaction callback, not while rendering. Focus
+/// moves asynchronously: it lands within a few tasks rather than before the call returns.
+#[derive(Clone)]
 pub struct TargetFocusAction {
+    document: Rc<dyn Document>,
     target_id: Rc<str>,
     tab_ids: Vec<Rc<str>>,
 }
 
+/// Equality compares the target and its containing tabs; the captured document is the same for
+/// every action created under one renderer and does not take part.
+impl PartialEq for TargetFocusAction {
+    fn eq(&self, other: &Self) -> bool {
+        self.target_id == other.target_id && self.tab_ids == other.tab_ids
+    }
+}
+
+impl Eq for TargetFocusAction {}
+
 impl TargetFocusAction {
+    /// Creates the action for `target_id` against the current runtime's document.
     pub(crate) fn new(target_id: String) -> Self {
         Self {
+            document: dioxus::document::document(),
             target_id: target_id.into(),
             tab_ids: Vec::new(),
         }
@@ -1116,50 +1133,13 @@ impl TargetFocusAction {
 
     /// Reveals any containing tab panels and focuses the target DOM element.
     pub fn focus(&self) {
-        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-        let _ = (&self.target_id, &self.tab_ids);
-
-        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-        {
-            use wasm_bindgen::JsCast;
-
-            let Some(window) = web_sys::window() else {
-                return;
-            };
-            let Some(document) = window.document() else {
-                return;
-            };
-            for tab_id in &self.tab_ids {
-                if let Some(tab) = document
-                    .get_element_by_id(tab_id)
-                    .and_then(|element| element.dyn_into::<web_sys::HtmlElement>().ok())
-                {
-                    tab.click();
-                }
-            }
-            if self.tab_ids.is_empty() {
-                crate::focus_element(&self.target_id);
-            } else {
-                focus_element_after_render(self.target_id.clone(), 4);
-            }
-        }
+        let tabs = self.tab_ids.iter().map(|id| &**id).collect::<Vec<_>>();
+        crate::dom::focus(
+            &*self.document,
+            &tabs,
+            crate::dom::Target::Element(&self.target_id),
+        );
     }
-}
-
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-fn focus_element_after_render(target_id: Rc<str>, attempts: u8) {
-    use wasm_bindgen::{JsCast, closure::Closure};
-
-    if crate::focus_element(&target_id) || attempts == 0 {
-        return;
-    }
-    let Some(window) = web_sys::window() else {
-        return;
-    };
-    let callback = Closure::once_into_js(move || {
-        focus_element_after_render(target_id, attempts - 1);
-    });
-    window.queue_microtask(callback.unchecked_ref());
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1741,7 +1721,7 @@ impl Localizer for FallbackLocalizer {
 ///
 /// A bound form owns generated DOM identities. Its clones refer to the same plan and must not
 /// be mounted concurrently; bind the handle separately for each concurrent view. The plan is
-/// intended only for this crate's browser-CSR [`crate::SchemaForm`] component.
+/// intended only for this crate's client-side [`crate::SchemaForm`] component.
 #[derive(Clone)]
 pub struct BoundForm {
     pub(crate) inner: Rc<BoundFormInner>,

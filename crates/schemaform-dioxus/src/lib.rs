@@ -1,4 +1,4 @@
-//! Accessible Dioxus browser rendering for [`schemaform::FormDefinition`].
+//! Accessible client-side Dioxus rendering for [`schemaform::FormDefinition`].
 //!
 //! The crate keeps Dioxus state out of the core engine and provides explicit
 //! control renderer, structure renderer, finding presenter, localization, and
@@ -26,6 +26,7 @@ use dioxus_core::use_drop;
 use schemaform::{SubmissionOutcome, SubmissionSnapshot};
 use serde_json::Value;
 
+mod dom;
 #[cfg(schemaform_test_validation_faults)]
 mod render_observation;
 
@@ -86,7 +87,7 @@ fn report_operation<T>(
     route_operation(handler, result).is_some()
 }
 
-/// Properties for the browser-CSR [`SchemaForm`] component.
+/// Properties for the client-side [`SchemaForm`] component.
 ///
 /// Callbacks run synchronously after the adapter operation has released its form borrow. They may
 /// start host-owned asynchronous work, but transport, retries, and pending/success lifecycle are
@@ -108,10 +109,12 @@ pub struct SchemaFormProps {
 }
 
 #[allow(non_snake_case)]
-/// Renders one bound browser-CSR form.
+/// Renders one bound client-side form.
 ///
-/// The component supports client-side browser rendering only, not SSR, hydration, or desktop and
-/// WebView targets. A [`render::BoundForm`] and its clones share generated DOM identity and must
+/// The component supports client-side rendering in a browser or a desktop or mobile WebView, not
+/// SSR or hydration. Focus movement and rejected-write resynchronisation run through the
+/// platform's [`dioxus::document::Document`], which the host's renderer must provide, and land
+/// asynchronously. A [`render::BoundForm`] and its clones share generated DOM identity and must
 /// have at most one concurrent mount. Submission calls `on_submit` only for a ready
 /// [`SubmissionSnapshot`]; blocked outcomes update findings and focus, while adapter failures call
 /// `on_error`. Built-ins emit semantic accessibility markup; a custom control renderer owns its
@@ -848,7 +851,9 @@ fn SemanticTabs(props: SemanticTabsProps) -> Element {
                             if let Some(next) = next {
                                 event.prevent_default();
                                 selected.set(next);
-                                focus_element(&format!("{tabs_element_id}-tab-{next}"));
+                                dom::focus_in_runtime(dom::Target::Element(&format!(
+                                    "{tabs_element_id}-tab-{next}"
+                                )));
                             }
                         },
                         "{label}"
@@ -866,31 +871,6 @@ fn SemanticTabs(props: SemanticTabsProps) -> Element {
                 }
             }
         }
-    }
-}
-
-fn focus_element(id: &str) -> bool {
-    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-    {
-        let _ = id;
-        false
-    }
-
-    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    {
-        use wasm_bindgen::JsCast;
-
-        if let Some(element) = web_sys::window()
-            .and_then(|window| window.document())
-            .and_then(|document| document.get_element_by_id(id))
-            .and_then(|element| element.dyn_into::<web_sys::HtmlElement>().ok())
-        {
-            let _ = element.focus();
-        }
-        web_sys::window()
-            .and_then(|window| window.document())
-            .and_then(|document| document.active_element())
-            .is_some_and(|element| element.id() == id)
     }
 }
 
@@ -2013,45 +1993,16 @@ fn set_array_announcement(
 }
 
 fn focus_array_target(target: &ArrayFocusRequest) {
-    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     match target {
         ArrayFocusRequest::Element(targets) => {
-            let _ = targets;
+            dom::focus_in_runtime(dom::Target::FirstOf(targets));
         }
         ArrayFocusRequest::Item(stem) => {
-            let _ = stem;
-        }
-    }
-
-    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    {
-        use wasm_bindgen::JsCast;
-
-        const FOCUSABLE: &str = "input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
-
-        let Some(document) = web_sys::window().and_then(|window| window.document()) else {
-            return;
-        };
-        let as_html = |element: web_sys::Element| element.dyn_into::<web_sys::HtmlElement>().ok();
-        let first_focusable_inside = |id: &str| {
-            document
-                .get_element_by_id(id)
-                .and_then(|element| element.query_selector(FOCUSABLE).ok().flatten())
-                .and_then(as_html)
-        };
-        let target = match target {
-            ArrayFocusRequest::Element(targets) => targets
-                .iter()
-                .find_map(|target| document.get_element_by_id(target).and_then(as_html)),
-            ArrayFocusRequest::Item(stem) => document
-                .get_element_by_id(stem)
-                .filter(|root| root.matches(FOCUSABLE).unwrap_or(false))
-                .and_then(as_html)
-                .or_else(|| first_focusable_inside(stem))
-                .or_else(|| first_focusable_inside(&array_item_row_id(stem))),
-        };
-        if let Some(target) = target {
-            let _ = target.focus();
+            let row = array_item_row_id(stem);
+            dom::focus_in_runtime(dom::Target::Item {
+                root: stem,
+                row: &row,
+            });
         }
     }
 }
@@ -3407,37 +3358,6 @@ fn BuiltinConstantControl(props: BuiltinControlProps) -> Element {
         }
     }
 }
-
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-#[wasm_bindgen::prelude::wasm_bindgen(inline_js = r#"
-export function schemaformResynchronizeControlValue(id, value) {
-    const control = document.getElementById(id);
-    if (control) control.value = value;
-}
-
-export function schemaformResynchronizeBoolean(id, checked) {
-    const control = document.getElementById(id);
-    if (!control) return;
-    if (control instanceof HTMLSelectElement) {
-        control.value = checked === undefined ? "" : String(checked);
-    } else {
-        control.checked = checked === true;
-    }
-}
-"#)]
-extern "C" {
-    #[wasm_bindgen::prelude::wasm_bindgen(js_name = schemaformResynchronizeControlValue)]
-    fn resynchronize_control_value(control_id: &str, value: &str);
-
-    #[wasm_bindgen::prelude::wasm_bindgen(js_name = schemaformResynchronizeBoolean)]
-    fn resynchronize_boolean(control_id: &str, checked: Option<bool>);
-}
-
-#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-fn resynchronize_control_value(_control_id: &str, _value: &str) {}
-
-#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-fn resynchronize_boolean(_control_id: &str, _checked: Option<bool>) {}
 
 fn render_local_findings(
     form: &render::BoundForm,

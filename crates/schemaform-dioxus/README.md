@@ -3,14 +3,14 @@
 [![crates.io](https://img.shields.io/crates/v/schemaform-dioxus?style=flat-square)](https://crates.io/crates/schemaform-dioxus)
 [![docs.rs](https://img.shields.io/docsrs/schemaform-dioxus?style=flat-square)](https://docs.rs/schemaform-dioxus)
 
-**Browser-CSR [Dioxus](https://dioxuslabs.com) adapter for runtime JSON Schema
+**Client-side [Dioxus](https://dioxuslabs.com) adapter for runtime JSON Schema
 forms.**
 
 `schemaform-dioxus` renders a [`schemaform`](../schemaform/README.md)
-`FormDefinition` as accessible, unstyled semantic HTML in a Dioxus browser
-client-side-rendered application. It keeps Dioxus state out of the core engine
-and provides explicit control renderer, structure renderer, finding presenter,
-localization, and extension seams.
+`FormDefinition` as accessible, unstyled semantic HTML in a client-side-rendered
+Dioxus application: a browser, or a desktop or mobile WebView. It keeps Dioxus
+state out of the core engine and provides explicit control renderer, structure
+renderer, finding presenter, localization, and extension seams.
 
 ## Install
 
@@ -579,13 +579,36 @@ interface. Text is rendered as escaped plain text.
 | Host transactions | `HandleTransactionError` |
 | Submission | `SchemaForm::on_submit` for a ready snapshot; optional `SchemaForm::on_error` for adapter failures |
 
-This package supports browser CSR. SSR, hydration, desktop/WebView execution,
+This package supports client-side rendering. Browser CSR is the tested platform:
+the repository's real-DOM suite and interaction matrix run there. Desktop and
+mobile WebViews share the same code path — every DOM touch (focus movement and
+putting canonical values back into widgets after the core rejects a write) runs
+through Dioxus's `document::eval` with fixed scripts — so the suite is evidence
+for the scripts, while evidence that each WebView's transport reaches them is a
+manual smoke checklist ([#32](https://github.com/sagikazarmark/schemaform/issues/32)).
+SSR, hydration,
 transport, authentication, retries, and pending/success lifecycle are outside
-its scope. It inherits the core trust boundary: data schemas must be
-application-trusted for evaluator work, referenced resources are supplied in
-memory, and structural limits are not hostile-schema execution containment. It
-also inherits the core capability boundary: nullable support is limited to
-scalar controls, while nullable fixed objects and arrays are capability-blocking.
+its scope.
+
+Three consequences of that bridge are visible to a host:
+
+- The renderer must provide a Dioxus `Document`. `dioxus-web` does behind its
+  `document` feature, which is on by default; a host that disables default
+  features must enable `document` again, or focus management and
+  resynchronisation silently do nothing.
+- On the web, `document::eval` runs scripts through `new Function`, so a
+  Content-Security-Policy must allow `'unsafe-eval'` for focus management and
+  resynchronisation to work. The form otherwise functions without them.
+- Focus movement and resynchronisation are asynchronous: they land within a few
+  tasks of the triggering interaction rather than before its handler returns.
+  A `TargetFocusAction` captures its document when it is created and may be
+  invoked from any callback, with or without a Dioxus runtime on the stack.
+
+It inherits the core trust boundary: data schemas must be application-trusted
+for evaluator work, referenced resources are supplied in memory, and structural
+limits are not hostile-schema execution containment. It also inherits the core
+capability boundary: nullable support is limited to scalar controls, while
+nullable fixed objects and arrays are capability-blocking.
 
 ## Feature Flags
 

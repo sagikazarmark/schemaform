@@ -388,12 +388,12 @@ impl FormHandle {
     }
 }
 
-/// Creates one browser-local [`FormHandle`] for the current Dioxus component scope.
+/// Creates one client-local [`FormHandle`] for the current Dioxus component scope.
 ///
-/// This is a Dioxus hook for browser client-side rendering. Call it unconditionally in a
-/// stable hook order; construction runs only on the initial hook invocation, so later input
-/// changes must be applied explicitly through [`FormHandle::reinitialize`]. SSR, hydration,
-/// desktop/WebView runtimes, and cross-thread ownership are outside this adapter's contract.
+/// This is a Dioxus hook for client-side rendering. Call it unconditionally in a stable hook
+/// order; construction runs only on the initial hook invocation, so later input changes must be
+/// applied explicitly through [`FormHandle::reinitialize`]. SSR, hydration, and cross-thread
+/// ownership are outside this adapter's contract.
 pub fn use_form(
     definition: FormDefinition,
     form_data: Value,

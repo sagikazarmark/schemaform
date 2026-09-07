@@ -19,4 +19,4 @@ dioxus = { workspace = true }
 dioxus-web = { workspace = true }
 serde_json = { workspace = true }
 wasm-bindgen = { workspace = true }
-web-sys = { workspace = true, features = ["Performance", "Window"] }
+web-sys = { workspace = true, features = ["Location", "Performance", "Window"] }
