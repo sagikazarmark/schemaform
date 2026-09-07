@@ -597,14 +597,7 @@ pub mod definition {
                             creation_seed: control.creation_seed().cloned(),
                             required: control.is_required(),
                             accepts_null: control.accepts_null(),
-                            choice_options: control
-                                .choices()
-                                .cloned()
-                                .map(|value| ChoiceOption {
-                                    label: scalar_choice_label(&value),
-                                    value,
-                                })
-                                .collect(),
+                            choice_options: control.choices().map(choice_option).collect(),
                             choice_selectable: control.is_choice(),
                             owning_array_binding: None,
                             schema_locations: collect_schema_locations(control.schema_locations()),
@@ -646,30 +639,21 @@ pub mod definition {
                     owning_array_binding: Some(array_binding.clone()),
                     schema_locations: collect_schema_locations(object.schema_locations()),
                 }));
-                generated_nodes.extend(array.item_controls().map(|item| {
-                    GeneratedNode {
-                        binding: item.binding().to_owned(),
-                        parent_binding: item.parent_binding().map(str::to_owned),
-                        kind: DefinitionNodeKind::Control,
-                        semantic_kind: Some(control_semantic_kind(item)),
-                        label: item.label().to_owned(),
-                        help: item.help().map(str::to_owned),
-                        data_schema_annotations: item.data_schema_annotations().clone(),
-                        creation_seed: item.creation_seed().cloned(),
-                        required: item.is_required(),
-                        accepts_null: item.accepts_null(),
-                        choice_options: item
-                            .choices()
-                            .cloned()
-                            .map(|value| ChoiceOption {
-                                label: scalar_choice_label(&value),
-                                value,
-                            })
-                            .collect(),
-                        choice_selectable: item.is_choice(),
-                        owning_array_binding: Some(array_binding.clone()),
-                        schema_locations: collect_schema_locations(item.schema_locations()),
-                    }
+                generated_nodes.extend(array.item_controls().map(|item| GeneratedNode {
+                    binding: item.binding().to_owned(),
+                    parent_binding: item.parent_binding().map(str::to_owned),
+                    kind: DefinitionNodeKind::Control,
+                    semantic_kind: Some(control_semantic_kind(item)),
+                    label: item.label().to_owned(),
+                    help: item.help().map(str::to_owned),
+                    data_schema_annotations: item.data_schema_annotations().clone(),
+                    creation_seed: item.creation_seed().cloned(),
+                    required: item.is_required(),
+                    accepts_null: item.accepts_null(),
+                    choice_options: item.choices().map(choice_option).collect(),
+                    choice_selectable: item.is_choice(),
+                    owning_array_binding: Some(array_binding.clone()),
+                    schema_locations: collect_schema_locations(item.schema_locations()),
                 }));
             }
             let capability_report = CapabilityReport {
@@ -2586,13 +2570,14 @@ pub mod definition {
         HomogeneousArray,
     }
 
-    /// One owned compiled scalar choice and its display label.
+    /// One owned compiled scalar choice, its display label, and optional description.
     ///
     /// Definition inspection exposes borrowed [`ChoiceOptionView`] values.
     #[derive(Debug, Clone, PartialEq)]
     pub struct ChoiceOption {
         value: Value,
         label: String,
+        description: Option<String>,
     }
 
     /// A borrowed view of one compiled scalar choice.
@@ -2608,8 +2593,20 @@ pub mod definition {
         }
 
         /// Returns the option's compiled plain-text display label.
+        ///
+        /// A constant choice contributes its branch `title`; otherwise the label
+        /// is the stringified value.
         pub fn label(self) -> &'a str {
             &self.option.label
+        }
+
+        /// Returns the option's compiled plain-text description, when its
+        /// source authored one.
+        ///
+        /// Only a constant choice carries per-option descriptions; `enum` and
+        /// `const` options have none.
+        pub fn description(self) -> Option<&'a str> {
+            self.option.description.as_deref()
         }
     }
 
@@ -3022,7 +3019,11 @@ pub mod definition {
         ///   `applicator.additional-properties.open`: `{"implicit":boolean}`;
         /// - `applicator.all-of.ambiguous`:
         ///   `{"branchCount":integer,"reason":"incompatible-kind"}`;
-        /// - `applicator.any-of` and `applicator.one-of`: `{"branchCount":integer}`;
+        /// - `applicator.any-of` and `applicator.one-of`:
+        ///   `{"branchCount":integer,"reason":"boolean-branch"|"duplicate-constant"|"non-constant-branch"}`,
+        ///   naming the first cause that disqualified the applicator as a constant
+        ///   choice;
+        /// - `applicator.constant-choices.incompatible`: `{"keyword":"anyOf"|"oneOf"}`;
         /// - `applicator.prefix-items`: `{"itemCount":integer}`;
         /// - `applicator.properties.conditional`: `{"branch":"then"|"else"}`;
         /// - `structure.array.homogeneous-scalar`: `{}` or
@@ -3086,7 +3087,7 @@ pub mod definition {
         profile: &CompilationProfile,
     ) -> DefinitionFingerprint {
         let mut hasher = Sha256::new();
-        hasher.update(b"schemaform-definition-v18\0");
+        hasher.update(b"schemaform-definition-v19\0");
         hash_bytes(&mut hasher, engine.fingerprint_bytes());
         hash_bytes(&mut hasher, root_uri.as_str().as_bytes());
         for maximum in profile.ui_schema_limits().values() {
@@ -3188,6 +3189,12 @@ pub mod definition {
             for option in &node.choice_options {
                 hash_bytes(&mut hasher, option.label.as_bytes());
                 hash_bytes(&mut hasher, option.value.to_string().as_bytes());
+                if let Some(description) = &option.description {
+                    hasher.update([1]);
+                    hash_bytes(&mut hasher, description.as_bytes());
+                } else {
+                    hasher.update([0]);
+                }
             }
             hasher.update([match node.semantic_kind {
                 None => 0,
@@ -3260,6 +3267,16 @@ pub mod definition {
         hasher.update((values.len() as u64).to_be_bytes());
         for value in values {
             hasher.update(engine::semantic_json_fingerprint(value));
+        }
+    }
+
+    fn choice_option(choice: &engine::CompiledChoice) -> ChoiceOption {
+        ChoiceOption {
+            label: choice
+                .title()
+                .map_or_else(|| scalar_choice_label(choice.value()), str::to_owned),
+            description: choice.description().map(str::to_owned),
+            value: choice.value().clone(),
         }
     }
 

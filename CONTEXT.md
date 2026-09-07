@@ -127,3 +127,7 @@ _Avoid_: Validation error, parse error
 **Capability finding**:
 A finding that a valid data schema or UI schema construct cannot be represented faithfully in the form tree.
 _Avoid_: Validation error, unsupported-schema error
+
+**Constant choice**:
+A finite scalar choice set declared as a `oneOf` or `anyOf` whose every branch asserts one constant and otherwise only annotates it. It validates like `enum` and carries per-option titles, descriptions and authored order.
+_Avoid_: Titled enum, enumNames, labelled enum, oneOf enum

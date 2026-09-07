@@ -192,12 +192,13 @@ fn resource_compilation(input: &[u8]) -> Outcome {
     let property_count = usize::from(input.get(1).copied().unwrap_or(0) % 9);
     let properties = (0..property_count)
         .map(|index| {
-            let kind = input.get(index + 2).copied().unwrap_or(0) % 4;
-            let schema = match kind {
+            let property_selector = input.get(index + 2).copied().unwrap_or(0);
+            let schema = match property_selector % 5 {
                 0 => json!({ "type": "string" }),
                 1 => json!({ "type": "integer" }),
                 2 => json!({ "type": "boolean" }),
-                _ => json!({ "type": ["null", "string"] }),
+                3 => json!({ "type": ["null", "string"] }),
+                _ => constant_choice_property(property_selector / 5),
             };
             (format!("field{index}"), schema)
         })
@@ -226,6 +227,43 @@ fn resource_compilation(input: &[u8]) -> Outcome {
         None
     };
     Outcome::ResourceCompile(compile(schema, resource))
+}
+
+/// A reviewed `oneOf`/`anyOf` property shape around constant-choice recognition.
+///
+/// The even variants are recognized constant choices; the odd variants keep one
+/// disqualifying cause each, so mutation reaches both the projection and the
+/// blocking-finding path without composing an unreviewed schema.
+fn constant_choice_property(variant: u8) -> Value {
+    match variant % 4 {
+        0 => json!({
+            "oneOf": [
+                { "const": "low", "title": "Low priority" },
+                { "const": "high", "title": "High priority", "description": "Needs attention now" }
+            ]
+        }),
+        1 => json!({
+            "oneOf": [
+                { "const": "same", "title": "First" },
+                { "const": "same", "title": "Duplicate constant" }
+            ]
+        }),
+        2 => json!({
+            "anyOf": [
+                { "const": null, "title": "Not specified" },
+                { "const": 1, "type": "integer", "title": "One" },
+                { "const": true },
+                { "const": "eu", "type": ["string", "null"], "title": "Europe" },
+                { "const": "eu", "title": "Merged duplicate" }
+            ]
+        }),
+        _ => json!({
+            "anyOf": [
+                { "const": "a", "title": "Constant" },
+                { "type": "string", "minLength": 1 }
+            ]
+        }),
+    }
 }
 
 fn compile(
@@ -349,6 +387,12 @@ fn reviewed_definition_schema() -> Value {
         "properties": {
             "name": { "type": "string" },
             "age": { "type": ["null", "integer"] },
+            "priority": {
+                "oneOf": [
+                    { "const": "low", "title": "Low priority" },
+                    { "const": "high", "title": "High priority", "description": "Needs attention now" }
+                ]
+            },
             "tags": {
                 "type": "array",
                 "maxItems": 16,
@@ -414,6 +458,16 @@ pub fn retained_cases() -> &'static [RetainedCase] {
         },
         RetainedCase {
             target: Target::ResourceCompilation,
+            source: "corpus",
+            name: "corpus-constant-choice",
+            input: include_bytes!(
+                "../../../fuzz/corpus/resource_compilation/corpus-constant-choice"
+            ),
+            expected_outcome: "resource-compile:success",
+            expected_digest: "87320c975bec29b10bd57883ac63f431495cec6e76d0a2f0620aa5b3489a2388",
+        },
+        RetainedCase {
+            target: Target::ResourceCompilation,
             source: "regression",
             name: "regression-unresolved",
             input: include_bytes!(
@@ -454,7 +508,7 @@ pub fn retained_cases() -> &'static [RetainedCase] {
             name: "official-empty-object",
             input: include_bytes!("../../../fuzz/corpus/form_construction/official-empty-object"),
             expected_outcome: "form:success",
-            expected_digest: "23e6fa56d5fbe11c2cee110d993cd1af248f594900e7d9846cf636135a33a0cc",
+            expected_digest: "4d4e3685d60edecd9cb117d2d4c41a69e5b3cdf7bd7291d6c7c931cf5c3ee933",
         },
         RetainedCase {
             target: Target::FormConstruction,
@@ -462,7 +516,15 @@ pub fn retained_cases() -> &'static [RetainedCase] {
             name: "corpus-business-data",
             input: include_bytes!("../../../fuzz/corpus/form_construction/corpus-business-data"),
             expected_outcome: "form:success",
-            expected_digest: "23733f9b42730520a7d712274cf6c9affde8dd24dc863248600f0b3beb4a0d84",
+            expected_digest: "893bbe98b49ddcb445619504938200c9d6eef7cc575eb738bc499e4edefc00ef",
+        },
+        RetainedCase {
+            target: Target::FormConstruction,
+            source: "corpus",
+            name: "corpus-constant-choice",
+            input: include_bytes!("../../../fuzz/corpus/form_construction/corpus-constant-choice"),
+            expected_outcome: "form:success",
+            expected_digest: "e86578542dc05aff96839154f3ae3ae9743b25ad373fa720eccfb36aabb44c2a",
         },
         RetainedCase {
             target: Target::FormConstruction,
@@ -472,7 +534,7 @@ pub fn retained_cases() -> &'static [RetainedCase] {
                 "../../../fuzz/corpus/form_construction/regression-incompatible-array"
             ),
             expected_outcome: "form:success",
-            expected_digest: "b07882a5943c49ad0631cae79afa94756f581b9cc723eda29c35cf5d4149eaa8",
+            expected_digest: "dd6f287768ff3531b61dd58f3cce6dd663160e5a2ea60274646ddd6532c20f6b",
         },
         RetainedCase {
             target: Target::UriPointer,

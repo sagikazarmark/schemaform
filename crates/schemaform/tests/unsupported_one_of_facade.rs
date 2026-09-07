@@ -58,7 +58,10 @@ fn strict_and_lenient_compilation_report_the_same_located_one_of_capability() {
         finding.keyword_location().pointer().as_str(),
         "/properties/contact/oneOf"
     );
-    assert_eq!(finding.parameters(), &json!({ "branchCount": 2 }));
+    assert_eq!(
+        finding.parameters(),
+        &json!({ "branchCount": 2, "reason": "non-constant-branch" })
+    );
     assert!(finding.is_blocking());
 
     let definition = analysis.definition();

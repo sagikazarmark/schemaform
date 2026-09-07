@@ -19,6 +19,19 @@ and nullable arrays are capability-blocking. Optional container properties may
 be absent but do not accept null. Unsupported editing semantics are reported
 explicitly rather than guessed or silently omitted.
 
+Finite scalar choices come from `enum`, `const`, or a constant choice: a `oneOf`
+or `anyOf` whose every branch is one scalar `const` plus annotations (`title`,
+`description`, `$comment`, `deprecated`, `examples`, and keywords outside the
+Draft 2020-12 vocabularies), optionally with a `type` the constant satisfies. A
+constant choice compiles to the same choice control as `enum` with each option
+labeled by its branch `title`, carrying its branch `description`, in authored
+branch order; `enum` options stay sorted by value as before. Every other `oneOf`
+or `anyOf` — a branch with any further assertion, applicator or annotation such
+as `default`, a boolean-schema branch, or a `oneOf` with duplicate constants —
+remains capability-blocking, and the finding names the reason. A multi-select
+presentation for arrays of constant choices is out of scope; such an array
+compiles to a homogeneous array of labeled choice items.
+
 Use [`schemaform-dioxus`](../schemaform-dioxus/README.md) to render a compiled
 definition in a Dioxus browser application.
 

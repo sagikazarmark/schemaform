@@ -15,10 +15,9 @@ fn target_specific_seed_classes_replay_deterministically() {
             .iter()
             .filter(|case| case.target == target)
             .collect::<Vec<_>>();
-        assert_eq!(
-            target_cases.len(),
-            3,
-            "each target retains all three seed classes"
+        assert!(
+            target_cases.len() >= 3,
+            "each target retains at least one seed per class"
         );
         let primary_class = match target {
             Target::UserCommands | Target::HostTransactions | Target::ExternalFindings => "model",

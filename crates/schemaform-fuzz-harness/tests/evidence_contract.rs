@@ -225,7 +225,16 @@ fn machine_readable_contract_matches_the_settled_fuzz_evidence() {
                 .collect::<BTreeSet<_>>(),
             expected_classes
         );
-        assert_eq!(target.seeds.len(), 3);
+        assert_eq!(
+            target
+                .seeds
+                .iter()
+                .map(|seed| seed.source.as_str())
+                .collect::<BTreeSet<_>>(),
+            expected_classes,
+            "{} retains at least one seed per class and no seed outside its classes",
+            target.name
+        );
         for seed in &target.seeds {
             let retained = retained_cases()
                 .iter()
@@ -272,7 +281,15 @@ fn machine_readable_contract_matches_the_settled_fuzz_evidence() {
         }
     }
 
-    assert_eq!(retained_cases().len(), Target::ALL.len() * 3);
+    assert_eq!(
+        retained_cases().len(),
+        contract
+            .targets
+            .iter()
+            .map(|target| target.seeds.len())
+            .sum::<usize>(),
+        "every retained case is contracted and every contracted seed is retained"
+    );
 }
 
 fn assert_input_decoder(

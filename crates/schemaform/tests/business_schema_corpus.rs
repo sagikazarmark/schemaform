@@ -353,6 +353,23 @@ fn support_profile_is_complete_and_matches_corpus_classifications() {
             "capability-blocking",
             "implemented",
         ),
+        (
+            "applicator.one-of.constant-choices",
+            "editing",
+            "implemented",
+        ),
+        ("applicator.one-of", "capability-blocking", "implemented"),
+        (
+            "applicator.any-of.constant-choices",
+            "editing",
+            "implemented",
+        ),
+        ("applicator.any-of", "capability-blocking", "implemented"),
+        (
+            "applicator.constant-choices.incompatible",
+            "capability-blocking",
+            "implemented",
+        ),
         ("validation.unique-items", "validation-only", "implemented"),
         ("validation.contains", "validation-only", "implemented"),
         ("validation.min-contains", "validation-only", "implemented"),

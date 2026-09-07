@@ -509,7 +509,7 @@ fn compile_properties<'a>(
 
         match (choices, kind) {
             (Some(choices), _) => {
-                let accepts_null = choices.values.iter().any(Value::is_null);
+                let accepts_null = choices.values.iter().any(|choice| choice.value.is_null());
                 let kind = if choices.null_only {
                     ControlKind::Null
                 } else if choices.selectable {
@@ -815,7 +815,7 @@ fn compile_homogeneous_array<'a>(
     }
     let (item_kind, item_choices, accepts_null) = match (choices, kind) {
         (Some(choices), _) => {
-            let accepts_null = choices.values.iter().any(Value::is_null);
+            let accepts_null = choices.values.iter().any(|choice| choice.value.is_null());
             let kind = if choices.null_only {
                 ControlKind::Null
             } else if choices.selectable {
@@ -1182,7 +1182,7 @@ fn sort_annotation_values(values: &mut [Value]) {
 
 fn scalar_creation_seed(
     kind: ControlKind,
-    choices: &[Value],
+    choices: &[CompiledChoice],
     annotations: &DataSchemaAnnotations,
 ) -> Option<Value> {
     let eligible = annotations
@@ -1201,7 +1201,7 @@ fn scalar_creation_seed(
 
 fn array_item_creation_seed(
     kind: ControlKind,
-    choices: &[Value],
+    choices: &[CompiledChoice],
     accepts_null: bool,
     annotations: &DataSchemaAnnotations,
 ) -> Option<Value> {
@@ -1221,21 +1221,25 @@ fn array_item_creation_seed(
     minimal_scalar_seed(kind, choices)
 }
 
-fn minimal_scalar_seed(kind: ControlKind, choices: &[Value]) -> Option<Value> {
+fn minimal_scalar_seed(kind: ControlKind, choices: &[CompiledChoice]) -> Option<Value> {
     match kind {
         ControlKind::String => Some(Value::String(String::new())),
         ControlKind::Number | ControlKind::Integer => Some(serde_json::json!(0)),
         ControlKind::Boolean => Some(Value::Bool(false)),
         ControlKind::Choice | ControlKind::Constant => choices
             .iter()
-            .find(|value| !value.is_null())
+            .find(|choice| !choice.value.is_null())
             .or_else(|| choices.first())
-            .cloned(),
+            .map(|choice| choice.value.clone()),
         ControlKind::Null => Some(Value::Null),
     }
 }
 
-fn scalar_value_is_compatible(kind: ControlKind, choices: &[Value], value: &Value) -> bool {
+fn scalar_value_is_compatible(
+    kind: ControlKind,
+    choices: &[CompiledChoice],
+    value: &Value,
+) -> bool {
     match kind {
         ControlKind::String => value.is_string(),
         ControlKind::Number => value.is_number(),
@@ -1245,7 +1249,7 @@ fn scalar_value_is_compatible(kind: ControlKind, choices: &[Value], value: &Valu
         ControlKind::Boolean => value.is_boolean(),
         ControlKind::Choice | ControlKind::Constant | ControlKind::Null => choices
             .iter()
-            .any(|choice| json_values_equal(choice, value)),
+            .any(|choice| json_values_equal(&choice.value, value)),
     }
 }
 
@@ -1454,18 +1458,14 @@ fn deferred_shape_findings(
     independent_kind: Option<ProjectedKind>,
     has_finite_choices: bool,
 ) -> Vec<UnsupportedFinding> {
-    let mut findings = array_applicator_findings(applicable, "oneOf", "applicator.one-of");
-    findings.extend(array_applicator_findings(
+    let mut findings = branch_applicator_findings(applicable, "oneOf", "applicator.one-of");
+    findings.extend(branch_applicator_findings(
         applicable,
         "anyOf",
         "applicator.any-of",
     ));
     if array_may_apply(applicable) {
-        findings.extend(array_applicator_findings(
-            applicable,
-            "prefixItems",
-            "applicator.prefix-items",
-        ));
+        findings.extend(prefix_items_findings(applicable));
     }
 
     if independent_kind.is_none() && !has_finite_choices {
@@ -1765,14 +1765,21 @@ fn dynamic_object_shape_findings(
     findings.into_values().collect()
 }
 
-fn array_applicator_findings(
+/// Blocking findings for every `oneOf`/`anyOf` that is not a constant choice.
+///
+/// A recognized constant choice is projected by [`scalar_choices`] and emits
+/// nothing here; a disqualified one keeps the general branch-selection finding
+/// and names the first disqualifying cause. Recognition is repeated rather than
+/// threaded through from `scalar_choices` so this pass stays independent of the
+/// choice derivation's own early exits.
+fn branch_applicator_findings(
     applicable: &[LocatedSchema<'_>],
     keyword: &'static str,
     code: &'static str,
 ) -> Vec<UnsupportedFinding> {
     let mut findings = BTreeMap::new();
-    for located in applicable {
-        let Some(values) = located.schema.get(keyword).and_then(Value::as_array) else {
+    for (located, branches) in branch_applicators(applicable, keyword) {
+        let Err(reason) = recognize_constant_choice(keyword, branches) else {
             continue;
         };
         let keyword_location = append_pointer(Some(&located.pointer), [keyword]);
@@ -1782,11 +1789,30 @@ fn array_applicator_findings(
                 code,
                 keyword_location,
                 resource: located.resource.clone(),
-                parameters: if keyword == "prefixItems" {
-                    serde_json::json!({ "itemCount": values.len() })
-                } else {
-                    serde_json::json!({ "branchCount": values.len() })
-                },
+                parameters: serde_json::json!({
+                    "branchCount": branches.len(),
+                    "reason": reason,
+                }),
+            },
+        );
+    }
+    findings.into_values().collect()
+}
+
+fn prefix_items_findings(applicable: &[LocatedSchema<'_>]) -> Vec<UnsupportedFinding> {
+    let mut findings = BTreeMap::new();
+    for located in applicable {
+        let Some(values) = located.schema.get("prefixItems").and_then(Value::as_array) else {
+            continue;
+        };
+        let keyword_location = append_pointer(Some(&located.pointer), ["prefixItems"]);
+        findings.insert(
+            (located.resource.clone(), keyword_location.to_string()),
+            UnsupportedFinding {
+                code: "applicator.prefix-items",
+                keyword_location,
+                resource: located.resource.clone(),
+                parameters: serde_json::json!({ "itemCount": values.len() }),
             },
         );
     }
@@ -2573,8 +2599,40 @@ fn projected_kind(kind: &str) -> Option<ProjectedKind> {
     }
 }
 
+/// One compiled scalar option together with the per-option annotations its
+/// source contributed. `enum` and `const` contribute none; a constant choice
+/// contributes the branch `title` and `description`.
+#[derive(Clone, Debug)]
+pub struct CompiledChoice {
+    value: Value,
+    title: Option<String>,
+    description: Option<String>,
+}
+
+impl CompiledChoice {
+    fn unannotated(value: Value) -> Self {
+        Self {
+            value,
+            title: None,
+            description: None,
+        }
+    }
+
+    pub fn value(&self) -> &Value {
+        &self.value
+    }
+
+    pub fn title(&self) -> Option<&str> {
+        self.title.as_deref()
+    }
+
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+}
+
 struct ScalarChoices {
-    values: Vec<Value>,
+    values: Vec<CompiledChoice>,
     selectable: bool,
     null_only: bool,
 }
@@ -2597,10 +2655,11 @@ fn scalar_choices(
         .iter()
         .filter_map(|located| located.schema.get("const").map(|value| (located, value)))
         .collect::<Vec<_>>();
-    let null_only = enumerations.is_empty()
-        && constants.is_empty()
-        && independent_kind == Some(ProjectedKind::Null);
-    if enumerations.is_empty() && constants.is_empty() && !null_only {
+    let constant_choices = recognized_constant_choices(applicable);
+    let has_source =
+        !enumerations.is_empty() || !constants.is_empty() || !constant_choices.is_empty();
+    let null_only = !has_source && independent_kind == Some(ProjectedKind::Null);
+    if !has_source && !null_only {
         return Ok(None);
     }
 
@@ -2630,36 +2689,46 @@ fn scalar_choices(
         }]);
     }
 
-    let mut values = if let Some((_, first)) = enumerations.first() {
-        first.to_vec()
+    // The first recognized constant choice seeds the option set so its authored
+    // branch order and annotations survive; every other source only narrows it.
+    let mut enumeration_sources = enumerations.iter().map(|(_, values)| *values);
+    let mut values = if let Some(first) = constant_choices.first() {
+        first.choices.clone()
+    } else if let Some(first) = enumeration_sources.next() {
+        first
+            .iter()
+            .cloned()
+            .map(CompiledChoice::unannotated)
+            .collect::<Vec<_>>()
     } else if let Some((_, value)) = constants.first() {
-        vec![(*value).clone()]
+        vec![CompiledChoice::unannotated((*value).clone())]
     } else {
-        vec![Value::Null]
+        vec![CompiledChoice::unannotated(Value::Null)]
     };
-    for (_, choices) in enumerations.iter().skip(1) {
-        values.retain(|candidate| {
-            choices
-                .iter()
-                .any(|choice| json_values_equal(candidate, choice))
-        });
+    for other in constant_choices.iter().skip(1) {
+        retain_allowed_choices(
+            &mut values,
+            other.choices.iter().map(|choice| &choice.value),
+        );
+    }
+    for choices in enumeration_sources {
+        retain_allowed_choices(&mut values, choices.iter());
     }
     for (_, constant) in &constants {
-        values.retain(|candidate| json_values_equal(candidate, constant));
+        retain_allowed_choices(&mut values, std::iter::once(*constant));
     }
     values.retain(|candidate| {
         applicable.iter().all(|located| {
             located.schema.as_bool() != Some(false)
-                && located
-                    .schema
-                    .get("type")
-                    .is_none_or(|declared| value_matches_type_declaration(candidate, declared))
+                && located.schema.get("type").is_none_or(|declared| {
+                    value_matches_type_declaration(&candidate.value, declared)
+                })
         })
     });
 
     let structured = values
         .iter()
-        .any(|value| value.is_array() || value.is_object());
+        .any(|choice| choice.value.is_array() || choice.value.is_object());
     if structured {
         let (located, keyword, code) = if let Some((located, _)) = enumerations.first() {
             (*located, "enum", "validation.enum.structured")
@@ -2677,17 +2746,27 @@ fn scalar_choices(
         }]);
     }
 
-    let mut unique = Vec::with_capacity(values.len());
+    let mut unique: Vec<CompiledChoice> = Vec::with_capacity(values.len());
     for value in values {
         if !unique
             .iter()
-            .any(|existing| json_values_equal(existing, &value))
+            .any(|existing| json_values_equal(&existing.value, &value.value))
         {
             unique.push(value);
         }
     }
-    unique.sort_by_key(scalar_choice_sort_key);
+    if constant_choices.is_empty() {
+        unique.sort_by_key(|choice| scalar_choice_sort_key(&choice.value));
+    }
     if unique.is_empty() {
+        if let Some(first) = constant_choices.first() {
+            return Err(vec![UnsupportedFinding {
+                code: "applicator.constant-choices.incompatible",
+                keyword_location: first.keyword_location.clone(),
+                resource: first.located.resource.clone(),
+                parameters: serde_json::json!({ "keyword": first.keyword }),
+            }]);
+        }
         let (located, keyword, code) = if let Some((located, _)) = enumerations.first() {
             (*located, "enum", "validation.enum.incompatible")
         } else {
@@ -2706,9 +2785,239 @@ fn scalar_choices(
 
     Ok(Some(ScalarChoices {
         values: unique,
-        selectable: !enumerations.is_empty() && constants.is_empty(),
+        selectable: (!enumerations.is_empty() || !constant_choices.is_empty())
+            && constants.is_empty(),
         null_only,
     }))
+}
+
+/// Every keyword the Draft 2020-12 vocabularies define. A keyword outside this
+/// list is unknown to the dialect and therefore an annotation, which a
+/// constant-choice branch may carry freely.
+const DRAFT_2020_12_KEYWORDS: &[&str] = &[
+    "$anchor",
+    "$comment",
+    "$defs",
+    "$dynamicAnchor",
+    "$dynamicRef",
+    "$id",
+    "$ref",
+    "$schema",
+    "$vocabulary",
+    "additionalProperties",
+    "allOf",
+    "anyOf",
+    "const",
+    "contains",
+    "contentEncoding",
+    "contentMediaType",
+    "contentSchema",
+    "default",
+    "dependentRequired",
+    "dependentSchemas",
+    "deprecated",
+    "description",
+    "else",
+    "enum",
+    "examples",
+    "exclusiveMaximum",
+    "exclusiveMinimum",
+    "format",
+    "if",
+    "items",
+    "maxContains",
+    "maxItems",
+    "maxLength",
+    "maxProperties",
+    "maximum",
+    "minContains",
+    "minItems",
+    "minLength",
+    "minProperties",
+    "minimum",
+    "multipleOf",
+    "not",
+    "oneOf",
+    "pattern",
+    "patternProperties",
+    "prefixItems",
+    "properties",
+    "propertyNames",
+    "readOnly",
+    "required",
+    "then",
+    "title",
+    "type",
+    "unevaluatedItems",
+    "unevaluatedProperties",
+    "uniqueItems",
+    "writeOnly",
+];
+
+/// The dialect keywords a constant-choice branch may carry: the constant itself,
+/// a `type` the constant satisfies, and the descriptive annotations the
+/// recognition rule admits. `default`, `readOnly`, `writeOnly` and `format` are
+/// deliberately absent: they carry meaning beyond describing the option, so a
+/// branch using them stays a general applicator.
+const CONSTANT_BRANCH_KEYWORDS: &[&str] = &[
+    "const",
+    "type",
+    "title",
+    "description",
+    "$comment",
+    "deprecated",
+    "examples",
+];
+
+/// One `oneOf`/`anyOf` keyword recognized as a constant choice. The list these
+/// are collected into is in canonical location order, so its first entry seeds
+/// option order and labels.
+struct RecognizedConstantChoice<'a> {
+    located: &'a LocatedSchema<'a>,
+    keyword: &'static str,
+    keyword_location: PointerBuf,
+    choices: Vec<CompiledChoice>,
+}
+
+/// Every `oneOf`/`anyOf` value among the applicable schemas, with its origin.
+fn branch_applicators<'a>(
+    applicable: &'a [LocatedSchema<'a>],
+    keyword: &'static str,
+) -> impl Iterator<Item = (&'a LocatedSchema<'a>, &'a [Value])> {
+    applicable.iter().filter_map(move |located| {
+        located
+            .schema
+            .get(keyword)
+            .and_then(Value::as_array)
+            .map(|branches| (located, branches.as_slice()))
+    })
+}
+
+fn recognized_constant_choices<'a>(
+    applicable: &'a [LocatedSchema<'a>],
+) -> Vec<RecognizedConstantChoice<'a>> {
+    let mut recognized = Vec::new();
+    for keyword in ["anyOf", "oneOf"] {
+        for (located, branches) in branch_applicators(applicable, keyword) {
+            let Ok(choices) = recognize_constant_choice(keyword, branches) else {
+                continue;
+            };
+            recognized.push(RecognizedConstantChoice {
+                located,
+                keyword,
+                keyword_location: append_pointer(Some(&located.pointer), [keyword]),
+                choices,
+            });
+        }
+    }
+    recognized.sort_by(|left, right| {
+        (&left.located.resource, left.keyword_location.as_str())
+            .cmp(&(&right.located.resource, right.keyword_location.as_str()))
+    });
+    recognized
+}
+
+/// One branch of an applicator that passed the per-branch constant-choice checks.
+struct ConstantBranch<'a> {
+    constant: &'a Value,
+    /// Whether the branch's own `type`, if any, admits the constant. A branch
+    /// that fails this contributes no option but does not disqualify the applicator.
+    satisfies_type: bool,
+    members: &'a serde_json::Map<String, Value>,
+}
+
+/// Recognizes the constant-choice shape of one `oneOf`/`anyOf` value.
+///
+/// Every branch must be an object schema asserting one scalar `const`, optionally
+/// a `type`, and otherwise only annotations. `oneOf` constants must be pairwise
+/// distinct; `anyOf` merges duplicates with the first branch's annotations. A
+/// branch whose `type` the constant cannot satisfy contributes no option. The
+/// error names the first disqualifying cause for the blocking finding.
+///
+/// Qualification already rejects an empty applicator against the meta-schema,
+/// so `branches` is never empty here.
+fn recognize_constant_choice(
+    keyword: &str,
+    branches: &[Value],
+) -> Result<Vec<CompiledChoice>, &'static str> {
+    let mut constants = Vec::with_capacity(branches.len());
+    for branch in branches {
+        let Some(members) = branch.as_object() else {
+            return Err(if branch.is_boolean() {
+                "boolean-branch"
+            } else {
+                "non-constant-branch"
+            });
+        };
+        let Some(constant) = members.get("const") else {
+            return Err("non-constant-branch");
+        };
+        if constant.is_array() || constant.is_object() {
+            return Err("non-constant-branch");
+        }
+        let asserts_more = members.keys().any(|key| {
+            !CONSTANT_BRANCH_KEYWORDS.contains(&key.as_str())
+                && DRAFT_2020_12_KEYWORDS.contains(&key.as_str())
+        });
+        if asserts_more {
+            return Err("non-constant-branch");
+        }
+        constants.push(ConstantBranch {
+            constant,
+            satisfies_type: members
+                .get("type")
+                .is_none_or(|declared| value_matches_type_declaration(constant, declared)),
+            members,
+        });
+    }
+    if keyword == "oneOf" {
+        for (index, branch) in constants.iter().enumerate() {
+            if constants[..index]
+                .iter()
+                .any(|other| json_values_equal(other.constant, branch.constant))
+            {
+                return Err("duplicate-constant");
+            }
+        }
+    }
+
+    let mut choices: Vec<CompiledChoice> = Vec::with_capacity(constants.len());
+    for branch in constants {
+        if !branch.satisfies_type
+            || choices
+                .iter()
+                .any(|existing| json_values_equal(&existing.value, branch.constant))
+        {
+            continue;
+        }
+        choices.push(CompiledChoice {
+            value: branch.constant.clone(),
+            title: branch
+                .members
+                .get("title")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            description: branch
+                .members
+                .get("description")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+        });
+    }
+    Ok(choices)
+}
+
+/// Drops every choice whose value is not among `allowed`.
+fn retain_allowed_choices<'a>(
+    choices: &mut Vec<CompiledChoice>,
+    allowed: impl Iterator<Item = &'a Value>,
+) {
+    let allowed = allowed.collect::<Vec<_>>();
+    choices.retain(|candidate| {
+        allowed
+            .iter()
+            .any(|value| json_values_equal(&candidate.value, value))
+    });
 }
 
 fn value_matches_type_declaration(value: &Value, declaration: &Value) -> bool {
@@ -3104,7 +3413,7 @@ impl<'a> ControlDefinitionView<'a> {
         matches!(self.control.kind, ControlKind::Null)
     }
 
-    pub fn choices(&self) -> impl Iterator<Item = &'a Value> {
+    pub fn choices(&self) -> impl Iterator<Item = &'a CompiledChoice> {
         self.control.choices.iter()
     }
 
@@ -3790,8 +4099,8 @@ impl Form {
             .definition
             .choices
             .iter()
-            .find(|choice| json_values_equal(choice, value))
-            .cloned()
+            .find(|choice| json_values_equal(&choice.value, value))
+            .map(|choice| choice.value.clone())
             .unwrap_or_else(|| value.clone());
         let control_binding = PointerBuf::parse(binding.to_owned())
             .map_err(|_| EditError::UnknownControl(binding.to_owned()))?;
@@ -4715,7 +5024,7 @@ struct ControlDefinition {
     binding: PointerBuf,
     parent_binding: Option<PointerBuf>,
     kind: ControlKind,
-    choices: Vec<Value>,
+    choices: Vec<CompiledChoice>,
     accepts_null: bool,
     schema_locations: Vec<SchemaLocationDefinition>,
     presentation: NodePresentation,
@@ -4784,7 +5093,7 @@ fn control_value_is_compatible(control: &ControlDefinition, value: &Value) -> bo
         ControlKind::Choice | ControlKind::Constant | ControlKind::Null => control
             .choices
             .iter()
-            .any(|choice| json_values_equal(choice, value)),
+            .any(|choice| json_values_equal(&choice.value, value)),
     }
 }
 
@@ -4831,7 +5140,7 @@ fn fingerprint_compiled_definition(
     used_resources: &BTreeSet<String>,
 ) -> DefinitionFingerprint {
     let mut hasher = Sha256::new();
-    hasher.update(b"schemaform-compiled-definition-v15\0");
+    hasher.update(b"schemaform-compiled-definition-v16\0");
     hash_fingerprint_length(&mut hasher, controls.len());
     for control in controls {
         hash_fingerprint_bytes(&mut hasher, control.binding.as_str().as_bytes());
@@ -4854,10 +5163,7 @@ fn fingerprint_compiled_definition(
         }
         hasher.update([control.required as u8]);
         hasher.update([control.accepts_null as u8]);
-        hash_fingerprint_length(&mut hasher, control.choices.len());
-        for choice in &control.choices {
-            hash_json_value(&mut hasher, choice);
-        }
+        hash_compiled_choices(&mut hasher, &control.choices);
     }
     hash_fingerprint_length(&mut hasher, objects.len());
     for object in objects {
@@ -4901,10 +5207,7 @@ fn fingerprint_compiled_definition(
             hash_optional_fingerprint_bytes(&mut hasher, control.presentation.help.as_deref());
             hasher.update([control.required as u8]);
             hasher.update([control.accepts_null as u8]);
-            hash_fingerprint_length(&mut hasher, control.choices.len());
-            for choice in &control.choices {
-                hash_json_value(&mut hasher, choice);
-            }
+            hash_compiled_choices(&mut hasher, &control.choices);
         }
     }
     hash_fingerprint_length(&mut hasher, used_resources.len());
@@ -4919,6 +5222,15 @@ fn fingerprint_compiled_definition(
     }
 
     DefinitionFingerprint(hasher.finalize().into())
+}
+
+fn hash_compiled_choices(hasher: &mut Sha256, choices: &[CompiledChoice]) {
+    hash_fingerprint_length(hasher, choices.len());
+    for choice in choices {
+        hash_json_value(hasher, &choice.value);
+        hash_optional_fingerprint_bytes(hasher, choice.title.as_deref());
+        hash_optional_fingerprint_bytes(hasher, choice.description.as_deref());
+    }
 }
 
 fn hash_optional_usize(hasher: &mut Sha256, value: Option<usize>) {

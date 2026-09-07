@@ -504,7 +504,10 @@ fn lenient_analysis_reports_every_blocker_on_one_unsupported_region() {
     assert_eq!(
         findings,
         [
-            ("applicator.one-of", json!({ "branchCount": 2 })),
+            (
+                "applicator.one-of",
+                json!({ "branchCount": 2, "reason": "boolean-branch" }),
+            ),
             (
                 "applicator.all-of.ambiguous",
                 json!({ "branchCount": 2, "reason": "incompatible-kind" }),

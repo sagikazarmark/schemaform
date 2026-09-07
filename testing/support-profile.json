@@ -88,6 +88,20 @@
         ]
       },
       {
+        "id": "constant-choice-facade",
+        "path": "crates/schemaform/tests/constant_choice_facade.rs",
+        "platforms": ["native"],
+        "tests": [
+          "titled_one_of_and_any_of_strings_compile_to_a_labeled_choice_in_authored_order",
+          "mixed_scalar_constants_round_trip_with_type_filtering_title_fallback_and_descriptions",
+          "constant_choices_keep_authored_order_while_an_equivalent_enum_stays_sorted",
+          "all_of_intersections_narrow_the_option_set_and_keep_surviving_titles",
+          "an_empty_intersection_is_a_located_blocking_finding_in_strict_and_lenient_modes",
+          "disqualified_branch_shapes_keep_the_blocking_finding_and_name_the_reason",
+          "titled_any_of_items_compile_to_a_homogeneous_array_of_labeled_choices"
+        ]
+      },
+      {
         "id": "scalar-array-facade",
         "path": "crates/schemaform/tests/scalar_array_facade.rs",
         "platforms": ["native", "browser-wasm"],
@@ -275,6 +289,19 @@
         "tests": [
           "validator-official-suite::mandatory_draft_2020_12_suite_matches_through_the_product_validator",
           "scalar-array-facade::array_assertions_produce_structured_findings_and_never_rewrite_moves"
+        ]
+      },
+      {
+        "profile_cases": [
+          "applicator.one-of.constant-choices",
+          "applicator.any-of.constant-choices"
+        ],
+        "tests": [
+          "constant-choice-facade::titled_one_of_and_any_of_strings_compile_to_a_labeled_choice_in_authored_order",
+          "constant-choice-facade::mixed_scalar_constants_round_trip_with_type_filtering_title_fallback_and_descriptions",
+          "constant-choice-facade::constant_choices_keep_authored_order_while_an_equivalent_enum_stays_sorted",
+          "constant-choice-facade::all_of_intersections_narrow_the_option_set_and_keep_surviving_titles",
+          "constant-choice-facade::titled_any_of_items_compile_to_a_homogeneous_array_of_labeled_choices"
         ]
       },
       {
@@ -1168,16 +1195,37 @@
       "current": "implemented"
     },
     {
+      "id": "applicator.one-of.constant-choices",
+      "construct": "oneOf",
+      "context": "Every branch is one annotated scalar constant; projected like `enum` with per-option title, description and authored order",
+      "target": "editing",
+      "current": "implemented"
+    },
+    {
       "id": "applicator.one-of",
       "construct": "oneOf",
-      "context": "General branch selection or migration",
+      "context": "General branch selection other than constant choices, including migration",
       "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.any-of.constant-choices",
+      "construct": "anyOf",
+      "context": "Every branch is one annotated scalar constant; projected like `enum` with per-option title, description and authored order",
+      "target": "editing",
       "current": "implemented"
     },
     {
       "id": "applicator.any-of",
       "construct": "anyOf",
-      "context": "General multi-branch editing",
+      "context": "General multi-branch editing other than constant choices",
+      "target": "capability-blocking",
+      "current": "implemented"
+    },
+    {
+      "id": "applicator.constant-choices.incompatible",
+      "construct": "constant choice",
+      "context": "The constant choice intersected with applicable `enum`, `const` and `type` leaves no option; located at the first recognised applicator with the keyword as a parameter",
       "target": "capability-blocking",
       "current": "implemented"
     },
