@@ -31,3 +31,10 @@ cargo run --locked -p schemaform --example bundle_official_suite -- \
   /path/to/JSON-Schema-Test-Suite \
   crates/schemaform/tests/fixtures/draft202012-official-suite.json
 ```
+
+## Host wire recipe
+
+`host_wire_recipe.rs` is the decode recipe the crate README hands to hosts whose
+wire protocol must keep decoding as if `serde_json/arbitrary_precision` were
+off. `validator_configuration_target.rs` compiles it with `include!` and asserts
+the README's fenced block is this file byte for byte, so the two cannot drift.

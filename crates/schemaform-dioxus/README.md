@@ -618,6 +618,15 @@ The crate has no public Cargo features. Repository qualification hooks are
 enabled through a `--cfg` and cannot be activated through dependency feature
 unification or `--all-features`.
 
+Depending on this crate enables `serde_json/arbitrary_precision` for every
+`serde_json` user in the build, because the core does and Cargo unifies features
+per crate. Nothing in the adapter adds to that effect, and nothing can remove
+it. Hosts that decode their own wire protocol from text into
+`#[serde(tag = "…")]`, `#[serde(untagged)]`, or `#[serde(flatten)]` types with
+float fields should read
+[what changes for the host's own decoding and how to guard against it](../schemaform/README.md#serde_jsonarbitrary_precision-is-enabled-for-the-whole-build)
+in the core README.
+
 ## License
 
 Licensed under either of

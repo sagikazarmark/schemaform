@@ -171,9 +171,114 @@ responsible for secrets, persistence, transport, and authorization.
 
 ## Feature Flags
 
-The first release has no public Cargo features. Product behavior is
-unconditional; repository qualification hooks are not Cargo features and
-cannot be enabled by dependency feature unification or `--all-features`.
+The crate has no public Cargo features. Product behavior is unconditional;
+repository qualification hooks are not Cargo features and cannot be enabled by
+dependency feature unification or `--all-features`.
+
+### `serde_json/arbitrary_precision` is enabled for the whole build
+
+`schemaform` depends on `serde_json/arbitrary_precision` and on
+`jsonschema/arbitrary-precision`, which enables the same `serde_json` feature.
+Cargo unifies features per crate across a build, so every `serde_json` user in a
+host that depends on `schemaform` gets `arbitrary_precision` — including the
+code that parses the host's own wire protocol and never asked for it. There is
+no feature to turn this off, and this is not an oversight: exact numbers are the
+product's number model, not an option layered on top of it. Under stock
+`serde_json`, `0.1000000000000000000000000000000000000001` becomes `0.1` and
+`184467440737095516160` becomes `1.8446744073709552e20` before the engine ever
+sees them. Everything the engine promises about numbers rests on the literal
+surviving:
+
+- Form data keeps the spelling the user typed or the host supplied, and
+  `display_text` renders it back; a form library that silently rewrites what the
+  user typed is not a lighter mode of this one.
+- Dirty state, edit no-op detection, choice matching, and host transactions
+  compare numbers by mathematical value, so `1e3`, `1000`, and `1000.0` are one
+  value with three spellings.
+- Integer edits accept up to 4096 canonical digits by default, and
+  `minItems`/`maxItems` bounds beyond `u64` are enforced exactly.
+- The validator compares `minimum`, `maximum`, `multipleOf`, `const`, and `enum`
+  against the authored literal, and bound findings report that literal rather
+  than a rounding of it.
+
+#### What changes for the host's own decoding
+
+With `arbitrary_precision`, `serde_json` hands a number to a type that asks for
+"any value" as a `u64` or `i64` when the literal is an integer that fits, and
+otherwise — a fraction, an exponent, or an integer beyond `u64` or below `i64`
+— as a one-entry map carrying the literal. A plain struct field typed `f64` is
+unaffected: it asks for a float and gets one. Anything that buffers before
+deciding what it is — `#[serde(tag = "…")]`, `#[serde(untagged)]`,
+`#[serde(flatten)]`, or any other path through `serde`'s content buffer —
+receives the map and fails with `invalid type: map, expected f64` or
+`data did not match any variant of untagged enum …`. Integer-only fields in
+those same types keep working, which is why the failure is easy to miss.
+
+Decoding through `serde_json::Value` first is only a partial escape. `Value`
+emits a float for a stored literal only when its spelling is what `f64`
+formatting would produce: `0.5` and `1.0` decode; `1.50`, `1e2`, and `2.5E0`
+still fail.
+
+#### Add a tripwire; if it fires, canonicalize
+
+Put a test on your wire layer that decodes a representative message through the
+real decode path. Use spellings `f64` formatting would not reproduce — they fail
+on the direct path and through `Value` alike — so the test fires however the
+wire layer decodes today, and it points at the wire layer rather than at the
+form:
+
+```rust
+#[test]
+fn wire_messages_decode_under_the_current_dependency_set() {
+    // Fires when any dependency enables `serde_json/arbitrary_precision` and a
+    // buffered wire type with a float field meets a non-canonical number.
+    let message = r#"{"type":"number","minimum":1.50,"maximum":1e2}"#;
+    wire::decode::<PropertySchema>(message)
+        .expect("the wire layer should decode non-canonical numbers");
+}
+```
+
+If the wire types are yours, `serde_json::Number` fields decode under either
+configuration. If they are not, re-spell the numbers to what stock `serde_json`
+would have produced before the typed decoder sees them. At the cost of parsing
+twice, this restores stock behavior for every message stock `serde_json` would
+have accepted, including integers beyond `u64` becoming floats:
+
+```rust
+use serde::de::DeserializeOwned;
+use serde_json::{Number, Value};
+
+/// Decodes a wire message the way stock `serde_json` would have.
+pub fn decode_wire<T: DeserializeOwned>(text: &str) -> serde_json::Result<T> {
+    let mut value: Value = serde_json::from_str(text)?;
+    canonicalize_numbers(&mut value);
+    serde_json::from_value(value)
+}
+
+/// Re-spells every number that is not a machine integer as the `f64` it rounds to.
+fn canonicalize_numbers(value: &mut Value) {
+    match value {
+        Value::Number(number) if !number.is_u64() && !number.is_i64() => {
+            if let Some(float) = number.as_f64().and_then(Number::from_f64) {
+                *number = float;
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(canonicalize_numbers),
+        Value::Object(members) => members.values_mut().for_each(canonicalize_numbers),
+        _ => {}
+    }
+}
+```
+
+Canonicalize only what the host decodes for itself. When a message carries a
+data schema or form data bound for `schemaform` — as a protocol that ships the
+form's schema inside its own envelope does — take that subtree from the
+`Value` before the pass and hand it over unchanged; a typed `f64` field could
+not have carried the exact literal anyway, and the engine's exactness depends on
+receiving it. The repository's own qualification tests hold this section to the
+locked `serde_json`: they assert that the direct path fails, that the `Value`
+detour is partial, and that the recipe above — compiled from the same file the
+block is checked against — decodes every spelling listed here.
 
 ## License
 

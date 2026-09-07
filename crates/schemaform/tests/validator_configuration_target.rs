@@ -13,6 +13,8 @@ const WORKSPACE_MANIFEST: &str = include_str!("../../../Cargo.toml");
 const WORKSPACE_LOCK: &str = include_str!("../../../Cargo.lock");
 const CORE_MANIFEST: &str = include_str!("../Cargo.toml");
 const DIOXUS_MANIFEST: &str = include_str!("../../schemaform-dioxus/Cargo.toml");
+const CORE_README: &str = include_str!("../README.md");
+const DIOXUS_README: &str = include_str!("../../schemaform-dioxus/README.md");
 
 #[derive(Clone, Copy, Debug)]
 enum ExpectedOutcome {
@@ -181,6 +183,194 @@ fn validation_fault_annotation_is_inert_in_production_builds() {
         form.prepare_submission().outcome(),
         SubmissionOutcome::Blocked(blockers)
             if blockers.iter().all(|blocker| matches!(blocker, SubmissionBlocker::Validation(_)))
+    ));
+}
+
+const HOST_WIRE_RECIPE: &str = include_str!("fixtures/host_wire_recipe.rs");
+
+#[test]
+fn published_readmes_disclose_the_build_wide_arbitrary_precision_effect() {
+    // The manifest assertions above hold `arbitrary_precision` on. Cargo unifies features per
+    // crate across a build, so every `serde_json` user in a host gets it. The README that ships
+    // with each package has to say so, next to the "no public Cargo features" statement, or a
+    // host learns about it from a decode failure far from where the feature was enabled.
+    let core_feature_flags = CORE_README
+        .split("## Feature Flags")
+        .nth(1)
+        .expect("the core README should keep its Feature Flags section");
+    assert!(
+        core_feature_flags
+            .contains("### `serde_json/arbitrary_precision` is enabled for the whole build")
+    );
+    assert!(core_feature_flags.contains("`jsonschema/arbitrary-precision`"));
+    // The recipe the README hands to hosts is the file the test below compiles, byte for byte.
+    assert!(
+        core_feature_flags.contains(&format!("```rust\n{HOST_WIRE_RECIPE}```")),
+        "the core README recipe block should be tests/fixtures/host_wire_recipe.rs verbatim"
+    );
+
+    let dioxus_feature_flags = DIOXUS_README
+        .split("## Feature Flags")
+        .nth(1)
+        .expect("the adapter README should keep its Feature Flags section");
+    assert!(dioxus_feature_flags.contains("`serde_json/arbitrary_precision`"));
+    assert!(dioxus_feature_flags.contains(
+        "../schemaform/README.md#serde_jsonarbitrary_precision-is-enabled-for-the-whole-build"
+    ));
+}
+
+/// The wire-type shapes the core README names as affected by `arbitrary_precision`.
+mod host_wire_types {
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    #[serde(tag = "type")]
+    #[allow(dead_code)]
+    pub enum Tagged {
+        Number { minimum: f64 },
+        Integer { minimum: i64 },
+    }
+
+    #[derive(Deserialize)]
+    #[serde(tag = "type")]
+    #[allow(dead_code)]
+    pub enum TaggedExact {
+        Number { minimum: serde_json::Number },
+    }
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    #[allow(dead_code)]
+    pub enum Untagged {
+        Integer(i64),
+        Float(f64),
+    }
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    pub struct Flattened {
+        pub name: String,
+        #[serde(flatten)]
+        pub bounds: Bounds,
+    }
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    pub struct Bounds {
+        pub minimum: f64,
+    }
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    pub struct Plain {
+        pub minimum: f64,
+    }
+}
+
+/// The recipe the core README hands to hosts, compiled from the file the README block is
+/// checked against.
+mod host_wire_recipe {
+    include!("fixtures/host_wire_recipe.rs");
+}
+
+#[cfg_attr(
+    all(target_arch = "wasm32", target_os = "unknown"),
+    wasm_bindgen_test::wasm_bindgen_test
+)]
+#[cfg_attr(not(all(target_arch = "wasm32", target_os = "unknown")), test)]
+fn disclosed_host_decoding_effects_match_the_qualified_serde_json() {
+    use host_wire_recipe::decode_wire;
+    use host_wire_types::{Flattened, Plain, Tagged, TaggedExact, Untagged};
+    use serde::de::DeserializeOwned;
+
+    fn number_message(spelling: &str) -> String {
+        format!(r#"{{"type":"Number","minimum":{spelling}}}"#)
+    }
+    fn via_value<T: DeserializeOwned>(text: &str) -> serde_json::Result<T> {
+        serde_json::from_value(serde_json::from_str::<Value>(text)?)
+    }
+    fn assert_fails_with<T: DeserializeOwned>(
+        result: serde_json::Result<T>,
+        expected_prefix: &str,
+        context: &str,
+    ) {
+        match result {
+            Ok(_) => panic!("{context}: decoded successfully, expected `{expected_prefix}…`"),
+            Err(error) => assert!(
+                error.to_string().starts_with(expected_prefix),
+                "{context}: expected `{expected_prefix}…`, got `{error}`"
+            ),
+        }
+    }
+
+    // A plain float field asks for a float and gets one. Buffered shapes receive a map for
+    // every literal that is not a machine integer.
+    assert!(serde_json::from_str::<Plain>(r#"{"minimum":0.5}"#).is_ok());
+    for spelling in ["0.5", "1e2", "184467440737095516160"] {
+        assert_fails_with(
+            serde_json::from_str::<Tagged>(&number_message(spelling)),
+            "invalid type: map, expected f64",
+            &format!("{spelling} straight into a tagged enum"),
+        );
+    }
+    assert_fails_with(
+        serde_json::from_str::<Untagged>("0.5"),
+        "data did not match any variant of untagged enum",
+        "0.5 straight into an untagged enum",
+    );
+    assert_fails_with(
+        serde_json::from_str::<Flattened>(r#"{"name":"rate","minimum":0.5}"#),
+        "invalid type: map, expected f64",
+        "0.5 straight into a flattened struct",
+    );
+
+    // Integer literals that fit a machine integer keep working in the same shapes.
+    assert!(serde_json::from_str::<Tagged>(r#"{"type":"Integer","minimum":1}"#).is_ok());
+    assert!(serde_json::from_str::<Tagged>(&number_message("1")).is_ok());
+    assert!(serde_json::from_str::<Untagged>("1").is_ok());
+
+    // The `Value` detour repairs only spellings that `f64` formatting reproduces.
+    for repaired in ["0.5", "1.0"] {
+        assert!(
+            via_value::<Tagged>(&number_message(repaired)).is_ok(),
+            "{repaired} should decode through Value"
+        );
+    }
+    for unrepaired in ["1.50", "1e2", "2.5E0"] {
+        assert_fails_with(
+            via_value::<Tagged>(&number_message(unrepaired)),
+            "invalid type: map, expected f64",
+            &format!("{unrepaired} through Value"),
+        );
+    }
+
+    // The documented recipe restores stock behavior for every spelling named in the README,
+    // including integers beyond `u64` becoming floats. A host that owns its wire types can
+    // instead type the field as `serde_json::Number`, which decodes every spelling directly.
+    for spelling in [
+        "0.5",
+        "1.0",
+        "1.50",
+        "1e2",
+        "2.5E0",
+        "0.1000000000000000000000000000000000000001",
+        "184467440737095516160",
+    ] {
+        let tagged = decode_wire::<Tagged>(&number_message(spelling))
+            .unwrap_or_else(|error| panic!("{spelling} should decode through the recipe: {error}"));
+        assert!(matches!(tagged, Tagged::Number { .. }));
+        assert!(
+            decode_wire::<Untagged>(spelling).is_ok(),
+            "{spelling} should decode into the untagged enum through the recipe"
+        );
+        assert!(
+            serde_json::from_str::<TaggedExact>(&number_message(spelling)).is_ok(),
+            "{spelling} should decode directly into a serde_json::Number field"
+        );
+    }
+    assert!(matches!(
+        decode_wire::<Tagged>(r#"{"type":"Integer","minimum":1}"#),
+        Ok(Tagged::Integer { minimum: 1 })
     ));
 }
 

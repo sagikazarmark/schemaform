@@ -171,6 +171,13 @@ Data schemas must be application-trusted. The core meta-validates schemas,
 denies implicit I/O, and applies finite structural limits, but does not contain
 hostile evaluator workloads.
 
+Depending on either package enables `serde_json/arbitrary_precision` for every
+`serde_json` user in the build; the exact number model requires it and neither
+package offers a feature to turn it off. Hosts that decode their own wire
+protocol from text into tagged, untagged, or flattened types with float fields
+should read
+[what changes and how to guard against it](crates/schemaform/README.md#serde_jsonarbitrary_precision-is-enabled-for-the-whole-build).
+
 ## UI Schema
 
 The optional UI-schema path implements stable version 1 of the complete
