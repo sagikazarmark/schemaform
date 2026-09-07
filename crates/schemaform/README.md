@@ -9,7 +9,8 @@
 discovered at runtime from application-trusted JSON Schema Draft 2020-12 data
 schemas. It compiles a reusable definition, owns canonical JSON form data and
 edit state, validates every accepted data change, and prepares immutable
-submission snapshots.
+submission snapshots, or advisory submissions for hosts that decide validity
+themselves.
 
 The first release supports a non-null fixed-object root containing supported
 scalars, nested fixed objects, and one homogeneous array per root-to-leaf
@@ -102,7 +103,8 @@ provided by the application.
 | User operations | `form::UserOperationError` |
 | Privileged host transactions | `form::TransactionError` and `form::HostCommitError` |
 | Reinitialization and external findings | Dedicated typed errors in `form` |
-| Submission | `SubmissionOutcome::Ready` or `SubmissionOutcome::Blocked` |
+| Gated submission | `SubmissionOutcome::Ready` or `SubmissionOutcome::Blocked` |
+| Advisory submission | `AdvisorySubmission` with its findings |
 
 Schema-invalid but structurally permitted form data remains constructible,
 visible, and repairable. A blocked submission is an ordinary outcome, not an
@@ -112,6 +114,48 @@ snapshot. Serialization and transport remain application responsibilities.
 Validation findings expose stable keyword codes, instance and data-schema
 locations, and code-specific structured parameters through `ValidationFinding`;
 adapters and hosts own localized presentation text.
+
+## Two Submission Paths
+
+The form is the authority on validity only when the host wants it to be.
+
+| | `prepare_submission` | `prepare_advisory_submission` |
+| --- | --- | --- |
+| Returns | `SubmissionOutcome::Ready(SubmissionSnapshot)` or `SubmissionOutcome::Blocked(SubmissionBlockers)` | `AdvisorySubmission`: form data plus every finding the gated path would have blocked on |
+| Refuses on | Parse blockers, validation findings, indeterminate validation, blocking capability findings, blocking external findings | Nothing; the same findings are reported as advisories |
+| Data when findings exist | None | The current form data, which may violate the data schema |
+| Unparseable edit buffers | Block | Stay out of the data and are reported as parse findings |
+| Wants it | A host that treats the form as the last word: the snapshot is valid by construction and safe to send | A host that decides validity itself: a draft that may be saved incomplete, a client whose server validates again, or a protocol probe that must send what the data schema forbids to observe the other side |
+
+Both paths prepare identically: they mark submission attempted, finalize
+parseable edit buffers, and return a `Transition` the caller must process
+because submission-only findings may have become visible. An
+`AdvisorySubmission` is a different type from `SubmissionSnapshot` and offers
+no conversion into one, so consumers expecting validated data cannot receive
+findings-laden data by accident. The engine never commits unparseable numeric
+text as a string; what to send for a member that could not be parsed is the
+host's decision about its own wire format.
+
+```rust
+use schemaform::FormDefinition;
+use serde_json::json;
+
+let definition = FormDefinition::compile(json!({
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "quantity": { "type": "integer", "minimum": 1 }
+    }
+}))?;
+let mut form = definition.create_form(json!({ "quantity": 0 }))?;
+
+let (transition, advisory) = form.prepare_advisory_submission().into_parts();
+assert!(!transition.is_empty());
+assert_eq!(advisory.form_data(), &json!({ "quantity": 0 }));
+assert_eq!(advisory.findings().count(), 1);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
 
 ## Trust Boundary
 

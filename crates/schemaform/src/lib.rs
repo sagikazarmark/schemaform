@@ -3,7 +3,8 @@
 //!
 //! The crate compiles reusable [`FormDefinition`] values, owns canonical JSON
 //! form data and edit state, validates accepted changes, and prepares immutable
-//! [`SubmissionSnapshot`] values. Schema retrieval and submission transport
+//! [`SubmissionSnapshot`] values, or [`AdvisorySubmission`] values for hosts
+//! that decide validity themselves. Schema retrieval and submission transport
 //! remain the application's responsibility.
 #![deny(rustdoc::broken_intra_doc_links)]
 #![forbid(unsafe_code)]
@@ -3860,35 +3861,93 @@ pub mod form {
         /// operation error. Preparation marks submission as attempted and can
         /// commit parseable edit buffers, so callers must process its [`Transition`]
         /// even when blocked. This method performs no serialization or transport.
+        ///
+        /// Hosts that are not the authority on validity and want the data
+        /// regardless of blockers use [`Form::prepare_advisory_submission`].
         pub fn prepare_submission(&mut self) -> SubmissionPreparation {
             let before = self.revisions();
             let observations_before = self.node_observations();
-            let (snapshot, mut blockers) = match self.engine.prepare_submission() {
-                Ok(snapshot) => (Some(snapshot), Vec::new()),
-                Err(failure) => {
-                    let blockers = failure
-                        .parse_blockers()
-                        .filter_map(|blocker| {
-                            self.identity_for_binding(blocker.binding()).map(|target| {
-                                SubmissionBlocker::Parse {
-                                    target,
-                                    kind: match blocker.reason() {
-                                        engine::ParseBlocker::InvalidNumber => {
-                                            ParseBlockerKind::InvalidNumber
-                                        }
-                                        engine::ParseBlocker::InvalidInteger => {
-                                            ParseBlockerKind::InvalidInteger
-                                        }
-                                        engine::ParseBlocker::ResourceLimitExceeded => {
-                                            ParseBlockerKind::ResourceLimitExceeded
-                                        }
-                                    },
-                                }
-                            })
+            let blockers = self.finalize_submission();
+            let outcome = if blockers.is_empty() {
+                SubmissionOutcome::Ready(SubmissionSnapshot {
+                    form_data: self.engine.form_data().clone(),
+                    data_revision: self.revisions().0,
+                    definition_fingerprint: self.definition.fingerprint(),
+                })
+            } else {
+                SubmissionOutcome::Blocked(SubmissionBlockers { blockers })
+            };
+            let after = self.revisions();
+            SubmissionPreparation {
+                transition: self.transition(before, after, self.changed_nodes(observations_before)),
+                outcome,
+            }
+        }
+
+        /// Finalizes parseable buffers and returns the form data with every
+        /// finding the gated path would have blocked on.
+        ///
+        /// This is the advisory counterpart of [`Form::prepare_submission`] for
+        /// hosts that are not the authority on validity: a draft that may be
+        /// saved incomplete, a client whose server validates again, or a probe
+        /// that must send what the data schema forbids. Preparation has the
+        /// same side effects as the gated path — submission is marked attempted
+        /// and parseable edit buffers are committed — so callers must process
+        /// the [`Transition`]. Unparseable edit buffers remain interaction
+        /// state: they are not committed to form data and are reported as parse
+        /// findings instead.
+        ///
+        /// The result is an [`AdvisorySubmission`], never a validated
+        /// [`SubmissionSnapshot`]. This method performs no serialization or
+        /// transport.
+        pub fn prepare_advisory_submission(&mut self) -> AdvisorySubmissionPreparation {
+            let before = self.revisions();
+            let observations_before = self.node_observations();
+            let findings = self.finalize_submission();
+            let submission = AdvisorySubmission {
+                form_data: self.engine.form_data().clone(),
+                data_revision: self.revisions().0,
+                definition_fingerprint: self.definition.fingerprint(),
+                findings,
+            };
+            let after = self.revisions();
+            AdvisorySubmissionPreparation {
+                transition: self.transition(before, after, self.changed_nodes(observations_before)),
+                submission,
+            }
+        }
+
+        /// Marks submission attempted, finalizes parseable edit buffers, and
+        /// collects every current blocker in deterministic category order:
+        /// parse, validation, validation truncation, indeterminate, capability,
+        /// then external. Both submission paths share this step so they cannot
+        /// disagree about what blocks.
+        fn finalize_submission(&mut self) -> Vec<SubmissionBlocker> {
+            let engine_preparation = self.engine.prepare_submission();
+            let engine_refused = engine_preparation.is_err();
+            let mut blockers = match engine_preparation {
+                Ok(_) => Vec::new(),
+                Err(failure) => failure
+                    .parse_blockers()
+                    .filter_map(|blocker| {
+                        self.identity_for_binding(blocker.binding()).map(|target| {
+                            SubmissionBlocker::Parse {
+                                target,
+                                kind: match blocker.reason() {
+                                    engine::ParseBlocker::InvalidNumber => {
+                                        ParseBlockerKind::InvalidNumber
+                                    }
+                                    engine::ParseBlocker::InvalidInteger => {
+                                        ParseBlockerKind::InvalidInteger
+                                    }
+                                    engine::ParseBlocker::ResourceLimitExceeded => {
+                                        ParseBlockerKind::ResourceLimitExceeded
+                                    }
+                                },
+                            }
                         })
-                        .collect::<Vec<_>>();
-                    (None, blockers)
-                }
+                    })
+                    .collect::<Vec<_>>(),
             };
             match &self.validation {
                 validation::Outcome::Valid => {}
@@ -3925,24 +3984,11 @@ pub mod form {
                         finding,
                     })
             }));
-            let outcome = if blockers.is_empty() {
-                let snapshot = snapshot.expect("a blocker-free engine preparation has a snapshot");
-                SubmissionOutcome::Ready(SubmissionSnapshot {
-                    form_data: snapshot.form_data().clone(),
-                    data_revision: DataRevision {
-                        form: self.id,
-                        revision: snapshot.data_revision(),
-                    },
-                    definition_fingerprint: self.definition.fingerprint(),
-                })
-            } else {
-                SubmissionOutcome::Blocked(SubmissionBlockers { blockers })
-            };
-            let after = self.revisions();
-            SubmissionPreparation {
-                transition: self.transition(before, after, self.changed_nodes(observations_before)),
-                outcome,
-            }
+            assert!(
+                !engine_refused || !blockers.is_empty(),
+                "an engine submission refusal reports at least one blocker"
+            );
+            blockers
         }
 
         fn revalidate(&mut self) {
@@ -6933,6 +6979,77 @@ pub mod form {
         }
     }
 
+    /// The state transition and result of one advisory submission preparation.
+    ///
+    /// The transition must be processed because preparation finalizes edit
+    /// buffers and can reveal submission-only findings, exactly as the gated
+    /// [`SubmissionPreparation`] does.
+    pub struct AdvisorySubmissionPreparation {
+        transition: Transition,
+        submission: AdvisorySubmission,
+    }
+
+    impl AdvisorySubmissionPreparation {
+        /// Borrows the state changes caused by advisory submission preparation.
+        pub fn transition(&self) -> &Transition {
+            &self.transition
+        }
+
+        /// Borrows the form data and its advisory findings.
+        pub fn submission(&self) -> &AdvisorySubmission {
+            &self.submission
+        }
+
+        /// Consumes the preparation into its transition and advisory submission.
+        pub fn into_parts(self) -> (Transition, AdvisorySubmission) {
+            (self.transition, self.submission)
+        }
+    }
+
+    /// Owned form data together with every finding a gated submission would
+    /// have refused on, for hosts that decide validity themselves.
+    ///
+    /// An advisory submission is not a validated [`SubmissionSnapshot`] and
+    /// cannot be converted into one. Its data may violate the data schema, may
+    /// lack members whose edit buffers could not be parsed, and may have been
+    /// prepared under an indeterminate validation outcome; the findings say
+    /// which. Later form edits do not modify it, and its revision and
+    /// fingerprint tokens identify exactly what was captured.
+    #[derive(Debug, Clone)]
+    pub struct AdvisorySubmission {
+        form_data: Value,
+        data_revision: DataRevision,
+        definition_fingerprint: DefinitionFingerprint,
+        findings: Vec<SubmissionBlocker>,
+    }
+
+    impl AdvisorySubmission {
+        /// Borrows the canonical JSON object captured for the host, as it stood
+        /// after parseable edit buffers were finalized.
+        pub fn form_data(&self) -> &Value {
+            &self.form_data
+        }
+
+        /// Returns the exact form data revision captured by this submission.
+        pub fn data_revision(&self) -> DataRevision {
+            self.data_revision
+        }
+
+        /// Returns the semantic fingerprint of the definition used to prepare it.
+        pub fn definition_fingerprint(&self) -> DefinitionFingerprint {
+            self.definition_fingerprint
+        }
+
+        /// Iterates every finding the gated path would have reported as a
+        /// blocker, in the same deterministic category order.
+        ///
+        /// An empty iterator means [`Form::prepare_submission`] would have
+        /// produced a snapshot of the same data.
+        pub fn findings(&self) -> impl Iterator<Item = &SubmissionBlocker> {
+            self.findings.iter()
+        }
+    }
+
     /// Complete retained reasons that prevented creation of a submission snapshot.
     pub struct SubmissionBlockers {
         blockers: Vec<SubmissionBlocker>,
@@ -6945,7 +7062,11 @@ pub mod form {
         }
     }
 
-    /// A structured reason that prevents a submission snapshot.
+    /// A structured reason that prevents a gated submission snapshot.
+    ///
+    /// The advisory path reports the same values through
+    /// [`AdvisorySubmission::findings`] without refusing.
+    #[derive(Debug, Clone)]
     #[non_exhaustive]
     pub enum SubmissionBlocker {
         Parse {
@@ -7165,9 +7286,10 @@ pub use definition::{
 };
 pub use finding::{ExternalFinding, ExternalFindingBatch, FindingView, ValidationFinding};
 pub use form::{
-    DataRevision, FindingVisibility, FindingVisibilityPolicy, Form, FormBuildError, FormView,
-    InstanceIdentity, ItemIdentity, NodeView, StateRevision, SubmissionOutcome,
-    SubmissionPreparation, SubmissionSnapshot, Transition, UserActions,
+    AdvisorySubmission, AdvisorySubmissionPreparation, DataRevision, FindingVisibility,
+    FindingVisibilityPolicy, Form, FormBuildError, FormView, InstanceIdentity, ItemIdentity,
+    NodeView, StateRevision, SubmissionOutcome, SubmissionPreparation, SubmissionSnapshot,
+    Transition, UserActions,
 };
 pub use json::{FormDataLimits, JsonParseError, JsonSyntaxError};
 pub use qualification::{QualificationError, QualificationLocation, QualificationResource};

@@ -104,6 +104,10 @@ _Avoid_: Validation timeout, schema size limit
 An immutable copy of a submittable form-data revision returned after the core finalizes edit buffers and checks all blockers.
 _Avoid_: Payload, submitted form, request body
 
+**Advisory submission**:
+An immutable copy of the current form-data revision returned together with every finding the gated path would have blocked on, for a host that decides validity itself. Nothing refuses; unparseable edit buffers stay out of the data and are reported as parse findings. An advisory submission is not a validated submission snapshot and cannot become one.
+_Avoid_: Submission snapshot, draft snapshot, unvalidated snapshot, force submit
+
 **Edit buffer**:
 The exact temporary textual value of an active text-like edit. It may preserve a parseable spelling after form data has changed or retain unparseable input that cannot yet change form data.
 _Avoid_: Raw value, invalid value
