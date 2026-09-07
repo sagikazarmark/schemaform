@@ -9,9 +9,9 @@ use std::{
 
 use dioxus::prelude::*;
 use schemaform::{
-    CompilationProfile, ExtensionNamespace, ExternalFinding, ExternalFindingBatch, FormDefinition,
-    InstanceIdentity, JsonPointer, RetrievalUri, SchemaResource, SubmissionOutcome,
-    SubmissionSnapshot, WidgetSymbol,
+    AdvisorySubmission, CompilationProfile, ExtensionNamespace, ExternalFinding,
+    ExternalFindingBatch, FormDefinition, InstanceIdentity, JsonPointer, RetrievalUri,
+    SchemaResource, SubmissionOutcome, SubmissionSnapshot, WidgetSymbol,
     definition::DefinitionNodeView,
     form::{ParseBlockerKind, SubmissionBlocker},
     json::parse_ui_schema_v1,
@@ -28,7 +28,7 @@ use schemaform_dioxus::{
     HandleError, HandleTransactionError, Localizer, PreparedExtension, RenderConfiguration,
     RenderEvent, RenderNodeKind, RenderObservation, RenderObserver,
     SchemaForm as RequiredSchemaForm, ShellContext, ShellRenderer, StructureRenderers,
-    TargetFocusAction,
+    SubmissionMode, TargetFocusAction,
     render::{BindFinding, FindingCollectionContext},
     use_choice_edit, use_form, use_text_edit,
 };
@@ -1009,6 +1009,75 @@ fn custom_shell_test_app(props: TestAppProps) -> Element {
         SchemaForm {
             form: bound,
             on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
+            on_error: move |error| errors.borrow_mut().push(error),
+        }
+    }
+}
+
+/// Props of the submission-mode test application: the same form as `custom_shell_test_app`,
+/// mounted in `initial_mode`, exposing the signal behind its `submission_mode` prop so a test can
+/// switch the mode on the mounted form, and recording what reaches each of the two submission
+/// channels.
+#[derive(Clone, Props)]
+struct SubmissionModeTestAppProps {
+    handle: Rc<RefCell<Option<FormHandle>>>,
+    submitted: Rc<RefCell<Option<SubmissionSnapshot>>>,
+    advisory_submissions: Rc<RefCell<Vec<AdvisorySubmission>>>,
+    errors: Rc<RefCell<Vec<HandleError>>>,
+    initial_mode: SubmissionMode,
+    mode: Rc<RefCell<Option<Signal<SubmissionMode>>>>,
+}
+
+impl PartialEq for SubmissionModeTestAppProps {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.handle, &other.handle)
+            && Rc::ptr_eq(&self.submitted, &other.submitted)
+            && Rc::ptr_eq(&self.advisory_submissions, &other.advisory_submissions)
+            && Rc::ptr_eq(&self.errors, &other.errors)
+            && self.initial_mode == other.initial_mode
+            && Rc::ptr_eq(&self.mode, &other.mode)
+    }
+}
+
+fn submission_mode_test_app(props: SubmissionModeTestAppProps) -> Element {
+    let definition = use_hook(|| {
+        FormDefinition::compile(json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+                "name": { "type": "string", "title": "Full name", "minLength": 2 }
+            }
+        }))
+        .expect("the submission-mode data schema should compile")
+    });
+    let form = use_form(definition, json!({ "name": "Ada" }))
+        .expect("the submission-mode form should be created");
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+    // This app re-renders when its mode changes, so the form is bound once, as a host would.
+    let bound = use_hook(move || {
+        RenderConfiguration::builder()
+            .structure(StructureRenderers::default().with_shell(TestShell))
+            .build()
+            .bind(&form)
+            .expect("the built-in control should bind under the test shell")
+    });
+    let mode = use_signal(|| props.initial_mode);
+    props.mode.borrow_mut().get_or_insert(mode);
+    let submitted = props.submitted.clone();
+    let advisory_submissions = props.advisory_submissions.clone();
+    let errors = props.errors.clone();
+
+    rsx! {
+        RequiredSchemaForm {
+            form: bound,
+            submission_mode: mode(),
+            on_submit: move |snapshot| *submitted.borrow_mut() = Some(snapshot),
+            on_advisory_submit: move |submission| advisory_submissions.borrow_mut().push(submission),
             on_error: move |error| errors.borrow_mut().push(error),
         }
     }
@@ -9566,6 +9635,202 @@ async fn custom_shell_renderer_keeps_submission_and_summary_focus_behaviour() {
     root.remove();
 }
 
+#[wasm_bindgen_test]
+async fn an_advisory_submit_with_findings_reaches_the_host_with_those_findings_and_moves_no_focus()
+{
+    let mounted = mount_submission_mode_test_app(SubmissionMode::Advisory).await;
+    let MountedSubmissionModeTestApp {
+        root,
+        form_handle,
+        submitted,
+        advisory_submissions,
+        errors,
+        ..
+    } = &mounted;
+    let form: HtmlFormElement = root
+        .query_selector("form")
+        .expect("the form selector should be valid")
+        .expect("the schema form should render a form element")
+        .dyn_into()
+        .expect("the schema form should use semantic form HTML");
+    let form_id = form.id();
+    let summary = form
+        .query_selector("[data-finding-summary]")
+        .expect("the summary selector should be valid")
+        .expect("the shell should place the adapter-owned summary wrapper");
+
+    // The shell is handed the advisory affordance: same id and label, a kind it can label for.
+    let submit = mounted.submit_button();
+    assert_eq!(submit.id(), format!("{form_id}-submit"));
+    assert_eq!(submit.text_content().as_deref(), Some("Submit"));
+    assert_eq!(
+        submit.get_attribute("data-affordance").as_deref(),
+        Some("AdvisorySubmit")
+    );
+
+    // Make the name too short, keep the keyboard focus in the input, and submit.
+    let input = input_with_binding(root, "/name");
+    dispatch_input(&input, "A");
+    poll_dom(|| (form_handle.reader().form_data().ok()? == json!({ "name": "A" })).then_some(()))
+        .await;
+    input.focus().expect("the input should take focus");
+    assert_focused(&input);
+    submit.click();
+
+    // The host receives the data as it is, with the finding it carries, on the advisory channel
+    // alone.
+    poll_dom(|| (advisory_submissions.borrow().len() == 1).then_some(())).await;
+    {
+        let advisory_submissions = advisory_submissions.borrow();
+        assert_eq!(advisory_submissions[0].form_data(), &json!({ "name": "A" }));
+        let findings = advisory_submissions[0].findings().collect::<Vec<_>>();
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(matches!(
+            findings[0],
+            SubmissionBlocker::Validation(finding) if finding.code() == "minLength"
+        ));
+    }
+    assert!(submitted.borrow().is_none());
+
+    // The findings are presented — in the summary and at the node — so the reader sees what
+    // went out unchecked.
+    poll_dom(|| {
+        summary
+            .query_selector("[data-finding='minLength']")
+            .expect("the finding selector should be valid")
+    })
+    .await;
+    poll_dom(|| {
+        root.query_selector("[data-validation-finding='minLength']")
+            .expect("the local finding selector should be valid")
+    })
+    .await;
+    poll_dom(|| (input.get_attribute("aria-invalid").as_deref() == Some("true")).then_some(()))
+        .await;
+    assert!(
+        form_handle
+            .reader()
+            .read()
+            .expect("the form should be readable")
+            .submission_attempted
+    );
+
+    // Focus movement is asynchronous, so give a gated blocked submission's focus request more
+    // than enough time to have landed: the advisory one must not have made it.
+    for _ in 0..5 {
+        next_browser_task().await;
+    }
+    assert_focused(&input);
+    assert_ne!(active_element_id().as_deref(), Some(summary.id().as_str()));
+
+    // Implicit submission through the form element takes the same advisory path.
+    dispatch_submit(&form);
+    poll_dom(|| (advisory_submissions.borrow().len() == 2).then_some(())).await;
+    assert_eq!(
+        advisory_submissions.borrow()[1].form_data(),
+        &json!({ "name": "A" })
+    );
+    assert!(submitted.borrow().is_none());
+
+    // A valid form submits the data with no findings; still through the advisory channel.
+    dispatch_input(&input, "Grace");
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()? == json!({ "name": "Grace" })).then_some(())
+    })
+    .await;
+    submit.click();
+    poll_dom(|| (advisory_submissions.borrow().len() == 3).then_some(())).await;
+    assert_eq!(
+        advisory_submissions.borrow()[2].form_data(),
+        &json!({ "name": "Grace" })
+    );
+    assert_eq!(advisory_submissions.borrow()[2].findings().count(), 0);
+    assert!(submitted.borrow().is_none());
+    assert!(errors.borrow().is_empty());
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+async fn switching_the_submission_mode_prop_rewires_the_submit_affordance_and_its_path() {
+    let mut mounted = mount_submission_mode_test_app(SubmissionMode::Gated).await;
+    let form: HtmlFormElement = mounted
+        .root
+        .query_selector("form")
+        .expect("the form selector should be valid")
+        .expect("the schema form should render a form element")
+        .dyn_into()
+        .expect("the schema form should use semantic form HTML");
+    let summary_id = format!("{}-summary", form.id());
+    let input = input_with_binding(&mounted.root, "/name");
+    dispatch_input(&input, "A");
+    poll_dom(|| {
+        (mounted.form_handle.reader().form_data().ok()? == json!({ "name": "A" })).then_some(())
+    })
+    .await;
+
+    // Gated, as mounted: the same form and findings block and focus the summary, and the
+    // advisory channel is silent.
+    assert_eq!(
+        mounted
+            .submit_button()
+            .get_attribute("data-affordance")
+            .as_deref(),
+        Some("Submit")
+    );
+    mounted.submit_button().click();
+    wait_for_summary_focus(&mounted.root).await;
+    assert!(mounted.submitted.borrow().is_none());
+    assert!(mounted.advisory_submissions.borrow().is_empty());
+
+    // Switch to advisory: the shell is handed the advisory affordance and the next submit takes
+    // the advisory path, leaving focus where the reader put it.
+    mounted.switch_mode(SubmissionMode::Advisory).await;
+    input.focus().expect("the input should take focus");
+    assert_focused(&input);
+    mounted.submit_button().click();
+    poll_dom(|| (mounted.advisory_submissions.borrow().len() == 1).then_some(())).await;
+    assert_eq!(
+        mounted.advisory_submissions.borrow()[0].form_data(),
+        &json!({ "name": "A" })
+    );
+    for _ in 0..5 {
+        next_browser_task().await;
+    }
+    assert_focused(&input);
+    assert!(mounted.submitted.borrow().is_none());
+
+    // Switch back to gated: the affordance reverts and a blocked submission focuses the summary
+    // again while the advisory channel stays where it was.
+    mounted.switch_mode(SubmissionMode::Gated).await;
+    mounted.submit_button().click();
+    poll_dom(|| (active_element_id().as_deref() == Some(summary_id.as_str())).then_some(())).await;
+    assert_eq!(mounted.advisory_submissions.borrow().len(), 1);
+    assert!(mounted.submitted.borrow().is_none());
+
+    // And a valid gated submission reaches on_submit, as before the mode was ever switched.
+    dispatch_input(&input, "Grace");
+    poll_dom(|| {
+        (mounted.form_handle.reader().form_data().ok()? == json!({ "name": "Grace" })).then_some(())
+    })
+    .await;
+    mounted.submit_button().click();
+    let snapshot = poll_dom(|| mounted.submitted.borrow().clone()).await;
+    assert_eq!(snapshot.form_data(), &json!({ "name": "Grace" }));
+    assert_eq!(mounted.advisory_submissions.borrow().len(), 1);
+    assert!(mounted.errors.borrow().is_empty());
+
+    mounted.root.remove();
+}
+
+/// The id of the document's active element, if any.
+fn active_element_id() -> Option<String> {
+    web_sys::window()?
+        .document()?
+        .active_element()
+        .map(|element| element.id())
+}
+
 /// Finds the element with `id`, failing with the id in the message.
 fn element_by_id(id: &str) -> web_sys::HtmlElement {
     web_sys::window()
@@ -10516,6 +10781,46 @@ struct MountedTestApp {
     submitted: Rc<RefCell<Option<SubmissionSnapshot>>>,
 }
 
+struct MountedSubmissionModeTestApp {
+    root: web_sys::Element,
+    form_handle: FormHandle,
+    submitted: Rc<RefCell<Option<SubmissionSnapshot>>>,
+    advisory_submissions: Rc<RefCell<Vec<AdvisorySubmission>>>,
+    errors: Rc<RefCell<Vec<HandleError>>>,
+    mode: Signal<SubmissionMode>,
+}
+
+impl MountedSubmissionModeTestApp {
+    /// The `type="button"` submit the test shell renders for the affordance.
+    fn submit_button(&self) -> web_sys::HtmlElement {
+        self.root
+            .query_selector("footer[data-test-shell='footer'] > button[data-test-shell-submit]")
+            .expect("the shell submit selector should be valid")
+            .expect("the shell should render the submit affordance")
+            .dyn_into()
+            .expect("the shell submit should be a button")
+    }
+
+    /// Switches the mounted form's `submission_mode` prop and waits until the shell has been
+    /// handed the affordance of the new mode.
+    async fn switch_mode(&mut self, mode: SubmissionMode) {
+        let expected = match mode {
+            SubmissionMode::Advisory => "AdvisorySubmit",
+            _ => "Submit",
+        };
+        self.mode.set(mode);
+        poll_dom(|| {
+            (self
+                .submit_button()
+                .get_attribute("data-affordance")
+                .as_deref()
+                == Some(expected))
+            .then_some(())
+        })
+        .await;
+    }
+}
+
 struct MountedBusinessCorpus {
     root: web_sys::Element,
     handles: Rc<RefCell<HashMap<String, FormHandle>>>,
@@ -10576,6 +10881,44 @@ async fn mount_test_app_with_errors(
         },
         errors,
     )
+}
+
+async fn mount_submission_mode_test_app(
+    initial_mode: SubmissionMode,
+) -> MountedSubmissionModeTestApp {
+    let root = mount_test_root();
+    let handle = Rc::new(RefCell::new(None));
+    let submitted = Rc::new(RefCell::new(None));
+    let advisory_submissions = Rc::new(RefCell::new(Vec::new()));
+    let errors = Rc::new(RefCell::new(Vec::new()));
+    let mode = Rc::new(RefCell::new(None));
+    let vdom = VirtualDom::new_with_props(
+        submission_mode_test_app,
+        SubmissionModeTestAppProps {
+            handle: handle.clone(),
+            submitted: submitted.clone(),
+            advisory_submissions: advisory_submissions.clone(),
+            errors: errors.clone(),
+            initial_mode,
+            mode: mode.clone(),
+        },
+    );
+    launch_test_vdom(&root, vdom).await;
+    let form_handle = handle
+        .borrow()
+        .clone()
+        .expect("the mounted application should expose its handle");
+    let mode = mode
+        .borrow()
+        .expect("the mounted application should expose its submission mode signal");
+    MountedSubmissionModeTestApp {
+        root,
+        form_handle,
+        submitted,
+        advisory_submissions,
+        errors,
+        mode,
+    }
 }
 
 async fn mount_business_corpus_test_app() -> MountedBusinessCorpus {

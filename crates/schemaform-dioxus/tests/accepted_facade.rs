@@ -9,7 +9,7 @@ use schemaform_dioxus::{
     ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
     ExtensionPrepareError, ExtensionRenderContext, FindingCollectionPresenter, Localizer,
     NodePresentation, PreparedExtension, RenderConfiguration, ShellContext, ShellRenderer,
-    StructureRenderers, TextEdit,
+    StructureRenderers, SubmissionMode, TextEdit,
     render::{BUILTIN_CONTROL_PRIORITY, FindingCollectionContext, FindingKind, MessageDescriptor},
 };
 
@@ -53,6 +53,7 @@ impl ControlRenderer for Renderer {
                         | AffordanceKind::MoveDown
                         | AffordanceKind::RemoveItem
                         | AffordanceKind::Submit
+                        | AffordanceKind::AdvisorySubmit
                 ),
                 affordance.label.as_str(),
                 affordance.id.as_str(),
@@ -134,7 +135,11 @@ impl ShellRenderer for Shell {
     fn shell(&self, context: ShellContext) -> Element {
         let _shell_fields = (
             context.form_id.as_str(),
-            context.submit.kind == AffordanceKind::Submit,
+            match context.submit.kind {
+                AffordanceKind::Submit => SubmissionMode::Gated,
+                AffordanceKind::AdvisorySubmit => SubmissionMode::Advisory,
+                _ => SubmissionMode::default(),
+            },
             context.submit.label.as_str(),
             context.submit.id.as_str(),
             context.submit.accessible_name.as_deref(),

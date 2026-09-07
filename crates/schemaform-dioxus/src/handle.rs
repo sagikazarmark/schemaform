@@ -11,9 +11,9 @@ use std::{
 use dioxus::prelude::{ReadableExt, Signal, WritableExt, use_hook};
 use dioxus_core::{ScopeId, current_scope_id, use_drop};
 use schemaform::{
-    CapabilityFinding, DataRevision, DataSchemaAnnotations, ExternalFinding, ExternalFindingBatch,
-    Form, FormBuildError, FormDefinition, InstanceIdentity, ItemIdentity, JsonPointer,
-    StateRevision, SubmissionPreparation, Transition, ValidationFinding,
+    AdvisorySubmissionPreparation, CapabilityFinding, DataRevision, DataSchemaAnnotations,
+    ExternalFinding, ExternalFindingBatch, Form, FormBuildError, FormDefinition, InstanceIdentity,
+    ItemIdentity, JsonPointer, StateRevision, SubmissionPreparation, Transition, ValidationFinding,
     definition::SemanticKind,
     form::{AllowedOperations, ParseBlockerKind, ScalarValueState},
 };
@@ -137,6 +137,30 @@ impl FormHandle {
             .try_borrow_mut()
             .map_err(|_| HandleError::BorrowConflict)?;
         let preparation = form.prepare_submission();
+        drop(form);
+        self.apply_transition(preparation.transition());
+        Ok(preparation)
+    }
+
+    /// Finalizes edit buffers and atomically prepares an advisory submission: the form data with
+    /// every finding the gated path would have blocked on.
+    ///
+    /// The advisory counterpart of [`FormHandle::prepare_submission`], for a host that decides
+    /// validity itself. Preparation has the same side effects — submission is marked attempted
+    /// and parseable edit buffers are committed — and the same access semantics: re-entry while
+    /// the form is borrowed returns [`HandleError::BorrowConflict`], and a handle whose scope is
+    /// gone returns [`HandleError::Disposed`]. The returned preparation contains the transition,
+    /// already published to subscribed scopes, plus the [`schemaform::AdvisorySubmission`].
+    pub fn prepare_advisory_submission(
+        &self,
+    ) -> Result<AdvisorySubmissionPreparation, HandleError> {
+        self.ensure_live()?;
+        let mut form = self
+            .inner
+            .form
+            .try_borrow_mut()
+            .map_err(|_| HandleError::BorrowConflict)?;
+        let preparation = form.prepare_advisory_submission();
         drop(form);
         self.apply_transition(preparation.transition());
         Ok(preparation)
@@ -1203,6 +1227,14 @@ mod tests {
             name_actions.input_text("blocked by live borrow"),
             Err(HandleError::BorrowConflict)
         ));
+        assert!(matches!(
+            handle.prepare_submission(),
+            Err(HandleError::BorrowConflict)
+        ));
+        assert!(matches!(
+            handle.prepare_advisory_submission(),
+            Err(HandleError::BorrowConflict)
+        ));
         drop(borrow);
 
         mounted.set(false);
@@ -1214,6 +1246,7 @@ mod tests {
         assert_disposed!(reader.form_data());
         assert_disposed!(name.read());
         assert_disposed!(handle.prepare_submission());
+        assert_disposed!(handle.prepare_advisory_submission());
         assert_disposed!(handle.reset());
         assert_disposed!(handle.reinitialize(json!({ "name": "Grace", "rows": [] })));
         assert_disposed!(handle.apply_external_findings(external_findings));

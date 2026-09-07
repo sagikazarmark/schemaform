@@ -11,13 +11,13 @@ use std::{
     sync::Arc,
 };
 
-use dioxus::prelude::{Element, Props, rsx, use_hook};
+use dioxus::prelude::{Element, Props, Signal, WritableExt, rsx, use_hook, use_signal};
 use dioxus_core::{NoOpMutations, ScopeId, VirtualDom};
-use schemaform::{FormDefinition, SubmissionSnapshot};
+use schemaform::{AdvisorySubmission, FormDefinition, SubmissionSnapshot, form::SubmissionBlocker};
 use schemaform_dioxus::{
     Affordance, AffordanceKind, BoundForm, BuiltinShell, FormHandle, HandleError, Localizer,
     RenderConfiguration, SchemaForm, ShellContext, ShellRenderer, StructureRenderers,
-    render::MessageDescriptor, use_form,
+    SubmissionMode, render::MessageDescriptor, use_form,
 };
 use serde_json::json;
 
@@ -79,7 +79,12 @@ struct ShellAppProps {
     handle: Rc<RefCell<Option<FormHandle>>>,
     bound: Rc<RefCell<Option<BoundForm>>>,
     submitted: Rc<RefCell<Option<SubmissionSnapshot>>>,
+    advisory_submissions: Rc<RefCell<Vec<AdvisorySubmission>>>,
     errors: Rc<RefCell<Vec<HandleError>>>,
+    /// The submission mode the app mounts in; the app exposes the signal behind it through
+    /// `mode` so a test can switch the prop on the mounted form.
+    initial_mode: SubmissionMode,
+    mode: Rc<RefCell<Option<Signal<SubmissionMode>>>>,
 }
 
 impl PartialEq for ShellAppProps {
@@ -89,7 +94,10 @@ impl PartialEq for ShellAppProps {
             && Rc::ptr_eq(&self.handle, &other.handle)
             && Rc::ptr_eq(&self.bound, &other.bound)
             && Rc::ptr_eq(&self.submitted, &other.submitted)
+            && Rc::ptr_eq(&self.advisory_submissions, &other.advisory_submissions)
             && Rc::ptr_eq(&self.errors, &other.errors)
+            && self.initial_mode == other.initial_mode
+            && Rc::ptr_eq(&self.mode, &other.mode)
     }
 }
 
@@ -129,12 +137,17 @@ fn shell_app(props: ShellAppProps) -> Element {
         .bound
         .borrow_mut()
         .get_or_insert_with(|| bound.clone());
+    let mode = use_signal(|| props.initial_mode);
+    props.mode.borrow_mut().get_or_insert(mode);
     let submitted = props.submitted.clone();
+    let advisory_submissions = props.advisory_submissions.clone();
     let errors = props.errors.clone();
     rsx! {
         SchemaForm {
             form: bound,
+            submission_mode: mode(),
             on_submit: move |snapshot| *submitted.borrow_mut() = Some(snapshot),
+            on_advisory_submit: move |submission| advisory_submissions.borrow_mut().push(submission),
             on_error: move |error| errors.borrow_mut().push(error),
         }
     }
@@ -147,17 +160,25 @@ struct MountedShell {
     handle: FormHandle,
     bound: BoundForm,
     submitted: Rc<RefCell<Option<SubmissionSnapshot>>>,
+    advisory_submissions: Rc<RefCell<Vec<AdvisorySubmission>>>,
     errors: Rc<RefCell<Vec<HandleError>>>,
+    mode: Signal<SubmissionMode>,
 }
 
 impl MountedShell {
     fn mount() -> Self {
+        Self::mount_in(SubmissionMode::default())
+    }
+
+    fn mount_in(initial_mode: SubmissionMode) -> Self {
         let capture: Capture = Rc::default();
         let calls = Rc::new(Cell::new(0));
         let handle = Rc::new(RefCell::new(None));
         let bound = Rc::new(RefCell::new(None));
         let submitted = Rc::new(RefCell::new(None));
+        let advisory_submissions = Rc::new(RefCell::new(Vec::new()));
         let errors = Rc::new(RefCell::new(Vec::new()));
+        let mode = Rc::new(RefCell::new(None));
         let mut dom = VirtualDom::new_with_props(
             shell_app,
             ShellAppProps {
@@ -166,7 +187,10 @@ impl MountedShell {
                 handle: handle.clone(),
                 bound: bound.clone(),
                 submitted: submitted.clone(),
+                advisory_submissions: advisory_submissions.clone(),
                 errors: errors.clone(),
+                initial_mode,
+                mode: mode.clone(),
             },
         );
         dom.rebuild_in_place();
@@ -178,6 +202,9 @@ impl MountedShell {
             .borrow()
             .clone()
             .expect("the shell app should expose its bound form");
+        let mode = mode
+            .borrow()
+            .expect("the shell app should expose its submission mode signal");
         Self {
             dom,
             capture,
@@ -185,7 +212,9 @@ impl MountedShell {
             handle,
             bound,
             submitted,
+            advisory_submissions,
             errors,
+            mode,
         }
     }
 
@@ -199,6 +228,21 @@ impl MountedShell {
     /// Runs `callback` the way an event handler would, then settles the DOM.
     fn drive(&mut self, callback: impl FnOnce()) {
         self.dom.in_scope(ScopeId::ROOT, callback);
+        self.settle();
+    }
+
+    /// Switches the mounted form's `submission_mode` prop and settles the DOM.
+    fn switch_mode(&mut self, mode: SubmissionMode) {
+        let mut signal = self.mode;
+        self.drive(move || signal.set(mode));
+    }
+
+    /// Reinitializes the form with a name too short for the data schema, so the next submission
+    /// carries one `minLength` finding.
+    fn make_invalid(&mut self) {
+        self.handle
+            .reinitialize(json!({ "name": "A" }))
+            .expect("reinitialization with a too-short name should be accepted");
         self.settle();
     }
 
@@ -243,16 +287,16 @@ fn a_ready_submit_through_the_shell_affordance_yields_a_submission_snapshot() {
 #[test]
 fn a_blocked_submit_through_the_shell_affordance_yields_no_snapshot_and_records_the_attempt() {
     let mut mounted = MountedShell::mount();
-    mounted
-        .handle
-        .reinitialize(json!({ "name": "A" }))
-        .expect("reinitialization with a too-short name should be accepted");
-    mounted.settle();
+    mounted.make_invalid();
     let submit = mounted.captured().submit;
 
     mounted.drive(|| submit.invoke());
 
     assert!(mounted.submitted.borrow().is_none());
+    assert!(
+        mounted.advisory_submissions.borrow().is_empty(),
+        "a gated form never hands out advisory submissions"
+    );
     assert!(mounted.errors.borrow().is_empty());
     let projection = mounted
         .handle
@@ -264,6 +308,123 @@ fn a_blocked_submit_through_the_shell_affordance_yields_no_snapshot_and_records_
         !projection.findings.is_empty(),
         "a blocked submit should present its findings"
     );
+}
+
+#[test]
+fn an_advisory_form_hands_the_shell_an_advisory_submit_affordance() {
+    let mounted = MountedShell::mount_in(SubmissionMode::Advisory);
+    let shell = mounted.captured();
+
+    assert_eq!(shell.submit.kind, AffordanceKind::AdvisorySubmit);
+    assert_eq!(shell.submit.label, "Send");
+    assert_eq!(shell.submit.id, format!("{}-submit", shell.form_id));
+    assert_eq!(shell.submit.accessible_name, None);
+}
+
+#[test]
+fn an_advisory_submit_with_findings_hands_the_host_the_data_and_the_findings_it_carried() {
+    let mut mounted = MountedShell::mount_in(SubmissionMode::Advisory);
+    mounted.make_invalid();
+    let submit = mounted.captured().submit;
+
+    mounted.drive(|| submit.invoke());
+
+    let advisory_submissions = mounted.advisory_submissions.borrow();
+    let submission = advisory_submissions
+        .first()
+        .expect("an advisory submit should reach on_advisory_submit");
+    assert_eq!(advisory_submissions.len(), 1);
+    assert_eq!(submission.form_data(), &json!({ "name": "A" }));
+    let findings = submission.findings().collect::<Vec<_>>();
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert!(matches!(
+        findings[0],
+        SubmissionBlocker::Validation(finding) if finding.code() == "minLength"
+    ));
+    assert!(
+        mounted.submitted.borrow().is_none(),
+        "an advisory submission never reaches on_submit"
+    );
+    assert!(mounted.errors.borrow().is_empty());
+    let projection = mounted
+        .handle
+        .reader()
+        .read()
+        .expect("the form should be readable after an advisory submit");
+    assert!(projection.submission_attempted);
+    assert!(
+        !projection.findings.is_empty(),
+        "an advisory submit still presents the findings it sent past"
+    );
+}
+
+#[test]
+fn an_advisory_submit_of_a_valid_form_hands_the_host_the_data_and_no_findings() {
+    let mut mounted = MountedShell::mount_in(SubmissionMode::Advisory);
+    let submit = mounted.captured().submit;
+
+    mounted.drive(|| submit.invoke());
+
+    let advisory_submissions = mounted.advisory_submissions.borrow();
+    assert_eq!(advisory_submissions.len(), 1);
+    assert_eq!(advisory_submissions[0].form_data(), &initial_form_data());
+    assert_eq!(advisory_submissions[0].findings().count(), 0);
+    assert!(mounted.submitted.borrow().is_none());
+    assert!(mounted.errors.borrow().is_empty());
+}
+
+#[test]
+fn a_held_form_borrow_during_an_advisory_submit_surfaces_borrow_conflict_through_on_error() {
+    let mut mounted = MountedShell::mount_in(SubmissionMode::Advisory);
+    let submit = mounted.captured().submit;
+    let handle = mounted.handle.clone();
+
+    mounted.drive(|| {
+        handle
+            .try_transact(|_| {
+                submit.invoke();
+                Ok::<_, ()>(())
+            })
+            .expect("the outer transaction should complete without mutation");
+    });
+
+    assert_eq!(*mounted.errors.borrow(), vec![HandleError::BorrowConflict]);
+    assert!(mounted.advisory_submissions.borrow().is_empty());
+    assert!(mounted.submitted.borrow().is_none());
+}
+
+#[test]
+fn switching_the_submission_mode_prop_rewires_the_affordance_and_the_callback() {
+    let mut mounted = MountedShell::mount();
+    mounted.make_invalid();
+    assert_eq!(mounted.captured().submit.kind, AffordanceKind::Submit);
+
+    // Gated → advisory: the shell is handed the advisory affordance and the very next submit
+    // takes the advisory path.
+    mounted.switch_mode(SubmissionMode::Advisory);
+    let advisory_submit = mounted.captured().submit;
+    assert_eq!(advisory_submit.kind, AffordanceKind::AdvisorySubmit);
+    mounted.drive(|| advisory_submit.invoke());
+    assert_eq!(mounted.advisory_submissions.borrow().len(), 1);
+    assert!(mounted.submitted.borrow().is_none());
+
+    // Advisory → gated: the affordance reverts, the same findings now block, and the advisory
+    // channel stays quiet.
+    mounted.switch_mode(SubmissionMode::Gated);
+    let submit = mounted.captured().submit;
+    assert_eq!(submit.kind, AffordanceKind::Submit);
+    mounted.drive(|| submit.invoke());
+    assert_eq!(mounted.advisory_submissions.borrow().len(), 1);
+    assert!(mounted.submitted.borrow().is_none());
+
+    // An affordance a shell retained from the advisory render belongs to the same live form
+    // scope, so it is not stale, and its behaviour is fixed by its kind as every affordance's
+    // is: it still performs the advisory submission it was handed out as, whatever the form's
+    // current mode.
+    mounted.drive(|| advisory_submit.invoke());
+    assert_eq!(mounted.advisory_submissions.borrow().len(), 2);
+    assert!(mounted.submitted.borrow().is_none());
+    assert!(mounted.errors.borrow().is_empty());
 }
 
 #[test]

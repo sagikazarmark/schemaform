@@ -108,6 +108,10 @@ _Avoid_: Payload, submitted form, request body
 An immutable copy of the current form-data revision returned together with every finding the gated path would have blocked on, for a host that decides validity itself. Nothing refuses; unparseable edit buffers stay out of the data and are reported as parse findings. An advisory submission is not a validated submission snapshot and cannot become one.
 _Avoid_: Submission snapshot, draft snapshot, unvalidated snapshot, force submit
 
+**Submission mode**:
+Whether a whole form submits gated — the form is the authority on validity, a submission with blockers is refused, its findings are presented and focused — or advisory — every submission hands the host an advisory submission, its findings are presented but no focus moves and nothing is refused. A host chooses the mode per form; gated is the default, and the two results reach the host through different channels. The submit affordance carries the mode so a shell can label it for what it does.
+_Avoid_: Validation mode, draft mode, force-submit mode, strict mode
+
 **Edit buffer**:
 The exact temporary textual value of an active text-like edit. It may preserve a parseable spelling after form data has changed or retain unparseable input that cannot yet change form data.
 _Avoid_: Raw value, invalid value

@@ -386,11 +386,20 @@ pub enum AffordanceKind {
     MoveDown,
     /// Removes the item from its collection.
     RemoveItem,
-    /// Finalizes edit buffers and prepares the form for submission.
+    /// Finalizes edit buffers and prepares the form for gated submission.
     ///
     /// A ready outcome reaches `SchemaForm::on_submit`; a blocked outcome presents the
-    /// findings and focuses the finding summary instead.
+    /// findings and focuses the finding summary instead. The submit affordance of a form in
+    /// [`SubmissionMode::Gated`](crate::SubmissionMode::Gated).
     Submit,
+    /// Finalizes edit buffers and prepares an advisory submission.
+    ///
+    /// The form data, together with every finding the gated path would have blocked on,
+    /// reaches `SchemaForm::on_advisory_submit`. The findings are presented — in the summary
+    /// and at their nodes — but nothing is refused and no focus moves. The submit affordance
+    /// of a form in [`SubmissionMode::Advisory`](crate::SubmissionMode::Advisory); a shell
+    /// that wants to label the button for what it does branches on this kind.
+    AdvisorySubmit,
 }
 
 /// A localized, pre-authorized user action handed to a renderer.
@@ -505,9 +514,9 @@ impl Affordance {
     /// [`Affordance::id`], the built-in's marker attribute for its kind (`data-set-value`,
     /// `data-set-null`, `data-remove-value`, `data-replace-value`, `data-materialize`,
     /// `data-append-item`, `data-insert-item-before`, `data-move-item-up`,
-    /// `data-move-item-down`, `data-remove-item`, `data-submit`), `aria-label` from
-    /// [`Affordance::accessible_name`] when present, and [`Affordance::label`] as its text, with
-    /// `onclick` installed on [`Affordance::invoke`].
+    /// `data-move-item-down`, `data-remove-item`, `data-submit`, `data-advisory-submit`),
+    /// `aria-label` from [`Affordance::accessible_name`] when present, and [`Affordance::label`]
+    /// as its text, with `onclick` installed on [`Affordance::invoke`].
     ///
     /// Renderers that want different markup render the fields themselves and keep the `id`, the
     /// accessible name, and the `invoke` on an event handler — the three things the adapter's
@@ -532,6 +541,7 @@ impl Affordance {
                 "data-move-item-down": marker(AffordanceKind::MoveDown),
                 "data-remove-item": marker(AffordanceKind::RemoveItem),
                 "data-submit": marker(AffordanceKind::Submit),
+                "data-advisory-submit": marker(AffordanceKind::AdvisorySubmit),
                 "aria-label": affordance.accessible_name.clone(),
                 onclick: move |_| affordance.invoke(),
                 "{affordance.label}"
@@ -595,12 +605,17 @@ pub struct ShellContext {
     /// The finding summary region, including its adapter-owned wrapper element.
     ///
     /// The wrapper carries `{form_id}-summary`, `role="region"`, a localized `aria-label`,
-    /// and `tabindex="-1"`; a blocked submission focuses it. Must be placed.
+    /// and `tabindex="-1"`; a blocked gated submission focuses it. Must be placed.
     pub summary: Element,
     /// Every root-level node of the form, in definition order. Must be placed.
     pub body: Element,
-    /// The submit affordance: [`AffordanceKind::Submit`] with the localized submit label and
-    /// the id `{form_id}-submit`.
+    /// The submit affordance, with the localized submit label and the id `{form_id}-submit`.
+    ///
+    /// Its `kind` carries the form's submission mode: [`AffordanceKind::Submit`] for a gated
+    /// form, [`AffordanceKind::AdvisorySubmit`] for one in
+    /// [`SubmissionMode::Advisory`](crate::SubmissionMode::Advisory). A shell that wants its
+    /// button to say what it does ("Send anyway", say) branches on the kind rather than
+    /// reconstructing the rule; the label is the same localized message in both modes.
     pub submit: Affordance,
 }
 

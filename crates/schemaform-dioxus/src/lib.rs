@@ -4,7 +4,9 @@
 //! control renderer, structure renderer, finding presenter, localization, and
 //! extension seams, plus headless [`edit`] hooks that give custom renderers the
 //! built-in editing behaviour. [`SchemaForm`] renders unstyled semantic HTML and
-//! submits immutable [`schemaform::SubmissionSnapshot`] values.
+//! submits immutable [`schemaform::SubmissionSnapshot`] values, or — when the
+//! host opts a form into [`SubmissionMode::Advisory`] —
+//! [`schemaform::AdvisorySubmission`] values that carry their findings.
 #![deny(rustdoc::broken_intra_doc_links)]
 #![forbid(unsafe_code)]
 
@@ -23,7 +25,7 @@ use dioxus::prelude::{
 };
 #[cfg(schemaform_test_validation_faults)]
 use dioxus_core::use_drop;
-use schemaform::{SubmissionOutcome, SubmissionSnapshot};
+use schemaform::{AdvisorySubmission, SubmissionOutcome, SubmissionSnapshot};
 use serde_json::Value;
 
 mod dom;
@@ -87,6 +89,33 @@ fn report_operation<T>(
     route_operation(handler, result).is_some()
 }
 
+/// How a [`SchemaForm`] submits: whether the form is the authority on validity.
+///
+/// The mode is a prop of [`SchemaForm`], so a host can switch it on a mounted form; the submit
+/// affordance handed to the shell follows on the next render. It selects which of two callbacks
+/// a submission reaches — `on_submit` or `on_advisory_submit` — and the two never share a
+/// channel, so a host cannot receive findings-laden data where it expects a validated snapshot.
+/// The enum may grow, so matches need a wildcard arm.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum SubmissionMode {
+    /// The form is the last word on validity.
+    ///
+    /// Submission prepares through [`handle::FormHandle::prepare_submission`]: a ready
+    /// [`SubmissionSnapshot`] reaches `on_submit`; a blocked outcome presents the findings and
+    /// focuses the finding summary, and nothing reaches the host. The default.
+    #[default]
+    Gated,
+    /// The host decides validity itself.
+    ///
+    /// Submission prepares through [`handle::FormHandle::prepare_advisory_submission`]: the
+    /// [`AdvisorySubmission`] — form data plus every finding the gated path would have blocked
+    /// on — reaches `on_advisory_submit` every time. The findings are presented in the summary
+    /// and at their nodes so the reader sees what is going out unchecked, but no focus is
+    /// stolen and nothing is refused.
+    Advisory,
+}
+
 /// Properties for the client-side [`SchemaForm`] component.
 ///
 /// Callbacks run synchronously after the adapter operation has released its form borrow. They may
@@ -96,10 +125,22 @@ fn report_operation<T>(
 pub struct SchemaFormProps {
     /// Preflighted single-mount form plan to render.
     pub form: render::BoundForm,
+    /// Whether submission is gated on validity or advisory. Gated when not set.
+    #[props(default)]
+    pub submission_mode: SubmissionMode,
     /// Receives only immutable snapshots that passed submission preparation.
     ///
     /// Blocked submissions do not call this callback; they update finding presentation and focus.
+    /// In [`SubmissionMode::Advisory`] this callback is never called.
     pub on_submit: EventHandler<SubmissionSnapshot>,
+    /// Receives every submission of a form in [`SubmissionMode::Advisory`]: the form data with
+    /// the findings it carried.
+    ///
+    /// This callback is optional so that a gated form need not name it; in
+    /// [`SubmissionMode::Gated`] it is never called, and an advisory form that leaves it unset
+    /// drops its submissions.
+    #[props(default)]
+    pub on_advisory_submit: EventHandler<AdvisorySubmission>,
     /// Receives adapter operation failures, including reentrant handle borrow conflicts.
     ///
     /// This callback is optional; when it is not set, failures are dropped. Failures are never
@@ -115,11 +156,13 @@ pub struct SchemaFormProps {
 /// SSR or hydration. Focus movement and rejected-write resynchronisation run through the
 /// platform's [`dioxus::document::Document`], which the host's renderer must provide, and land
 /// asynchronously. A [`render::BoundForm`] and its clones share generated DOM identity and must
-/// have at most one concurrent mount. Submission calls `on_submit` only for a ready
-/// [`SubmissionSnapshot`]; blocked outcomes update findings and focus, while adapter failures call
-/// `on_error`. Built-ins emit semantic accessibility markup; a custom control renderer owns its
-/// whole control region and is responsible for emitting the elements its
-/// [`render::NodePresentation`] references.
+/// have at most one concurrent mount. In the default [`SubmissionMode::Gated`], submission calls
+/// `on_submit` only for a ready [`SubmissionSnapshot`] and blocked outcomes update findings and
+/// focus; in [`SubmissionMode::Advisory`], every submission calls `on_advisory_submit` with an
+/// [`AdvisorySubmission`] and the findings it carried are presented without moving focus.
+/// Adapter failures call `on_error` in either mode. Built-ins emit semantic accessibility
+/// markup; a custom control renderer owns its whole control region and is responsible for
+/// emitting the elements its [`render::NodePresentation`] references.
 ///
 /// The adapter owns the `<form>` element, the finding-summary region wrapper, and the submit
 /// handling; the bound form's [`render::ShellRenderer`] arranges the summary, the body, and the
@@ -128,10 +171,15 @@ pub fn SchemaForm(props: SchemaFormProps) -> Element {
     let operation_errors = use_context_provider(OperationErrorHandler::default);
     operation_errors.set(Some(props.on_error));
     let form_id = props.form.inner.form_id.clone();
-    let submit = use_submit_callback(&props);
+    let gated_submit = use_gated_submit_callback(&props);
+    let advisory_submit = use_advisory_submit_callback(&props);
+    let (submit_kind, submit) = match props.submission_mode {
+        SubmissionMode::Advisory => (render::AffordanceKind::AdvisorySubmit, advisory_submit),
+        SubmissionMode::Gated => (render::AffordanceKind::Submit, gated_submit),
+    };
     let scope = render::use_affordance_scope();
     let submit_affordance = render::Affordance::new(
-        render::AffordanceKind::Submit,
+        submit_kind,
         localize_builtin(&props.form, BuiltinMessage::Submit),
         format!("{form_id}-submit"),
         None,
@@ -184,7 +232,8 @@ pub fn SchemaForm(props: SchemaFormProps) -> Element {
     }
 }
 
-/// Creates the hook-stable submission callback behind the submit affordance and the form's
+/// Creates the hook-stable gated submission callback: the operation behind an
+/// [`render::AffordanceKind::Submit`] affordance and, in [`SubmissionMode::Gated`], the form's
 /// `submit` event.
 ///
 /// Invocation finalizes edit buffers and prepares submission: a ready snapshot reaches
@@ -192,7 +241,7 @@ pub fn SchemaForm(props: SchemaFormProps) -> Element {
 /// `on_error`. The closure is refreshed every render so it always calls the current props while
 /// the callback identity stays fixed. This is a hook: call it at the same position on every
 /// render.
-fn use_submit_callback(props: &SchemaFormProps) -> Callback<()> {
+fn use_gated_submit_callback(props: &SchemaFormProps) -> Callback<()> {
     let form = props.form.clone();
     let summary_focus =
         render::TargetFocusAction::new(format!("{}-summary", props.form.inner.form_id));
@@ -205,6 +254,27 @@ fn use_submit_callback(props: &SchemaFormProps) -> Callback<()> {
         },
         Err(error) => on_error.call(error),
     })
+}
+
+/// Creates the hook-stable advisory submission callback: the operation behind an
+/// [`render::AffordanceKind::AdvisorySubmit`] affordance and, in [`SubmissionMode::Advisory`],
+/// the form's `submit` event.
+///
+/// Invocation finalizes edit buffers and prepares an advisory submission that reaches
+/// `on_advisory_submit`; an adapter failure reaches `on_error`. No focus moves. Both submission
+/// callbacks exist on every render, whatever the mode, so an affordance keeps performing the
+/// operation of the kind it was handed out as, as [`render::Affordance`] promises, even if the
+/// mode has since been switched. This is a hook: call it at the same position on every render.
+fn use_advisory_submit_callback(props: &SchemaFormProps) -> Callback<()> {
+    let form = props.form.clone();
+    let on_advisory_submit = props.on_advisory_submit;
+    let on_error = props.on_error;
+    use_callback(
+        move |()| match form.handle().prepare_advisory_submission() {
+            Ok(preparation) => on_advisory_submit.call(preparation.into_parts().1),
+            Err(error) => on_error.call(error),
+        },
+    )
 }
 
 #[derive(Props, Clone, PartialEq)]

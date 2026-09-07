@@ -69,6 +69,10 @@ fn App() -> Element {
 `RenderConfiguration::bind` performs definition-stable renderer and extension
 preflight before mounting. `SchemaForm` calls `on_submit` only for a ready
 snapshot; blocked submission updates finding presentation and focus instead.
+That is the default, gated `SubmissionMode`; a host that decides validity itself
+sets `submission_mode: SubmissionMode::Advisory` and receives every submission
+through `on_advisory_submit` instead (see
+[Submission](#errors-and-platform-boundary) below).
 Adapter operation failures are reported through the optional `on_error`
 callback and are dropped when it is not set.
 
@@ -374,15 +378,21 @@ The first slot is the **form shell**. `ShellRenderer::shell` receives a
   the submit handling, `tabindex="-1"`, and the error-handler context.
 - `summary` is the finding summary inside its adapter-owned wrapper
   (`{form_id}-summary`, `role="region"`, a localized `aria-label`,
-  `tabindex="-1"`). A blocked submission focuses it. It must be placed.
+  `tabindex="-1"`). A blocked gated submission focuses it. It must be placed.
 - `body` is every root-level node in definition order, pre-keyed. It must be
   placed.
-- `submit` is an `Affordance` of kind `Submit` with the localized submit label
-  and the id `{form_id}-submit`. `invoke` finalizes edit buffers and prepares
-  submission: a ready snapshot reaches `on_submit`, a blocked outcome focuses
-  the summary, and an adapter failure reaches `on_error`. Place it either as a
-  `type="submit"` button, which submits through the form element, or as any
-  element that calls `invoke`; not both on one element.
+- `submit` is the submit `Affordance` with the localized submit label and the
+  id `{form_id}-submit`. Its `kind` carries the form's submission mode:
+  `Submit` for the default gated form, `AdvisorySubmit` for a form in
+  `SubmissionMode::Advisory`. `invoke` finalizes edit buffers and prepares
+  submission the way the mode says: gated, a ready snapshot reaches `on_submit`
+  and a blocked outcome focuses the summary; advisory, the data and its findings
+  reach `on_advisory_submit` and no focus moves. An adapter failure reaches
+  `on_error` either way. A shell that wants its button to say what it does
+  ("Send anyway", or whatever the host's words are) branches on the kind rather
+  than reconstructing the rule. Place it either as a `type="submit"` button,
+  which submits through the form element, or as any element that calls
+  `invoke`; not both on one element.
 
 `BuiltinShell` is the public built-in: summary, body, then a `type="submit"`
 button carrying the affordance's id and label.
@@ -577,7 +587,61 @@ interface. Text is rendered as escaped plain text.
 | Render preflight | `render::BindError` with structured `render::BindFinding` values |
 | Handle and control operations | `HandleError`; a custom renderer routes it to `on_error` with `ControlRenderContext::report` |
 | Host transactions | `HandleTransactionError` |
-| Submission | `SchemaForm::on_submit` for a ready snapshot; optional `SchemaForm::on_error` for adapter failures |
+| Submission, `SubmissionMode::Gated` (default) | `SchemaForm::on_submit` for a ready `SubmissionSnapshot`; a blocked outcome presents its findings and focuses the summary, and nothing reaches the host |
+| Submission, `SubmissionMode::Advisory` | `SchemaForm::on_advisory_submit` for every submission, with an `AdvisorySubmission`: the form data plus every finding the gated path would have blocked on; the findings are presented and no focus moves |
+| Submission, either mode | Optional `SchemaForm::on_error` for adapter failures |
+
+The mode is a `SchemaForm` prop, gated when not set, so a host that says nothing
+sees no change. The two submission callbacks carry different types and never
+share a channel: an `AdvisorySubmission` is not a `SubmissionSnapshot` and
+offers no conversion into one, so a consumer expecting validated data cannot
+receive findings-laden data by accident. Switching the prop on a mounted form
+takes effect on the next render: the shell is handed the affordance of the new
+mode (`AffordanceKind::Submit` or `AffordanceKind::AdvisorySubmit`) and the
+form's own `submit` event follows it, while an affordance a shell retained from
+an earlier render keeps performing the operation of the kind it was handed out
+as, as every affordance does. `FormHandle::prepare_advisory_submission` is the
+handle-level call behind the advisory path, with the same borrow-conflict and
+disposed-handle semantics as `prepare_submission`; which hosts want which path
+is described in
+[the core README](../schemaform/README.md#two-submission-paths).
+
+```rust,no_run
+use dioxus::prelude::*;
+use schemaform::{AdvisorySubmission, FormDefinition};
+use schemaform_dioxus::{RenderConfiguration, SchemaForm, SubmissionMode, use_form};
+use serde_json::json;
+
+#[component]
+fn Draft() -> Element {
+    let definition = use_hook(|| FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": { "title": { "type": "string", "minLength": 8 } }
+    })).expect("the trusted data schema should compile"));
+    let form = use_form(definition, json!({ "title": "Login" }))
+        .expect("the form should be created");
+    let form_to_bind = form.clone();
+    let bound = use_hook(move || RenderConfiguration::default()
+        .bind(&form_to_bind)
+        .expect("the built-in renderer should bind"));
+
+    rsx! {
+        SchemaForm {
+            form: bound,
+            submission_mode: SubmissionMode::Advisory,
+            // Never called in advisory mode: an advisory form produces no validated snapshot.
+            on_submit: move |_| {},
+            on_advisory_submit: move |submission: AdvisorySubmission| {
+                // Save the draft as it stands; decide what to do about its findings.
+                let _findings = submission.findings().count();
+                println!("{}", submission.form_data());
+            },
+        }
+    }
+}
+# fn main() {}
+```
 
 This package supports client-side rendering. Browser CSR is the tested platform:
 the repository's real-DOM suite and interaction matrix run there. Desktop and
