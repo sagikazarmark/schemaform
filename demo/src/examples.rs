@@ -1,5 +1,6 @@
 //! Small, focused examples mounted and quoted by the feature pages.
 
+pub mod advisory;
 pub mod arrays;
 pub mod daisyui;
 pub mod daisyui_builtin;

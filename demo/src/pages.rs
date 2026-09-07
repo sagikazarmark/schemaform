@@ -1,5 +1,6 @@
 //! Route components for the docs-by-example gallery.
 
+mod advisory;
 mod arrays;
 mod daisyui;
 mod daisyui_builtin;
@@ -9,6 +10,7 @@ mod not_found;
 mod playground;
 mod presentation;
 
+pub use advisory::Advisory;
 pub use arrays::Arrays;
 pub use daisyui::{Daisyui, DaisyuiRtl};
 pub use daisyui_builtin::DaisyuiBuiltin;

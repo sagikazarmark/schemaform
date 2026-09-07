@@ -22,6 +22,11 @@ pub fn Home() -> Element {
             Route::Presentation {},
         ),
         (
+            "Advisory submission",
+            "Opt a form out of the validity gate: the host receives the data together with the findings it carried, and nothing is refused.",
+            Route::Advisory {},
+        ),
+        (
             "daisyUI form",
             "Render every control, the arrays, the shell, and the finding summary with a component library through the renderer seams, and compare with the unstyled built-in.",
             Route::Daisyui {},
