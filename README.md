@@ -61,6 +61,13 @@ Both packages are published on crates.io and share one version; see the
 what changed in each release. Browser latency and runtime-memory calibration
 remain future work, and no release makes a quantitative claim for either.
 
+Browser CSR is the tested platform. A desktop WebView runs the same adapter
+code path, and the evidence for it is the manual
+[desktop smoke checklist](testing/desktop-smoke.md): a person runs the demo as
+a desktop application and records, per WebView and dated, whether focus and
+resynchronisation reach the WebView. Nothing automated drives a WebView, and the
+desktop binary has no artifact-size gate.
+
 ## Quick Start
 
 Compile a trusted data schema, edit through the core engine, and prepare a
@@ -188,6 +195,8 @@ npm run build
 dx serve
 ```
 
+`dx serve --platform desktop` opens the same pages in the platform's WebView.
+
 ## Development
 
 Run the native workspace checks with:
@@ -239,6 +248,25 @@ cargo run --locked -p browser-workload-pack -- check
 cargo test --locked -p schemaform-fuzz-harness
 ```
 
+### Desktop
+
+The desktop evidence is the [desktop smoke checklist](testing/desktop-smoke.md).
+It runs the demo as a desktop application and, per WebView (WebKitGTK,
+WKWebView, WebView2), checks by hand that focus after a blocked submission,
+summary focus-to-target through a hidden tab panel, every collection affordance,
+resynchronisation after a write the core does not keep, and one IME composition
+behave as the adapter promises. Results are recorded with a date. The `devenv`
+shell provides the Linux WebView build inputs and `xvfb-run` for a headless run;
+the checklist lists them and how to observe a WebView without a display:
+
+```console
+cd demo
+dx serve --platform desktop
+```
+
+Not covered: no automated WebView run exists — no CI job or Playwright project
+opens a WebView — and there is no artifact-size gate for the desktop binary.
+
 ### Continuous integration and release
 
 Every pull request and push to `main` runs the [Dagger](https://dagger.io)
@@ -250,8 +278,9 @@ both themes), and `demo:worker-bundle` for the `demo/` workspace. Pushes to
 `main` also deploy the demo.
 
 The browser test suite above, the interaction matrix, the artifact-size gate,
-the evidence archive, and the `fuzz/` targets do not run in CI; run them by
-hand before cutting a release. Releases are cut from a clean `main` with
+the evidence archive, the desktop smoke checklist, and the `fuzz/` targets do
+not run in CI; run them by hand before cutting a release. Releases are cut from
+a clean `main` with
 [`cargo-release`](https://github.com/crate-ci/cargo-release): both crates take
 the shared workspace version, and the release commit and `v{version}` tag are
 signed.

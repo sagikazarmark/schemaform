@@ -13,7 +13,11 @@ crates, browser targets, or release checks:
   and content-addressed fixtures as immutable release contracts.
 - `toolchain/` keeps the Dioxus pin and `rust-version` identical across the
   root, `fuzz/` and `demo/` manifests, which cannot inherit them from one
-  workspace.
+  workspace, and keeps the demo's platform selection in the Cargo features
+  `dx` reads.
+- `desktop-smoke.md` is the manual checklist that stands in for an automated
+  WebView run: what a person verifies in the desktop demo per WebView, and the
+  dated results of each run.
 
 Testing infrastructure that follows ecosystem conventions remains outside this
 tree:

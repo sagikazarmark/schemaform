@@ -27,13 +27,16 @@ the adapter's `schemaform-*` class hooks with daisyUI classes in its own
 stylesheet (`demo/src/forms.css`); that theme is the demo's, not this
 component's, and shrinks as further structure seams ship.
 
-## Browser CSR only
+## Client-side rendering only
 
-This component targets the browser client-side rendering path of
-`schemaform-dioxus`. It is not supported under SSR, hydration, or a desktop
-WebView: the edit hooks it is built on resynchronise the DOM after the core
-rejects input, and the registry's widgets focus their native elements through
-`MountedData` and `document.eval`.
+This component runs on the client-side rendering path of `schemaform-dioxus`,
+in a browser or in a desktop WebView running the same code. It is not supported
+under SSR or hydration: the edit hooks it is built on resynchronise the DOM
+after the core rejects input, and the registry's widgets focus their native
+elements through `MountedData` and `document.eval`, all of which need a live
+document. Browser CSR is the tested platform; a desktop WebView is not a
+support claim — what has been verified there, and when, is the repository's
+manual desktop smoke checklist (`testing/desktop-smoke.md`).
 
 ## Layout
 

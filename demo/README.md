@@ -17,6 +17,28 @@ dx serve
 Open the URL printed by `dx`. For live CSS rebuilding, run `npm run watch`
 alongside `dx serve`.
 
+### Desktop
+
+The same pages open in the platform's WebView with:
+
+```console
+dx serve --platform desktop
+```
+
+`dx build --platform desktop` writes the executable under
+`target/dx/demo/debug/<os>/app/`. The platform is a Cargo feature: `default`
+selects `web`, so `dx serve`, `cargo test`, and the Dagger checks are web
+builds, and `--platform desktop` swaps in `desktop`. On Linux the WebView is
+WebKitGTK and `wry` links GTK 3, WebKitGTK 4.1, libsoup 3, OpenSSL, and libxdo;
+the repository's `devenv` shell provides them. macOS (WKWebView) and Windows
+(WebView2) need nothing beyond the system WebView. The examples report adapter
+failures with `form operation failed: …` on standard error, which `dx serve`
+shows in its log.
+
+Desktop is not covered by any automated check. What a person verifies there,
+and when, is the repository's
+[desktop smoke checklist](../testing/desktop-smoke.md).
+
 The native tests run with `cargo test` from this directory; the Dagger pipeline
 runs them as the `test` check next to the wasm bundle. The examples' tests sit
 beside the examples; the `schemaform_daisyui` component's tests live in

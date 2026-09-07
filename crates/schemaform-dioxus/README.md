@@ -584,8 +584,10 @@ the repository's real-DOM suite and interaction matrix run there. Desktop and
 mobile WebViews share the same code path — every DOM touch (focus movement and
 putting canonical values back into widgets after the core rejects a write) runs
 through Dioxus's `document::eval` with fixed scripts — so the suite is evidence
-for the scripts, while evidence that each WebView's transport reaches them is a
-manual smoke checklist ([#32](https://github.com/sagikazarmark/schemaform/issues/32)).
+for the scripts, while evidence that each WebView's transport reaches them is
+the repository's manual
+[desktop smoke checklist](https://github.com/sagikazarmark/schemaform/blob/main/testing/desktop-smoke.md),
+run by hand against the demo and recorded per WebView with a date.
 SSR, hydration,
 transport, authentication, retries, and pending/success lifecycle are outside
 its scope.

@@ -122,7 +122,7 @@ fn DaisyuiPage(direction: WritingDirection) -> Element {
                 "Read the component's README",
                 "https://github.com/sagikazarmark/schemaform/blob/main/demo/src/components/schemaform_daisyui/README.md",
             )),
-            "The published crates do not depend on dioxus-field, the registry, or daisyUI. The component — its control renderer, structure bundle, and finding presenter — is laid out as a dx components member under src/components so it can move to a registry later, the theme for the remaining hooks is the demo's own stylesheet, and both are browser-CSR only."
+            "The published crates do not depend on dioxus-field, the registry, or daisyUI. The component — its control renderer, structure bundle, and finding presenter — is laid out as a dx components member under src/components so it can move to a registry later, the theme for the remaining hooks is the demo's own stylesheet, and both are client-side only: a browser or a desktop WebView, not SSR or hydration."
         }
     }
 }

@@ -11,7 +11,8 @@ pub mod ui_schema;
 /// Reports a form operation failure where a developer will see it.
 ///
 /// `eprintln!` is a no-op on `wasm32-unknown-unknown`, so in the browser the failure goes to the
-/// console; natively (the examples' own tests) it goes to stderr.
+/// console; natively — the desktop build, where `dx serve` shows the app's standard error, and
+/// the examples' own tests — it goes to stderr.
 pub fn report_form_error(error: &schemaform_dioxus::HandleError) {
     let message = format!("form operation failed: {error}");
     #[cfg(target_arch = "wasm32")]

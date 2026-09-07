@@ -5,6 +5,17 @@ edition = "2024"
 rust-version = "1.92"
 publish = false
 
+# One Cargo feature per renderer, named the way `dx` selects platforms: `dx serve`
+# autodetects the web build from `default`, and `dx serve --platform desktop`
+# builds with `--no-default-features --features desktop` plus the default features
+# that enable no renderer. `cargo test` (no `dx`) stays a web build through
+# `default`. Nothing on the `dioxus` dependency itself may select a renderer, or
+# it would be compiled into every platform build.
+[features]
+default = ["web"]
+web = ["dioxus/web"]
+desktop = ["dioxus/desktop"]
+
 [dependencies]
 schemaform = { path = "../crates/schemaform" }
 schemaform-dioxus = { path = "../crates/schemaform-dioxus" }
@@ -20,7 +31,6 @@ dioxus = { version = "=0.7.10", default-features = false, features = [
     "mounted",
     "router",
     "signals",
-    "web",
 ] }
 dioxus-code = { version = "0.1.2", default-features = false, features = [
     "lang-json",
