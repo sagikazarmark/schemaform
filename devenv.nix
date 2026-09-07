@@ -16,6 +16,12 @@
     cargo-dist
     cargo-release
     cargo-watch
+
+    # Browser test suite (README "Development"). The wasm-bindgen-cli version
+    # must match the `wasm-bindgen` version in Cargo.lock; bump both together.
+    wasm-bindgen-cli_0_2_126
+    firefox
+    geckodriver
   ];
 
   languages = {

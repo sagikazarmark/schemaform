@@ -197,7 +197,9 @@ cargo test --locked --workspace
 ```
 
 The browser tracer uses `wasm-bindgen-test-runner` matching the locked
-`wasm-bindgen` version, Firefox, and geckodriver:
+`wasm-bindgen` version, Firefox, and geckodriver. The `devenv` shell provides
+all three (`devenv.nix` pins `wasm-bindgen-cli` to the lockfile's version;
+bump them together):
 
 ```console
 RUSTFLAGS="--cfg schemaform_test_validation_faults" \
@@ -206,6 +208,12 @@ GECKODRIVER="$(command -v geckodriver)" \
 cargo test --locked --target wasm32-unknown-unknown \
   -p schemaform-dioxus --test browser_csr
 ```
+
+The runner instruments the whole test binary in memory; with debug info that
+binary is about 180 MiB and the runner's working set exceeds 3 GiB. On a machine
+with less than about 4 GiB free, prefix the command with
+`CARGO_PROFILE_TEST_DEBUG=0 CARGO_PROFILE_DEV_DEBUG=0` — the suite is unchanged,
+only panic backtraces lose line numbers.
 
 The same public-facade corpora run natively and in browser WASM, so the
 fixed-object, array, and business-schema qualification suites can be executed
