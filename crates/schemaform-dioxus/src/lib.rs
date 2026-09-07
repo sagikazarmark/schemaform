@@ -1173,8 +1173,9 @@ impl BuiltinMessage {
                 "True".to_owned(),
                 serde_json::json!({}),
             ),
-            // The core spells a choice control's null option as JSON (`null`), which is not a
-            // label for a person; the adapter labels it like the boolean values above.
+            // The core spells an untitled null option of a choice control as JSON (`null`),
+            // which is not a label for a person; the adapter labels it like the boolean values
+            // above. A constant choice's titled null option keeps its authored title instead.
             Self::ChoiceNull => (
                 "schemaform.choice.null",
                 "None".to_owned(),
@@ -3304,6 +3305,8 @@ fn BuiltinBooleanControl(props: BuiltinControlProps) -> Element {
 /// The built-in choice control: a native select over opaque option identities.
 ///
 /// Built on [`edit::use_choice_edit`] and the public context, as a custom renderer would be.
+/// Each option's text is its localized label; an option's description is not rendered, since an
+/// HTML `option` has no slot for one.
 #[allow(non_snake_case)]
 fn BuiltinChoiceControl(props: BuiltinControlProps) -> Element {
     let context = &props.context;

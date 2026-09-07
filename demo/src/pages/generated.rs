@@ -30,7 +30,11 @@ pub fn Generated() -> Element {
         ExampleSection {
             title: "One schema, many scalar states",
             intro: rsx! {
-                "Try a two-character name or an age below 18, then submit. The same form also demonstrates a boolean, finite choice, nullable value, constant, read-only value, and a write-only replacement. "
+                "Try a two-character name or an age below 18, then submit. The same form also demonstrates a boolean, a finite choice spelled as a plain "
+                InlineCode { "enum" }
+                " beside a constant choice (a "
+                InlineCode { "oneOf" }
+                " of titled constants), nullable value, constant, read-only value, and a write-only replacement. "
                 InlineCode { "SubmissionSnapshot" }
                 " is emitted only after every parse and validation blocker is clear."
             },

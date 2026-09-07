@@ -115,6 +115,7 @@ fn headless_edit_handles(text: &TextEdit, boolean: &BooleanEdit, choice: &Choice
         (
             option.identity.as_str(),
             option.label.as_str(),
+            option.description.as_deref(),
             option.is_null,
             option.disabled,
         )

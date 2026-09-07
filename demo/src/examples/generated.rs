@@ -7,9 +7,12 @@ use crate::components::{StatusLine, schemaform_daisyui};
 
 /// Generated presentation needs only a Draft 2020-12 data schema. This one
 /// exercises text, integer, boolean, choice, nullable, constant, read-only, and
-/// write-only controls as well as validation and submission. The controls are
-/// the built-in renderer's; only the shell and the finding summary come from
-/// the demo's daisyUI component.
+/// write-only controls as well as validation and submission. The two choices
+/// show both spellings side by side: a plain `enum` whose options read as their
+/// values, and a constant choice (`oneOf` of titled constants) whose options
+/// read as their titles in authored order. The controls are the built-in
+/// renderer's; only the shell and the finding summary come from the demo's
+/// daisyUI component.
 #[component]
 pub fn GeneratedControlsExample() -> Element {
     let definition = use_hook(definition);
@@ -20,6 +23,7 @@ pub fn GeneratedControlsExample() -> Element {
             "age": 36,
             "active": true,
             "plan": "team",
+            "priority": "normal",
             "nickname": null,
             "account_type": "standard",
             "customer_id": "cus_1843",
@@ -78,7 +82,7 @@ fn definition() -> FormDefinition {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "age", "active", "plan", "account_type"],
+        "required": ["name", "age", "active", "plan", "priority", "account_type"],
         "properties": {
             "name": {
                 "type": "string",
@@ -98,6 +102,26 @@ fn definition() -> FormDefinition {
             "plan": {
                 "title": "Plan",
                 "enum": ["starter", "team", "enterprise"]
+            },
+            "priority": {
+                "title": "Support priority",
+                "oneOf": [
+                    {
+                        "const": "low",
+                        "title": "Low priority",
+                        "description": "Answered within the week."
+                    },
+                    {
+                        "const": "normal",
+                        "title": "Normal priority",
+                        "description": "Answered within a business day."
+                    },
+                    {
+                        "const": "high",
+                        "title": "High priority",
+                        "description": "Escalated within the hour."
+                    }
+                ]
             },
             "nickname": {
                 "type": ["string", "null"],

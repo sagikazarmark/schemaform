@@ -127,8 +127,9 @@ impl ControlMatcher for HookedControls {
     }
 }
 
-/// Localizes exactly one keyless authored label, proving choice labels pass through the
-/// configured localizer, and the null option's built-in message, proving it is keyed;
+/// Localizes exactly two keyless authored labels, proving choice labels pass through the
+/// configured localizer with the core's compiled label (an `enum` value or a constant-choice
+/// title) as the fallback, and the null option's built-in message, proving it is keyed;
 /// everything else falls back.
 struct HeadlessLocalizer;
 
@@ -136,6 +137,9 @@ impl Localizer for HeadlessLocalizer {
     fn localize(&self, message: &MessageDescriptor) -> String {
         if message.key.is_none() && message.fallback == "public" {
             return "Public".to_owned();
+        }
+        if message.key.is_none() && message.fallback == "High priority" {
+            return "Urgent".to_owned();
         }
         if message.key.as_deref() == Some("schemaform.choice.null") {
             return "Not chosen".to_owned();
@@ -171,7 +175,8 @@ fn initial_form_data() -> serde_json::Value {
         "secret_flag": true,
         "mode": "private",
         "fixed_mode": "a",
-        "secret_mode": "a"
+        "secret_mode": "a",
+        "priority": "high"
     })
 }
 
@@ -183,7 +188,7 @@ fn headless_app(props: HeadlessAppProps) -> Element {
             "additionalProperties": false,
             "required": [
                 "quantity", "name", "secret", "note", "enabled", "secret_flag", "mode",
-                "fixed_mode", "secret_mode"
+                "fixed_mode", "secret_mode", "priority"
             ],
             "properties": {
                 "quantity": { "type": "integer", "title": "Quantity", "minimum": 0 },
@@ -210,6 +215,18 @@ fn headless_app(props: HeadlessAppProps) -> Element {
                     "title": "Secret mode",
                     "enum": ["a", "b"],
                     "writeOnly": true
+                },
+                "priority": {
+                    "title": "Priority",
+                    "oneOf": [
+                        {
+                            "const": "high",
+                            "title": "High priority",
+                            "description": "Escalate within the hour"
+                        },
+                        { "const": "low" },
+                        { "const": null, "title": "Not specified" }
+                    ]
                 }
             }
         }))
@@ -754,5 +771,66 @@ fn write_only_choice_selections_are_not_echoed() {
 
     assert_eq!(mounted.form_data()["secret_mode"], json!("b"));
     assert_eq!(mounted.selected("/secret_mode"), None);
+    assert!(mounted.errors.borrow().is_empty());
+}
+
+#[test]
+fn constant_choice_options_carry_descriptions_and_titles_through_the_localizer() {
+    let mounted = MountedHeadless::mount();
+
+    let options = mounted
+        .choice_edit("/priority")
+        .options
+        .iter()
+        .map(|option| {
+            (
+                option.label.clone(),
+                option.description.clone(),
+                option.is_null,
+            )
+        })
+        .collect::<Vec<_>>();
+    // A constant choice keeps the authored branch order rather than sorting null first. The
+    // compiled title is the keyless fallback the localizer receives, so "High priority" is the
+    // one authored title the localizer maps; an untitled branch falls back to its value and has
+    // no description. A titled null option keeps its authored title instead of the adapter's
+    // `schemaform.choice.null` message, which only stands in for the core's JSON spelling.
+    assert_eq!(
+        options,
+        [
+            (
+                "Urgent".to_owned(),
+                Some("Escalate within the hour".to_owned()),
+                false,
+            ),
+            ("low".to_owned(), None, false),
+            ("Not specified".to_owned(), None, true),
+        ]
+    );
+    // An `enum` choice's untitled null option still carries the adapter's message.
+    assert_eq!(
+        mounted.option("/mode", None),
+        mounted.option("/mode", Some("Not chosen"))
+    );
+}
+
+#[test]
+fn selecting_a_titled_null_constant_choice_option_sets_null() {
+    let mut mounted = MountedHeadless::mount();
+    let high = mounted.option("/priority", Some("Urgent"));
+    let not_specified = mounted.option("/priority", None);
+    assert_eq!(mounted.selected("/priority"), Some(high.clone()));
+
+    let edit = mounted.choice_edit("/priority");
+    mounted.drive(|| edit.select.call(Some(not_specified.clone())));
+
+    assert_eq!(mounted.form_data()["priority"], json!(null));
+    assert_eq!(mounted.selected("/priority"), Some(not_specified));
+
+    let low = mounted.option("/priority", Some("low"));
+    mounted.drive(|| edit.select.call(Some(low.clone())));
+
+    assert_eq!(mounted.form_data()["priority"], json!("low"));
+    assert_eq!(mounted.selected("/priority"), Some(low));
     assert!(mounted.errors.borrow().is_empty());
 }

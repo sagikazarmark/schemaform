@@ -1887,6 +1887,70 @@ fn choice_test_app(props: TestAppProps) -> Element {
     }
 }
 
+/// Two constant choices: `/priority` reaches the built-in select through the ordinary matcher,
+/// `/region` carries an exact widget symbol that resolves to the hook-based [`HookRenderer`].
+/// The branch order is deliberately not the sorted order of either the constants or the titles.
+fn constant_choice_test_app(props: TestAppProps) -> Element {
+    let pointer = |value| JsonPointer::parse(value).expect("the test binding should be valid");
+    let widget = WidgetSymbol::parse("company:select").expect("the widget symbol should parse");
+    let ui_schema = UiSchema::new(UiElement::Stack(Stack::new([
+        UiElement::Control(Control::new(Binding::root(pointer("/priority")))),
+        UiElement::Control(Control::new(Binding::root(pointer("/region"))).widget(widget.clone())),
+    ])));
+    let definition = FormDefinition::compiler(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["priority", "region"],
+        "properties": {
+            "priority": {
+                "title": "Priority",
+                "oneOf": [
+                    {
+                        "const": "low",
+                        "title": "Low priority",
+                        "description": "Handle within the week"
+                    },
+                    { "const": "medium", "title": "Medium priority" },
+                    {
+                        "const": "high",
+                        "title": "High priority",
+                        "description": "Escalate within the hour"
+                    }
+                ]
+            },
+            "region": {
+                "title": "Region",
+                "anyOf": [
+                    { "const": "us", "title": "United States" },
+                    { "const": "eu", "title": "Europe" },
+                    { "const": null, "title": "Anywhere" }
+                ]
+            }
+        }
+    }))
+    .ui_schema(ui_schema)
+    .compile()
+    .expect("the constant choice definition should compile");
+    let form = use_form(definition, json!({ "priority": "medium", "region": "eu" }))
+        .expect("the constant choice form should be created");
+    let bound = RenderConfiguration::builder()
+        .controls(ControlRegistry::with_builtins().widget(widget, Arc::new(HookRenderer)))
+        .build()
+        .bind(&form)
+        .expect("the constant choices should bind to the built-in and the exact widget");
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+
+    rsx! {
+        SchemaForm {
+            form: bound,
+            on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
+        }
+    }
+}
+
 fn unsupported_one_of_test_app(props: TestAppProps) -> Element {
     let definition = FormDefinition::compiler(json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -7005,6 +7069,128 @@ async fn finite_scalar_choices_use_opaque_tokens_and_submit_exact_values() {
     root.remove();
 }
 
+/// A constant choice reaches the reader as its titles: the built-in select's option texts are
+/// the branch titles in authored order, selecting one writes the branch constant, and the
+/// submission carries it. The same holds through an exact widget symbol resolving to a hook-based
+/// renderer, whose titled null option keeps its title rather than the adapter's null message; the
+/// projection carries each option's description, which neither select renders.
+#[wasm_bindgen_test]
+async fn constant_choices_render_titles_in_authored_order_and_submit_constants() {
+    let MountedTestApp {
+        root,
+        form_handle,
+        submitted,
+    } = mount_test_app(constant_choice_test_app).await;
+    let priority = select_with_binding(&root, "/priority");
+    let region = select_with_binding(&root, "/region");
+    assert!(
+        priority.get_attribute("data-hook-widget").is_none(),
+        "the priority control renders through the built-in"
+    );
+    assert_eq!(
+        region.get_attribute("data-hook-widget").as_deref(),
+        Some("choice"),
+        "the exact widget symbol resolves the region control to the custom renderer"
+    );
+
+    let texts = |select: &HtmlSelectElement| {
+        select_options(select)
+            .into_iter()
+            .filter(|(value, _)| !value.is_empty())
+            .map(|(_, text)| text)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        texts(&priority),
+        ["Low priority", "Medium priority", "High priority"]
+    );
+    assert_eq!(texts(&region), ["United States", "Europe", "Anywhere"]);
+
+    let option_values = |binding: &str| {
+        let control = control_with_binding(&form_handle, binding);
+        form_handle
+            .node(control)
+            .expect("the form should be readable")
+            .expect("the constant choice control should exist")
+            .read()
+            .expect("the constant choice control should be readable")
+            .expect("the constant choice control should remain present")
+            .choice_options
+    };
+    let priority_options = option_values("/priority");
+    assert_eq!(
+        priority_options
+            .iter()
+            .map(|option| (option.value.clone(), option.description.as_deref()))
+            .collect::<Vec<_>>(),
+        [
+            (json!("low"), Some("Handle within the week")),
+            (json!("medium"), None),
+            (json!("high"), Some("Escalate within the hour")),
+        ],
+        "the projection carries each option's constant and description in authored order"
+    );
+    assert!(
+        !root.inner_html().contains("Handle within the week"),
+        "neither select renders option descriptions: an HTML option has no slot for one"
+    );
+    let selected_text = |select: &HtmlSelectElement| {
+        select
+            .query_selector("option:checked")
+            .expect("the selected option selector should be valid")
+            .and_then(|option| option.text_content())
+    };
+    assert_eq!(selected_text(&priority).as_deref(), Some("Medium priority"));
+    assert_eq!(selected_text(&region).as_deref(), Some("Europe"));
+
+    let high = priority_options
+        .iter()
+        .find(|option| option.value == json!("high"))
+        .expect("the high priority option should exist");
+    dispatch_select_change(&priority, high.identity.as_str());
+    poll_dom(|| {
+        (form_handle
+            .reader()
+            .form_data()
+            .expect("form should be readable")["priority"]
+            == json!("high"))
+        .then_some(())
+    })
+    .await;
+    assert_eq!(selected_text(&priority).as_deref(), Some("High priority"));
+
+    let anywhere = option_values("/region")
+        .into_iter()
+        .find(|option| option.value.is_null())
+        .expect("the titled null option should exist");
+    dispatch_select_change(&region, anywhere.identity.as_str());
+    poll_dom(|| {
+        (form_handle
+            .reader()
+            .form_data()
+            .expect("form should be readable")["region"]
+            .is_null())
+        .then_some(())
+    })
+    .await;
+    assert_eq!(selected_text(&region).as_deref(), Some("Anywhere"));
+
+    let form: HtmlFormElement = root
+        .query_selector("form")
+        .expect("the form selector should be valid")
+        .expect("the schema form should render a form element")
+        .dyn_into()
+        .expect("the schema form should use semantic form HTML");
+    dispatch_submit(&form);
+    let snapshot = poll_dom(|| submitted.borrow().clone()).await;
+    assert_eq!(
+        snapshot.form_data(),
+        &json!({ "priority": "high", "region": null })
+    );
+
+    root.remove();
+}
+
 #[wasm_bindgen_test]
 async fn unsupported_one_of_region_is_presented_and_blocks_browser_submission() {
     let MountedTestApp {
@@ -10581,6 +10767,9 @@ fn HookSelect(props: HookControlProps) -> Element {
                 option {
                     key: "{option.identity.as_str()}",
                     value: option.identity.as_str().to_owned(),
+                    // As the built-in does: the select's `value` alone is applied before the
+                    // options exist, so the initial selection must also be marked on its option.
+                    selected: option.identity.as_str() == selected,
                     disabled: option.disabled,
                     "{option.label}"
                 }

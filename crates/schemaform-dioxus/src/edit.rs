@@ -16,7 +16,10 @@ use schemaform::form::AllowedOperations;
 use serde_json::Value;
 
 use crate::{
-    handle::{ChoiceIdentity, ControlActions, FormHandle, HandleError, NodeProjection, NodeReader},
+    handle::{
+        ChoiceIdentity, ChoiceOptionProjection, ControlActions, FormHandle, HandleError,
+        NodeProjection, NodeReader,
+    },
     render::ControlRenderContext,
 };
 
@@ -551,8 +554,8 @@ pub struct ChoiceEdit {
     /// through a memo that subscribes to the node, so the first render after a transition
     /// already sees the new selection.
     pub selected: ReadSignal<Option<ChoiceIdentity>>,
-    /// The selectable options in the core's compiled order (the null option first), with
-    /// localized labels.
+    /// The selectable options in the core's compiled order, with localized labels: an `enum`
+    /// lists its null option first, a constant choice keeps its authored branch order.
     pub options: Vec<ChoiceOption>,
     /// Applies the widget's selection.
     ///
@@ -590,20 +593,26 @@ impl fmt::Debug for ChoiceEdit {
 
 /// One selectable option of a choice control, as a widget should present it.
 ///
-/// Options are compiled from the definition, so their identities and order are fixed for the
-/// lifetime of the bound form; `label` follows the configured localizer and `disabled`
-/// follows the operations the core allows right now. The struct is non-exhaustive and only
-/// ever constructed by [`use_choice_edit`].
+/// Options are compiled from the definition, so their identities, order, and descriptions are
+/// fixed for the lifetime of the bound form; `label` follows the configured localizer and
+/// `disabled` follows the operations the core allows right now. The struct is non-exhaustive
+/// and only ever constructed by [`use_choice_edit`].
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct ChoiceOption {
     /// Opaque identity to hand back to [`ChoiceEdit::select`]; its
     /// [`ChoiceIdentity::as_str`] form is a safe DOM value.
     pub identity: ChoiceIdentity,
-    /// Localized plain-text label: the core's compiled label through the configured
-    /// localizer, or for the null option the adapter's `schemaform.choice.null` message
-    /// (`None` by default), since the core spells that option as JSON.
+    /// Localized plain-text label: the core's compiled label (a constant choice's branch
+    /// `title`, otherwise the value's spelling) through the configured localizer as a keyless
+    /// message. The one exception is a null option the core spells as JSON (`null`), which
+    /// carries the adapter's `schemaform.choice.null` message (`None` by default) instead; a
+    /// null option with an authored title keeps that title like every other option.
     pub label: String,
+    /// The core's compiled per-option description, unlocalized: a constant choice's branch
+    /// `description`. `enum` and `const` options have none. The built-in select does not
+    /// render it, since an HTML `option` has no slot for one; a radio group or a combobox can.
+    pub description: Option<String>,
     /// Whether this option selects JSON null.
     pub is_null: bool,
     /// Whether selecting this option right now would be rejected by the core: the null
@@ -809,12 +818,29 @@ impl ChoiceEditTarget {
     }
 }
 
-/// What `choice_state_of` asks its caller to localize for one option: the null option is the
-/// adapter's own message, since the core spells its label as JSON (`null`), which is not a
-/// label for a person; every other option carries the core's compiled plain-text label.
+/// What `choice_state_of` asks its caller to localize for one option: a null option the core
+/// spells as JSON (`null`) is the adapter's own message, since that spelling is not a label for
+/// a person; every other option, including a null option with an authored title, carries the
+/// core's compiled plain-text label.
 enum ChoiceLabel<'a> {
     Null,
     Compiled(&'a str),
+}
+
+impl<'a> ChoiceLabel<'a> {
+    /// The core labels an untitled null option with the JSON spelling of its value.
+    const JSON_NULL: &'static str = "null";
+
+    /// Classifies `option` by the label the core compiled for it. The core does not expose
+    /// whether a label was authored, so a null option is taken as untitled exactly when its
+    /// label is the JSON spelling; a null option whose authored title is literally `null`
+    /// reads the same and receives the adapter's message too, which spells it no worse.
+    fn of(option: &'a ChoiceOptionProjection) -> Self {
+        if option.value.is_null() && option.label == Self::JSON_NULL {
+            return Self::Null;
+        }
+        Self::Compiled(&option.label)
+    }
 }
 
 /// The choice state of a node read, with labels passed through `localize`, or `None` when the
@@ -846,15 +872,11 @@ fn choice_state_of(
             } else {
                 operations.can_set_value() || operations.can_replace_value()
             };
-            let label = localize(if is_null {
-                ChoiceLabel::Null
-            } else {
-                ChoiceLabel::Compiled(&option.label)
-            });
             ChoiceEntry {
                 option: ChoiceOption {
                     identity: option.identity.clone(),
-                    label,
+                    label: localize(ChoiceLabel::of(option)),
+                    description: option.description.clone(),
                     is_null,
                     disabled: !current && !allowed,
                 },
