@@ -605,9 +605,9 @@ pub struct ChoiceOption {
     pub identity: ChoiceIdentity,
     /// Localized plain-text label: the core's compiled label (a constant choice's branch
     /// `title`, otherwise the value's spelling) through the configured localizer as a keyless
-    /// message. The one exception is a null option the core spells as JSON (`null`), which
-    /// carries the adapter's `schemaform.choice.null` message (`None` by default) instead; a
-    /// null option with an authored title keeps that title like every other option.
+    /// message. The one exception is an untitled null option, which carries the adapter's
+    /// `schemaform.choice.null` message (`None` by default) instead of the core's JSON
+    /// spelling; a null option with an authored title keeps that title like every other option.
     pub label: String,
     /// The core's compiled per-option description, unlocalized: a constant choice's branch
     /// `description`. `enum` and `const` options have none. The built-in select does not
@@ -818,25 +818,20 @@ impl ChoiceEditTarget {
     }
 }
 
-/// What `choice_state_of` asks its caller to localize for one option: a null option the core
-/// spells as JSON (`null`) is the adapter's own message, since that spelling is not a label for
-/// a person; every other option, including a null option with an authored title, carries the
-/// core's compiled plain-text label.
+/// What `choice_state_of` asks its caller to localize for one option: an untitled null option
+/// is the adapter's own message, since the core spells it as JSON (`null`), which is not a
+/// label for a person; every other option, including a null option with an authored title,
+/// carries the core's compiled plain-text label.
 enum ChoiceLabel<'a> {
     Null,
     Compiled(&'a str),
 }
 
 impl<'a> ChoiceLabel<'a> {
-    /// The core labels an untitled null option with the JSON spelling of its value.
-    const JSON_NULL: &'static str = "null";
-
-    /// Classifies `option` by the label the core compiled for it. The core does not expose
-    /// whether a label was authored, so a null option is taken as untitled exactly when its
-    /// label is the JSON spelling; a null option whose authored title is literally `null`
-    /// reads the same and receives the adapter's message too, which spells it no worse.
+    /// Classifies `option` by whether the core's source authored a title for it, which the
+    /// core reports directly, so a null option titled literally `null` reads as written.
     fn of(option: &'a ChoiceOptionProjection) -> Self {
-        if option.value.is_null() && option.label == Self::JSON_NULL {
+        if option.value.is_null() && option.title.is_none() {
             return Self::Null;
         }
         Self::Compiled(&option.label)

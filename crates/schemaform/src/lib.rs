@@ -2570,13 +2570,15 @@ pub mod definition {
         HomogeneousArray,
     }
 
-    /// One owned compiled scalar choice, its display label, and optional description.
+    /// One owned compiled scalar choice, its display label, and optional
+    /// per-option annotations.
     ///
     /// Definition inspection exposes borrowed [`ChoiceOptionView`] values.
     #[derive(Debug, Clone, PartialEq)]
     pub struct ChoiceOption {
         value: Value,
         label: String,
+        title: Option<String>,
         description: Option<String>,
     }
 
@@ -2598,6 +2600,18 @@ pub mod definition {
         /// is the stringified value.
         pub fn label(self) -> &'a str {
             &self.option.label
+        }
+
+        /// Returns the option's authored plain-text title, when its source
+        /// authored one.
+        ///
+        /// Only a constant choice carries per-option titles; `enum` and `const`
+        /// options have none, and their [`Self::label`] is the stringified
+        /// value. A renderer that substitutes its own wording for an untitled
+        /// option, for example a null option, decides by this rather than by
+        /// comparing the label against a spelling.
+        pub fn title(self) -> Option<&'a str> {
+            self.option.title.as_deref()
         }
 
         /// Returns the option's compiled plain-text description, when its
@@ -3087,7 +3101,7 @@ pub mod definition {
         profile: &CompilationProfile,
     ) -> DefinitionFingerprint {
         let mut hasher = Sha256::new();
-        hasher.update(b"schemaform-definition-v19\0");
+        hasher.update(b"schemaform-definition-v20\0");
         hash_bytes(&mut hasher, engine.fingerprint_bytes());
         hash_bytes(&mut hasher, root_uri.as_str().as_bytes());
         for maximum in profile.ui_schema_limits().values() {
@@ -3187,14 +3201,12 @@ pub mod definition {
             }
             hasher.update((node.choice_options.len() as u64).to_be_bytes());
             for option in &node.choice_options {
-                hash_bytes(&mut hasher, option.label.as_bytes());
                 hash_bytes(&mut hasher, option.value.to_string().as_bytes());
-                if let Some(description) = &option.description {
-                    hasher.update([1]);
-                    hash_bytes(&mut hasher, description.as_bytes());
-                } else {
-                    hasher.update([0]);
-                }
+                hash_optional_bytes(&mut hasher, option.title.as_deref().map(str::as_bytes));
+                hash_optional_bytes(
+                    &mut hasher,
+                    option.description.as_deref().map(str::as_bytes),
+                );
             }
             hasher.update([match node.semantic_kind {
                 None => 0,
@@ -3239,6 +3251,18 @@ pub mod definition {
         hasher.update(bytes);
     }
 
+    /// Hashes presence and, when present, the bytes, so an absent value and an
+    /// empty one stay distinguishable.
+    fn hash_optional_bytes(hasher: &mut Sha256, bytes: Option<&[u8]>) {
+        match bytes {
+            Some(bytes) => {
+                hasher.update([1]);
+                hash_bytes(hasher, bytes);
+            }
+            None => hasher.update([0]),
+        }
+    }
+
     fn hash_text_reference(hasher: &mut Sha256, reference: Option<&ui::v1::TextReference>) {
         let Some(reference) = reference else {
             hasher.update([0]);
@@ -3275,6 +3299,7 @@ pub mod definition {
             label: choice
                 .title()
                 .map_or_else(|| scalar_choice_label(choice.value()), str::to_owned),
+            title: choice.title().map(str::to_owned),
             description: choice.description().map(str::to_owned),
             value: choice.value().clone(),
         }

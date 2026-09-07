@@ -547,6 +547,7 @@ impl NodeReader {
                 identity: ChoiceIdentity(format!("choice-{index}")),
                 value: option.value().clone(),
                 label: option.label().to_owned(),
+                title: option.title().map(str::to_owned),
                 description: option.description().map(str::to_owned),
                 selected: selected_choice
                     .as_ref()
@@ -882,9 +883,12 @@ pub struct ChoiceOptionProjection {
     pub identity: ChoiceIdentity,
     /// Canonical JSON value selected by this option.
     pub value: Value,
-    /// Authored fallback label: a constant choice's branch `title`, otherwise the core's
-    /// spelling of the value.
+    /// The core's compiled plain-text label: a constant choice's branch `title`, otherwise
+    /// the core's spelling of the value.
     pub label: String,
+    /// The authored per-option title behind `label`, when the core's source authored one: a
+    /// constant choice's branch `title`. `enum` and `const` options have none.
+    pub title: Option<String>,
     /// The core's compiled per-option description: a constant choice's branch `description`.
     /// `enum` and `const` options have none.
     pub description: Option<String>,

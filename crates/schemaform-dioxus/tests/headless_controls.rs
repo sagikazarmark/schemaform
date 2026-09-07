@@ -176,7 +176,8 @@ fn initial_form_data() -> serde_json::Value {
         "mode": "private",
         "fixed_mode": "a",
         "secret_mode": "a",
-        "priority": "high"
+        "priority": "high",
+        "spelled": "yes"
     })
 }
 
@@ -188,7 +189,7 @@ fn headless_app(props: HeadlessAppProps) -> Element {
             "additionalProperties": false,
             "required": [
                 "quantity", "name", "secret", "note", "enabled", "secret_flag", "mode",
-                "fixed_mode", "secret_mode", "priority"
+                "fixed_mode", "secret_mode", "priority", "spelled"
             ],
             "properties": {
                 "quantity": { "type": "integer", "title": "Quantity", "minimum": 0 },
@@ -226,6 +227,13 @@ fn headless_app(props: HeadlessAppProps) -> Element {
                         },
                         { "const": "low" },
                         { "const": null, "title": "Not specified" }
+                    ]
+                },
+                "spelled": {
+                    "title": "Spelled",
+                    "anyOf": [
+                        { "const": "yes", "title": "Yes" },
+                        { "const": null, "title": "null" }
                     ]
                 }
             }
@@ -811,6 +819,12 @@ fn constant_choice_options_carry_descriptions_and_titles_through_the_localizer()
     assert_eq!(
         mounted.option("/mode", None),
         mounted.option("/mode", Some("Not chosen"))
+    );
+    // Whether a null option is titled is the core's answer, not a comparison against the
+    // JSON spelling: an author who titles the null branch literally `null` reads `null`.
+    assert_eq!(
+        mounted.option("/spelled", None),
+        mounted.option("/spelled", Some("null"))
     );
 }
 

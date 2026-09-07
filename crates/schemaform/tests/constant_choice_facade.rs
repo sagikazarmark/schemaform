@@ -45,6 +45,33 @@ fn annotated_options(
         .collect()
 }
 
+/// Compiles `schema` strictly and leniently, asserting neither entry point reports any
+/// capability finding, and returns the strict definition.
+///
+/// The root object is closed first so the only findings a recognised constant choice could
+/// contribute are its own; an open root would otherwise report the unrelated, non-blocking
+/// `applicator.additional-properties.open`.
+fn compile_without_findings(mut schema: Value) -> FormDefinition {
+    schema["additionalProperties"] = json!(false);
+    let definition = FormDefinition::compiler(schema.clone())
+        .compile()
+        .expect("the constant choice should compile strictly");
+    assert_eq!(
+        definition.capability_findings().count(),
+        0,
+        "a recognised constant choice emits no capability finding"
+    );
+    let analysis = FormDefinition::compiler(schema)
+        .analyze()
+        .expect("lenient analysis should agree");
+    assert_eq!(analysis.capability_report().findings().count(), 0);
+    assert_eq!(
+        analysis.definition().fingerprint(),
+        definition.fingerprint()
+    );
+    definition
+}
+
 #[test]
 fn titled_one_of_and_any_of_strings_compile_to_a_labeled_choice_in_authored_order() {
     for keyword in ["oneOf", "anyOf"] {
@@ -259,6 +286,134 @@ fn mixed_scalar_constants_round_trip_with_type_filtering_title_fallback_and_desc
             .display_text()
             .as_deref(),
         Some("Not specified")
+    );
+}
+
+#[test]
+fn any_of_merges_duplicate_constants_and_the_first_branch_annotations_win() {
+    let definition = compile_without_findings(object_schema(json!({
+        "anyOf": [
+            { "const": "high", "title": "High priority", "description": "Urgent" },
+            { "const": "low", "title": "Low priority" },
+            { "const": "high", "title": "Also high", "description": "Repeated" },
+            { "const": "low" }
+        ]
+    })));
+
+    let mut form = definition
+        .create_form(json!({ "priority": "low" }))
+        .expect("the merged choice form should be created");
+    let priority = control_with_binding(&form, "/priority");
+    assert_eq!(
+        annotated_options(&form, priority),
+        [
+            (
+                json!("high"),
+                "High priority".to_owned(),
+                Some("Urgent".to_owned()),
+            ),
+            (json!("low"), "Low priority".to_owned(), None),
+        ],
+        "each value appears once, labeled by the first branch that carries it"
+    );
+
+    form.user()
+        .set_value(priority, json!("high"))
+        .expect("the merged constant should be selectable");
+    assert_eq!(form.form_data(), &json!({ "priority": "high" }));
+    assert_eq!(
+        form.view().validation_outcome(),
+        ValidationOutcomeView::Valid,
+        "anyOf accepts a value matched by more than one branch"
+    );
+}
+
+#[test]
+fn differing_titles_across_recognised_applicators_take_the_first_in_canonical_order() {
+    let definition = compile_without_findings(object_schema(json!({
+        "allOf": [
+            {
+                "anyOf": [
+                    { "const": "low", "title": "Lowest", "description": "Bottom of the queue" },
+                    { "const": "high", "title": "Highest" }
+                ]
+            },
+            {
+                "oneOf": [
+                    { "const": "high", "title": "High priority", "description": "Urgent" },
+                    { "const": "low", "title": "Low priority" }
+                ]
+            }
+        ]
+    })));
+
+    let form = definition
+        .create_form(json!({ "priority": "high" }))
+        .expect("the form should be created");
+    let priority = control_with_binding(&form, "/priority");
+    assert_eq!(
+        annotated_options(&form, priority),
+        [
+            (
+                json!("low"),
+                "Lowest".to_owned(),
+                Some("Bottom of the queue".to_owned()),
+            ),
+            (json!("high"), "Highest".to_owned(), None),
+        ],
+        "order, title and description follow the first applicator in canonical location order"
+    );
+    assert_eq!(
+        form.node(priority)
+            .expect("the choice should exist")
+            .display_text()
+            .as_deref(),
+        Some("Highest")
+    );
+}
+
+#[test]
+fn an_option_title_is_the_authored_branch_title_and_absent_when_the_label_is_a_spelling() {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+            "titled": {
+                "oneOf": [
+                    { "const": null, "title": "null" },
+                    { "const": true, "title": "Yes" },
+                    { "const": false }
+                ]
+            },
+            "plain": { "enum": ["a", null] }
+        }
+    }))
+    .expect("both spellings should compile side by side");
+    let form = definition
+        .create_form(json!({}))
+        .expect("the form should be created");
+    let titles = |binding: &str| {
+        form.node(control_with_binding(&form, binding))
+            .expect("the choice control should exist")
+            .definition()
+            .choice_options()
+            .map(|option| (option.label().to_owned(), option.title().map(str::to_owned)))
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        titles("/titled"),
+        [
+            ("null".to_owned(), Some("null".to_owned())),
+            ("Yes".to_owned(), Some("Yes".to_owned())),
+            ("false".to_owned(), None),
+        ],
+        "a title reads the same as a spelling but is still an authored title"
+    );
+    assert_eq!(
+        titles("/plain"),
+        [("null".to_owned(), None), ("a".to_owned(), None)],
+        "enum options are never titled, and enum still sorts its null option first"
     );
 }
 
@@ -621,30 +776,12 @@ fn titled_any_of_items_compile_to_a_homogeneous_array_of_labeled_choices() {
 
 #[test]
 fn a_recognised_choice_reports_no_capability_finding_in_either_mode() {
-    let mut schema = object_schema(json!({
+    compile_without_findings(object_schema(json!({
         "oneOf": [
             { "const": "high", "title": "High priority", "x-icon": "flame", "$comment": "hot" },
             { "const": "low", "title": "Low priority", "deprecated": true, "examples": ["low"] }
         ]
-    }));
-    schema["additionalProperties"] = json!(false);
-    let definition = FormDefinition::compiler(schema.clone())
-        .compile()
-        .expect("unknown keywords and metadata annotations do not disqualify a branch");
-    assert_eq!(
-        definition.capability_findings().count(),
-        0,
-        "a recognised constant choice emits no capability finding"
-    );
-
-    let analysis = FormDefinition::compiler(schema)
-        .analyze()
-        .expect("lenient analysis should agree");
-    assert_eq!(analysis.capability_report().findings().count(), 0);
-    assert_eq!(
-        analysis.definition().fingerprint(),
-        definition.fingerprint()
-    );
+    })));
 }
 
 #[test]

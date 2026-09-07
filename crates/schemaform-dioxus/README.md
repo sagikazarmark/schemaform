@@ -332,11 +332,11 @@ callbacks plus a read signal derived through a memo over the node.
   and `disabled`, which is true when selecting the option right now would be
   rejected by the core (the null option while set null is not allowed; another
   option while neither set nor replace is allowed). The current option is never
-  disabled. A null option the core spells as JSON carries the adapter's
-  `schemaform.choice.null` message ("None" by default) instead of that
-  spelling; a null option with an authored title keeps the title. The built-in
-  select renders each option's label and not its description, since an HTML
-  `option` has no slot for one; a radio group or a combobox can.
+  disabled. An untitled null option carries the adapter's
+  `schemaform.choice.null` message ("None" by default) instead of the core's
+  JSON spelling; a null option with an authored title keeps the title. The
+  built-in select renders each option's label and not its description, since an
+  HTML `option` has no slot for one; a radio group or a combobox can.
 - `select: Callback<Option<ChoiceIdentity>>` applies a selection. The null
   option sets null; another option sets or replaces the value as `set` does
   above; reselecting the current option, `None`, and an unknown identity run no
