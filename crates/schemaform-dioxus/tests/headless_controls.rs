@@ -1,8 +1,9 @@
 //! Native contract tests for the headless edit hooks.
 //!
 //! Each test configures a capturing renderer through `RenderConfigurationBuilder`, mounts
-//! `SchemaForm` in a native `VirtualDom`, and drives the `TextEdit`, `BooleanEdit`, or
-//! `ChoiceEdit` the renderer's child component obtained from its hook outside the VirtualDom.
+//! `SchemaForm` in a native `VirtualDom`, and drives the `TextEdit`, `BooleanEdit`,
+//! `ChoiceEdit`, or `MultipleChoiceEdit` the renderer's child component obtained from its hook
+//! outside the VirtualDom.
 //! Observations go through the form handle, the captured render context, and the host's
 //! `on_error` callback only.
 
@@ -21,9 +22,9 @@ use schemaform::{
 };
 use schemaform_dioxus::{
     BooleanEdit, ChoiceEdit, ChoiceIdentity, ControlKind, ControlMatcher, ControlRegistry,
-    ControlRenderContext, ControlRenderer, FormHandle, HandleError, Localizer, RenderConfiguration,
-    SchemaForm, TextEdit, render::MessageDescriptor, use_boolean_edit, use_choice_edit, use_form,
-    use_text_edit,
+    ControlRenderContext, ControlRenderer, FormHandle, HandleError, Localizer, MultipleChoiceEdit,
+    RenderConfiguration, SchemaForm, TextEdit, render::MessageDescriptor, use_boolean_edit,
+    use_choice_edit, use_form, use_multiple_choice_edit, use_text_edit,
 };
 use serde_json::json;
 
@@ -33,6 +34,7 @@ enum CapturedEdit {
     Text(TextEdit),
     Boolean(BooleanEdit),
     Choice(ChoiceEdit),
+    MultipleChoice(MultipleChoiceEdit),
 }
 
 /// What the capturing child component saw on its latest render.
@@ -89,6 +91,13 @@ fn CapturingChoiceControl(props: CapturingControlProps) -> Element {
     rsx! {}
 }
 
+#[allow(non_snake_case)]
+fn CapturingMultipleChoiceControl(props: CapturingControlProps) -> Element {
+    let edit = use_multiple_choice_edit(&props.context);
+    capture(&props, CapturedEdit::MultipleChoice(edit));
+    rsx! {}
+}
+
 struct CapturingRenderer {
     edits: CapturedEdits,
 }
@@ -102,6 +111,9 @@ impl ControlRenderer for CapturingRenderer {
             },
             ControlKind::Choice => rsx! {
                 CapturingChoiceControl { context, edits }
+            },
+            ControlKind::MultipleChoice => rsx! {
+                CapturingMultipleChoiceControl { context, edits }
             },
             _ => rsx! {
                 CapturingTextControl { context, edits }
@@ -123,7 +135,7 @@ impl ControlMatcher for HookedControls {
                     | SemanticKind::Boolean
                     | SemanticKind::Choice
             )
-        )
+        ) || definition.is_multiple_choice()
     }
 }
 
@@ -178,7 +190,8 @@ fn initial_form_data() -> serde_json::Value {
         "secret_mode": "a",
         "priority": "high",
         "spelled": "yes",
-        "contact": "ada@example.test"
+        "contact": "ada@example.test",
+        "channels": ["sms"]
     })
 }
 
@@ -237,7 +250,20 @@ fn headless_app(props: HeadlessAppProps) -> Element {
                         { "const": null, "title": "null" }
                     ]
                 },
-                "contact": { "type": "string", "title": "Contact", "format": "email" }
+                "contact": { "type": "string", "title": "Contact", "format": "email" },
+                "channels": {
+                    "type": "array",
+                    "title": "Channels",
+                    "uniqueItems": true,
+                    "minItems": 1,
+                    "items": {
+                        "oneOf": [
+                            { "const": "email", "title": "Email" },
+                            { "const": "sms", "title": "SMS" },
+                            { "const": "push", "title": "public" }
+                        ]
+                    }
+                }
             }
         }))
         .expect("the headless data schema should compile")
@@ -319,6 +345,18 @@ impl MountedHeadless {
         }
     }
 
+    /// Reinitializes the form the way a host would, from inside the runtime: a transition that
+    /// introduces nodes (every reinitialization reseeds array items) allocates their version
+    /// signals in the handle's scope.
+    fn reinitialize(&mut self, form_data: serde_json::Value) {
+        let handle = self.handle.clone();
+        self.drive(|| {
+            handle
+                .reinitialize(form_data)
+                .expect("reinitialization should accept the replacement form data");
+        });
+    }
+
     fn captured(&self, name: &str) -> Captured {
         self.edits
             .borrow()
@@ -346,6 +384,30 @@ impl MountedHeadless {
             CapturedEdit::Choice(edit) => edit,
             _ => panic!("{name} should be a choice control"),
         }
+    }
+
+    fn multiple_choice_edit(&self, name: &str) -> MultipleChoiceEdit {
+        match self.captured(name).edit {
+            CapturedEdit::MultipleChoice(edit) => edit,
+            _ => panic!("{name} should be a multiple-choice control"),
+        }
+    }
+
+    /// The identity of the multiple-choice option labelled `label`.
+    fn multiple_choice_option(&self, name: &str, label: &str) -> ChoiceIdentity {
+        self.multiple_choice_edit(name)
+            .options
+            .iter()
+            .find(|option| option.label == label)
+            .unwrap_or_else(|| panic!("{name} should offer the {label:?} option"))
+            .identity
+            .clone()
+    }
+
+    fn multiple_choice_selected(&self, name: &str) -> Vec<ChoiceIdentity> {
+        let edit = self.multiple_choice_edit(name);
+        self.dom
+            .in_scope(ScopeId::ROOT, || edit.selected.read().clone())
     }
 
     /// The identity of the option labelled `label` (or the null option for `None`).
@@ -548,11 +610,7 @@ fn reinitialize_discards_an_in_flight_composition() {
 
     let mut reinitialized = initial_form_data();
     reinitialized["quantity"] = json!(7);
-    mounted
-        .handle
-        .reinitialize(reinitialized.clone())
-        .expect("reinitialization should establish a new lifecycle");
-    mounted.settle();
+    mounted.reinitialize(reinitialized.clone());
     assert_eq!(mounted.value("/quantity"), "7");
 
     mounted.drive(|| edit.composition_end.call(()));
@@ -627,11 +685,7 @@ fn boolean_set_chooses_set_value_or_replace_value_at_event_time() {
     // replace instead of set.
     let mut incompatible = initial_form_data();
     incompatible["enabled"] = json!("yes");
-    mounted
-        .handle
-        .reinitialize(incompatible)
-        .expect("reinitialization should accept incompatible boolean data");
-    mounted.settle();
+    mounted.reinitialize(incompatible);
     assert_eq!(mounted.checked("/enabled"), Some(false));
 
     mounted.drive(|| edit.set.call(Some(false)));
@@ -765,11 +819,7 @@ fn choice_select_chooses_set_value_or_replace_value_at_event_time() {
 
     let mut incompatible = initial_form_data();
     incompatible["mode"] = json!(42);
-    mounted
-        .handle
-        .reinitialize(incompatible)
-        .expect("reinitialization should accept an incompatible choice value");
-    mounted.settle();
+    mounted.reinitialize(incompatible);
     assert_eq!(mounted.selected("/mode"), None);
 
     mounted.drive(|| edit.select.call(Some(public.clone())));
@@ -870,5 +920,207 @@ fn selecting_a_titled_null_constant_choice_option_sets_null() {
 
     assert_eq!(mounted.form_data()["priority"], json!("low"));
     assert_eq!(mounted.selected("/priority"), Some(low));
+    assert!(mounted.errors.borrow().is_empty());
+}
+
+#[test]
+fn multiple_choice_toggle_adds_and_removes_members_and_reports_them_selected() {
+    let mut mounted = MountedHeadless::mount();
+    let captured = mounted.captured("/channels");
+    assert_eq!(captured.context.control().kind, ControlKind::MultipleChoice);
+    assert!(!captured.context.control().disabled);
+    // Labels pass through the localizer like a scalar choice's: the constant-choice title
+    // `public` is the one mapped label, the others fall back to their compiled titles.
+    assert_eq!(
+        mounted
+            .multiple_choice_edit("/channels")
+            .options
+            .iter()
+            .map(|option| (option.label.clone(), option.disabled))
+            .collect::<Vec<_>>(),
+        [
+            ("Email".to_owned(), false),
+            ("SMS".to_owned(), false),
+            ("Public".to_owned(), false),
+        ]
+    );
+    let email = mounted.multiple_choice_option("/channels", "Email");
+    let sms = mounted.multiple_choice_option("/channels", "SMS");
+    let push = mounted.multiple_choice_option("/channels", "Public");
+    assert_eq!(
+        mounted.multiple_choice_selected("/channels"),
+        std::slice::from_ref(&sms)
+    );
+
+    let edit = mounted.multiple_choice_edit("/channels");
+    mounted.drive(|| edit.toggle.call(push.clone()));
+    mounted.drive(|| edit.toggle.call(email.clone()));
+
+    assert_eq!(
+        mounted.form_data()["channels"],
+        json!(["email", "sms", "push"]),
+        "members follow option order, not the order of checking"
+    );
+    assert_eq!(
+        mounted.multiple_choice_selected("/channels"),
+        [email.clone(), sms.clone(), push.clone()]
+    );
+    assert_eq!(
+        mounted.multiple_choice_edit("/channels"),
+        edit,
+        "the hook's handles are stable across edits"
+    );
+
+    mounted.drive(|| edit.toggle.call(sms.clone()));
+    assert_eq!(mounted.form_data()["channels"], json!(["email", "push"]));
+    assert_eq!(mounted.multiple_choice_selected("/channels"), [email, push]);
+    assert!(mounted.projection("/channels").dirty);
+    assert!(mounted.errors.borrow().is_empty());
+}
+
+#[test]
+fn multiple_choice_toggle_past_min_items_is_accepted_and_blur_reveals_the_finding() {
+    let mut mounted = MountedHeadless::mount();
+    let sms = mounted.multiple_choice_option("/channels", "SMS");
+    let edit = mounted.multiple_choice_edit("/channels");
+
+    mounted.drive(|| edit.toggle.call(sms));
+    assert_eq!(mounted.form_data()["channels"], json!([]));
+    assert!(
+        !mounted.captured("/channels").context.presentation().invalid,
+        "an untouched node presents nothing under the default policy"
+    );
+
+    mounted.drive(|| edit.blur.call(()));
+    let presentation = mounted.captured("/channels").context.presentation().clone();
+    assert!(
+        presentation.invalid,
+        "minItems stays a finding rather than a disabled option"
+    );
+    assert_eq!(presentation.findings.len(), 1);
+    assert!(mounted.projection("/channels").touched);
+    assert!(mounted.errors.borrow().is_empty());
+}
+
+#[test]
+fn multiple_choice_with_an_incompatible_member_offers_replacement_with_the_compatible_members() {
+    let mut mounted = MountedHeadless::mount();
+    let mut incompatible = initial_form_data();
+    incompatible["channels"] = json!(["sms", "fax"]);
+    mounted.reinitialize(incompatible);
+
+    let sms = mounted.multiple_choice_option("/channels", "SMS");
+    assert_eq!(mounted.multiple_choice_selected("/channels"), [sms]);
+    let presentation = mounted.captured("/channels").context.presentation().clone();
+    assert_eq!(
+        presentation.incompatible_value.as_deref(),
+        Some(r#"["sms","fax"]"#),
+        "the stray member is shown as incompatible data, not dropped or invented"
+    );
+    let replace = presentation
+        .presence
+        .iter()
+        .find(|affordance| affordance.kind == schemaform_dioxus::AffordanceKind::Replace)
+        .expect("the replace affordance is offered")
+        .clone();
+
+    mounted.drive(|| replace.invoke());
+
+    assert_eq!(
+        mounted.form_data()["channels"],
+        json!(["sms"]),
+        "replace keeps the members that are options"
+    );
+    assert!(
+        mounted
+            .captured("/channels")
+            .context
+            .presentation()
+            .incompatible_value
+            .is_none()
+    );
+    assert!(mounted.errors.borrow().is_empty());
+}
+
+#[test]
+fn multiple_choice_options_are_disabled_until_the_array_is_materialized() {
+    let mut mounted = MountedHeadless::mount();
+    let mut absent = initial_form_data();
+    absent.as_object_mut().unwrap().remove("channels");
+    mounted.reinitialize(absent);
+
+    let captured = mounted.captured("/channels");
+    assert!(captured.context.control().disabled);
+    assert!(
+        mounted
+            .multiple_choice_edit("/channels")
+            .options
+            .iter()
+            .all(|option| option.disabled)
+    );
+    assert_eq!(mounted.multiple_choice_selected("/channels"), []);
+    let materialize = captured
+        .context
+        .presentation()
+        .presence
+        .iter()
+        .find(|affordance| affordance.kind == schemaform_dioxus::AffordanceKind::Materialize)
+        .expect("the array's materialize affordance is offered")
+        .clone();
+
+    mounted.drive(|| materialize.invoke());
+
+    assert_eq!(mounted.form_data()["channels"], json!([]));
+    assert!(!mounted.captured("/channels").context.control().disabled);
+    let email = mounted.multiple_choice_option("/channels", "Email");
+    let edit = mounted.multiple_choice_edit("/channels");
+    mounted.drive(|| edit.toggle.call(email));
+    assert_eq!(mounted.form_data()["channels"], json!(["email"]));
+    assert!(mounted.errors.borrow().is_empty());
+}
+
+#[test]
+fn multiple_choice_reports_a_duplicated_member_once_and_one_toggle_removes_every_copy() {
+    let mut mounted = MountedHeadless::mount();
+    let mut duplicated = initial_form_data();
+    duplicated["channels"] = json!(["sms", "email", "sms"]);
+    mounted.reinitialize(duplicated);
+
+    let email = mounted.multiple_choice_option("/channels", "Email");
+    let sms = mounted.multiple_choice_option("/channels", "SMS");
+    assert_eq!(
+        mounted.multiple_choice_selected("/channels"),
+        [email.clone(), sms.clone()],
+        "the duplicated option is checked once, in option order"
+    );
+    assert!(
+        mounted
+            .projection("/channels")
+            .validation_findings
+            .is_empty(),
+        "the duplicate finding waits for the node to be blurred or the form submitted"
+    );
+    let edit = mounted.multiple_choice_edit("/channels");
+    mounted.drive(|| edit.blur.call(()));
+    assert_eq!(
+        mounted
+            .projection("/channels")
+            .validation_findings
+            .iter()
+            .map(|finding| finding.code().to_owned())
+            .collect::<Vec<_>>(),
+        ["uniqueItems"],
+        "the core's duplicate finding is kept until the reader unchecks"
+    );
+
+    mounted.drive(|| edit.toggle.call(sms));
+    assert_eq!(mounted.form_data()["channels"], json!(["email"]));
+    assert_eq!(mounted.multiple_choice_selected("/channels"), [email]);
+    assert!(
+        mounted
+            .projection("/channels")
+            .validation_findings
+            .is_empty()
+    );
     assert!(mounted.errors.borrow().is_empty());
 }

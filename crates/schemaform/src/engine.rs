@@ -284,7 +284,11 @@ impl FormDefinition {
             .map(|definition| {
                 let items =
                     fresh_array_items_for_data(&definition, &form_data, &mut next_item_identity);
-                ArrayState { definition, items }
+                ArrayState {
+                    definition,
+                    items,
+                    touched: false,
+                }
             })
             .collect();
         let baseline_array_identities = arrays
@@ -806,6 +810,7 @@ fn compile_homogeneous_array<'a>(
             creation_seed: array_creation_seed(applicable),
             min_items,
             max_items,
+            unique_items: array_unique_items(applicable),
             item_template: ArrayItemTemplate {
                 controls,
                 objects,
@@ -901,6 +906,7 @@ fn compile_homogeneous_array<'a>(
         creation_seed: array_creation_seed(applicable),
         min_items,
         max_items,
+        unique_items: array_unique_items(applicable),
         item_template: ArrayItemTemplate {
             creation_seed: item
                 .creation_seed
@@ -910,6 +916,14 @@ fn compile_homogeneous_array<'a>(
             objects: Vec::new(),
         },
     }))
+}
+
+/// Whether any applicable schema asserts `uniqueItems: true`; a `false` or an
+/// absent keyword asserts nothing.
+fn array_unique_items(applicable: &[LocatedSchema<'_>]) -> bool {
+    applicable
+        .iter()
+        .any(|located| located.schema.get("uniqueItems").and_then(Value::as_bool) == Some(true))
 }
 
 fn array_length_bounds(applicable: &[LocatedSchema<'_>]) -> (Option<usize>, Option<usize>) {
@@ -3163,7 +3177,31 @@ struct ArrayDefinition {
     creation_seed: Value,
     min_items: Option<usize>,
     max_items: Option<usize>,
+    /// Whether an applicable schema asserts `uniqueItems: true`.
+    unique_items: bool,
     item_template: ArrayItemTemplate,
+}
+
+impl ArrayDefinition {
+    /// Whether the array is a multiple choice: it holds distinct members drawn
+    /// from a finite set, so its item template is one selectable choice and
+    /// `uniqueItems` forbids repeating a member.
+    fn is_multiple_choice(&self) -> bool {
+        self.unique_items
+            && self.item_template.objects.is_empty()
+            && matches!(
+                self.item_template.controls.as_slice(),
+                [item] if item.kind == ControlKind::Choice
+            )
+    }
+
+    /// The compiled options of a multiple choice; empty for every other array.
+    fn choices(&self) -> &[CompiledChoice] {
+        if !self.is_multiple_choice() {
+            return &[];
+        }
+        &self.item_template.controls[0].choices
+    }
 }
 
 #[derive(Clone)]
@@ -3223,6 +3261,18 @@ impl<'a> ArrayDefinitionView<'a> {
 
     pub fn max_items(&self) -> Option<usize> {
         self.array.max_items
+    }
+
+    /// Whether this array is a multiple choice: `uniqueItems` over a finite
+    /// item choice. Such an array is still edited as a homogeneous array; the
+    /// flag tells a presentation it may offer one toggle per option instead.
+    pub fn is_multiple_choice(&self) -> bool {
+        self.array.is_multiple_choice()
+    }
+
+    /// The options of a multiple choice in compiled order; empty otherwise.
+    pub fn choices(&self) -> impl Iterator<Item = &'a CompiledChoice> {
+        self.array.choices().iter()
     }
 
     pub fn item_controls(&self) -> impl Iterator<Item = ControlDefinitionView<'a>> {
@@ -3530,6 +3580,9 @@ pub(crate) struct HostItemWrite {
 struct ArrayState {
     definition: ArrayDefinition,
     items: Vec<ArrayItemState>,
+    /// Whether the user has blurred the array node itself, which only a
+    /// multiple choice offers; item controls record their own blur.
+    touched: bool,
 }
 
 #[derive(Clone)]
@@ -3700,6 +3753,114 @@ impl Form {
                     .and_then(Value::as_array)
             })
             .is_some_and(|values| values.len() > 1)
+    }
+
+    /// Whether `binding` is a multiple choice whose array is present, so a
+    /// member can be toggled. `minItems` and `maxItems` do not gate toggling:
+    /// they remain findings the reader resolves.
+    pub fn array_can_toggle_choice(&self, binding: &str) -> bool {
+        self.arrays
+            .iter()
+            .find(|array| array.definition.binding == binding)
+            .filter(|array| array.definition.is_multiple_choice())
+            .and_then(|array| array.definition.binding.resolve(&self.form_data).ok())
+            .is_some_and(Value::is_array)
+    }
+
+    /// Toggles membership of `value` in the multiple choice at `binding`.
+    ///
+    /// A member is removed together with every other item carrying the same
+    /// value, so a duplicate the data arrived with leaves in one step. A
+    /// non-member is inserted before the first item whose option comes later
+    /// in option order, else appended, so members the user checks land in
+    /// option order rather than the order of checking; items already out of
+    /// order, or carrying no option, keep their places. `value` must be one of
+    /// the options.
+    pub fn toggle_array_choice(
+        &mut self,
+        binding: &str,
+        value: &Value,
+    ) -> Result<ToggledArrayChoice, EditError> {
+        if !self.array_can_toggle_choice(binding) {
+            return Err(EditError::OperationNotAllowed(binding.to_owned()));
+        }
+        let array_index = self
+            .arrays
+            .iter()
+            .position(|array| array.definition.binding == binding)
+            .ok_or_else(|| EditError::UnknownControl(binding.to_owned()))?;
+        let choices = self.arrays[array_index].definition.choices();
+        let option_index = choices
+            .iter()
+            .position(|choice| json_values_equal(&choice.value, value))
+            .ok_or_else(|| EditError::OperationNotAllowed(binding.to_owned()))?;
+        let value = choices[option_index].value.clone();
+        let option_position = |member: &Value| {
+            choices
+                .iter()
+                .position(|choice| json_values_equal(&choice.value, member))
+        };
+        let members = self.arrays[array_index]
+            .definition
+            .binding
+            .resolve(&self.form_data)
+            .ok()
+            .and_then(Value::as_array)
+            .ok_or_else(|| EditError::UnresolvedControl(binding.to_owned()))?;
+        let carrying = members
+            .iter()
+            .enumerate()
+            .filter(|(_, member)| json_values_equal(member, &value))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let insert_at = carrying.is_empty().then(|| {
+            members
+                .iter()
+                .position(|member| {
+                    option_position(member).is_some_and(|later| later > option_index)
+                })
+                .unwrap_or(members.len())
+        });
+
+        let values = self.arrays[array_index]
+            .definition
+            .binding
+            .resolve_mut(&mut self.form_data)
+            .ok()
+            .and_then(Value::as_array_mut)
+            .ok_or_else(|| EditError::UnresolvedControl(binding.to_owned()))?;
+        let toggled = match insert_at {
+            Some(index) => {
+                values.insert(index, value);
+                let identity = self.next_item_identity;
+                self.next_item_identity += 1;
+                let item = ArrayItemState::new(identity, &self.arrays[array_index].definition);
+                self.arrays[array_index].items.insert(index, item);
+                let shifted = self.arrays[array_index].items[index + 1..]
+                    .iter()
+                    .map(|item| item.identity)
+                    .collect();
+                ToggledArrayChoice::Included(InsertedArrayItem { identity, shifted })
+            }
+            None => {
+                let mut removed = Vec::with_capacity(carrying.len());
+                for index in carrying.iter().rev() {
+                    values.remove(*index);
+                    removed.push(self.arrays[array_index].items.remove(*index).identity);
+                }
+                removed.reverse();
+                let first_removed = carrying[0];
+                let shifted = self.arrays[array_index].items[first_removed..]
+                    .iter()
+                    .map(|item| item.identity)
+                    .collect();
+                ToggledArrayChoice::Excluded { removed, shifted }
+            }
+        };
+        self.external_finding_batches.clear();
+        self.data_revision += 1;
+        self.state_revision += 1;
+        Ok(toggled)
     }
 
     pub fn append_array_item(&mut self, binding: &str) -> Result<u64, EditError> {
@@ -4134,12 +4295,22 @@ impl Form {
         Ok(())
     }
 
+    /// Replaces the present value at `binding` with the object or array
+    /// `value`, reseeding the identities of every array at or below it.
+    ///
+    /// The current value must not already have the replacement's shape, except
+    /// at a multiple choice, whose array may be replaced by another array to
+    /// drop a member that is no option.
     pub fn replace_structure(&mut self, binding: &str, value: &Value) -> Result<(), EditError> {
         let binding = PointerBuf::parse(binding.to_owned())
             .map_err(|_| EditError::UnknownControl(binding.to_owned()))?;
+        let multiple_choice = self.arrays.iter().any(|array| {
+            array.definition.binding == binding && array.definition.is_multiple_choice()
+        });
         if !(value.is_object() || value.is_array())
             || !binding.resolve(&self.form_data).is_ok_and(|current| {
-                value.is_object() && !current.is_object() || value.is_array() && !current.is_array()
+                value.is_object() && !current.is_object()
+                    || value.is_array() && (!current.is_array() || multiple_choice)
             })
         {
             return Err(EditError::OperationNotAllowed(binding.to_string()));
@@ -4306,6 +4477,8 @@ impl Form {
             state_changed |= control.clear_lifecycle_state();
         }
         for array in &mut self.arrays {
+            state_changed |= array.touched;
+            array.touched = false;
             for item in &mut array.items {
                 for control in &mut item.controls {
                     state_changed |= control.clear_lifecycle_state();
@@ -4344,6 +4517,7 @@ impl Form {
             control.clear_lifecycle_state();
         }
         for array in &mut self.arrays {
+            array.touched = false;
             array.items.clear();
             array.items = fresh_array_items_for_data(
                 &array.definition,
@@ -4533,9 +4707,9 @@ impl Form {
     }
 
     pub fn blur(&mut self, binding: &str) -> Result<(), EditError> {
-        let location = self
-            .control_location(binding)
-            .ok_or_else(|| EditError::UnknownControl(binding.to_owned()))?;
+        let Some(location) = self.control_location(binding) else {
+            return self.blur_array(binding);
+        };
         let control = self.control_state_mut(location);
 
         let state_changed = control.finalize_edit_buffer() | !control.touched;
@@ -4545,6 +4719,56 @@ impl Form {
         }
 
         Ok(())
+    }
+
+    /// Marks the multiple choice at `binding` touched; an array has no edit
+    /// buffer to finalize. Any other array is not a blur target: its items are.
+    fn blur_array(&mut self, binding: &str) -> Result<(), EditError> {
+        let array = self
+            .arrays
+            .iter_mut()
+            .find(|array| array.definition.binding == binding)
+            .filter(|array| array.definition.is_multiple_choice())
+            .ok_or_else(|| EditError::UnknownControl(binding.to_owned()))?;
+        if !array.touched {
+            array.touched = true;
+            self.state_revision += 1;
+        }
+        Ok(())
+    }
+
+    /// Whether the control or array node bound at `binding` has been blurred.
+    ///
+    /// An item of a multiple choice counts as blurred once the multiple choice
+    /// is: the item is presented by the array node, so its findings follow the
+    /// array's interaction state.
+    pub fn binding_is_touched(&self, binding: &str) -> bool {
+        if self
+            .control(binding)
+            .is_some_and(|control| control.is_touched())
+        {
+            return true;
+        }
+        if let Some(array) = self
+            .arrays
+            .iter()
+            .find(|array| array.definition.binding == binding)
+        {
+            return array.touched;
+        }
+        PointerBuf::parse(binding.to_owned())
+            .ok()
+            .and_then(|pointer| {
+                pointer.split_back().and_then(|(parent, index)| {
+                    index.to_index().ok()?;
+                    self.arrays
+                        .iter()
+                        .find(|array| array.definition.binding.as_str() == parent.as_str())
+                        .filter(|array| array.definition.is_multiple_choice())
+                        .map(|array| array.touched)
+                })
+            })
+            .unwrap_or(false)
     }
 
     pub fn prepare_submission(&mut self) -> Result<SubmissionSnapshot, SubmissionFailure> {
@@ -4697,6 +4921,19 @@ pub struct MovedArrayItem {
     pub from: usize,
     pub to: usize,
     pub data_changed: bool,
+}
+
+/// What toggling one option of a multiple choice did to the array's items.
+pub enum ToggledArrayChoice {
+    /// The option was not a member; one item now carries it.
+    Included(InsertedArrayItem),
+    /// The option was a member; every item carrying it is gone.
+    Excluded {
+        /// Identities of the removed items in their former order.
+        removed: Vec<u64>,
+        /// Identities of the surviving items whose index shifted.
+        shifted: Vec<u64>,
+    },
 }
 
 #[derive(Clone, Copy)]
@@ -5140,7 +5377,7 @@ fn fingerprint_compiled_definition(
     used_resources: &BTreeSet<String>,
 ) -> DefinitionFingerprint {
     let mut hasher = Sha256::new();
-    hasher.update(b"schemaform-compiled-definition-v16\0");
+    hasher.update(b"schemaform-compiled-definition-v17\0");
     hash_fingerprint_length(&mut hasher, controls.len());
     for control in controls {
         hash_fingerprint_bytes(&mut hasher, control.binding.as_str().as_bytes());
@@ -5181,6 +5418,7 @@ fn fingerprint_compiled_definition(
         hasher.update([array.required as u8]);
         hash_optional_usize(&mut hasher, array.min_items);
         hash_optional_usize(&mut hasher, array.max_items);
+        hasher.update([array.unique_items as u8]);
         hash_json_value(&mut hasher, &array.creation_seed);
         hash_json_value(&mut hasher, &array.item_template.creation_seed);
         hash_fingerprint_length(&mut hasher, array.item_template.objects.len());

@@ -104,10 +104,11 @@ renderer everything it needs, pre-localized:
   re-calling the renderer.
 - Each `Affordance` in `presence` is a pre-localized, pre-authorized action:
   its `kind` (`Set`, `SetNull`, `RemoveValue`, `Replace` on a scalar control;
-  `AffordanceKind` is non-exhaustive and also carries the container and
-  collection kinds handed to structure renderers), localized `label`, the `id`
-  the triggering element must carry, an optional `accessible_name` to use as
-  `aria-label` when it is `Some`, and an `invoke()` method that performs the
+  `Materialize`, `Replace`, `RemoveValue` on a multiple choice, which is an
+  array node; `AffordanceKind` is non-exhaustive and also carries the container
+  and collection kinds handed to structure renderers), localized `label`, the
+  `id` the triggering element must carry, an optional `accessible_name` to use
+  as `aria-label` when it is `Some`, and an `invoke()` method that performs the
   core operation and reports failures to `on_error` itself. The list holds
   exactly the operations the built-in would offer: set only while the value is
   missing or null and a creation seed exists, replace only while the core
@@ -115,7 +116,8 @@ renderer everything it needs, pre-localized:
   core allows them. Renderers place affordances; they do not reconstruct the
   rules.
 - `control()` is the control facets: `kind` (`String`, `Number`, `Integer`,
-  `Boolean`, `Choice`, `Constant`), the control binding as `name`, `required`,
+  `Boolean`, `Choice`, `Constant`, `MultipleChoice`), the control binding as
+  `name`, `required`,
   `disabled`, `read_only`, `write_only`, `touched`, `dirty`, `nullable`, the
   localized write-only replacement label and placeholder, write-only status
   text, and boolean value labels the built-in uses, and `format`: the data
@@ -147,7 +149,11 @@ preserved by stable UI-schema v1 parsing and compilation but fail render
 binding with `BindFinding::UnsupportedCollectionWidget`, even if registered.
 Matchers are not evaluated for array nodes. Inline item templates are still
 preflighted in full, and eligible controls within them retain exact or
-matcher-selected custom renderers and prepared extensions.
+matcher-selected custom renderers and prepared extensions. The one exception is
+an array the core reports as a multiple choice (`uniqueItems: true` over a
+finite item choice): it is a control of kind `MultipleChoice`, so exact widgets
+and matchers apply to it and the collection renderer is never consulted (see
+[Headless edit hooks](#headless-edit-hooks)).
 
 `ControlRenderContext` does not expose raw data schemas. Control-specific
 authored configuration may be interpreted by an extension handler while it
@@ -301,8 +307,9 @@ fn PlainTextControl(context: ControlRenderContext) -> Element {
 }
 ```
 
-Boolean and choice controls have their own hooks with the same shape: hook-stable
-callbacks plus a read signal derived through a memo over the node.
+Boolean, choice, and multiple-choice controls have their own hooks with the same
+shape: hook-stable callbacks plus a read signal derived through a memo over the
+node.
 
 `use_boolean_edit(&context)` returns a `BooleanEdit`:
 
@@ -347,6 +354,51 @@ callbacks plus a read signal derived through a memo over the node.
   for a write-only control, the widget's `value` property is restored to the
   selected identity (or `""`).
 - `blur` marks the control touched.
+
+`use_multiple_choice_edit(&context)` returns a `MultipleChoiceEdit` for a
+control of kind `MultipleChoice`: an array the core reports as a multiple choice
+(`uniqueItems: true` over a finite item choice — an `enum` or a constant choice).
+The node stays an array node: its data is an array, its element id and `name`
+are the array's, and its presence affordances are a container's (`Materialize`
+while the array is absent, `Replace` while a member is no option, `RemoveValue`
+while the array is optional). A recognised array never reaches the collection
+renderer; it resolves through the control registry like every other control, so
+a renderer registered for the kind, or for an exact widget symbol on the node,
+owns the whole control.
+
+- `selected: ReadSignal<Vec<ChoiceIdentity>>` lists the options to show as
+  checked, in option order: every option that is a member of the current array.
+  A repeated member appears once; a member that is no option appears nowhere
+  and is shown through `incompatible_value` instead. Empty while the array is
+  absent and always for a write-only control.
+- `options: Vec<ChoiceOption>` lists the options as `use_choice_edit` does,
+  with the same localized labels and descriptions. Every option is `disabled`
+  while the core allows no toggle: the array is absent (materialize it first),
+  read-only, or write-only. `minItems` and `maxItems` never disable an option;
+  they remain findings.
+- `toggle: Callback<ChoiceIdentity>` toggles one option's membership through
+  `ControlActions::toggle_choice`: a member is removed together with every
+  duplicate of it (so data that arrived violating `uniqueItems` is repaired by
+  one uncheck), a non-member is inserted in option order (checking B then A
+  yields `[A, B]`). An unknown identity runs no core operation. A failure is
+  reported to `on_error` and the checkbox carrying
+  `MultipleChoiceEdit::option_element_id(&identity)` — `{element_id}-{identity}`
+  — has its `checked` property restored.
+- `blur` marks the control touched.
+
+The built-in renders a `fieldset` carrying the node's element id and a `legend`,
+then one native checkbox per option with the option's element id, the node's
+`name`, `aria-required`, `aria-describedby` and `aria-invalid`, and a
+`label[for]`; help, the incompatible-value readout, presence buttons, and
+findings follow as in every other built-in control. The fieldset takes
+`tabindex="-1"` and `data-focus-first-descendant`, so focusing the node — from
+the finding summary after a blocked submission — lands on its first checkbox
+while the fieldset stays out of the tab order. A multiple choice presents no
+item of its own, so the core attaches findings located at its items (a member
+that is no option) to the node too: they are presented inside the fieldset,
+describe every checkbox, and focus the same fieldset from the summary. A
+read-only multiple choice renders as `output` of its selected labels, as every
+read-only kind does.
 
 A widget maps its DOM value back to an identity by looking it up in `options`
 with `ChoiceIdentity::as_str`. Constant controls have no hook: render read-only

@@ -472,6 +472,7 @@ pub mod definition {
         accepts_null: bool,
         choice_options: Vec<ChoiceOption>,
         choice_selectable: bool,
+        multiple_choice: bool,
         owning_array: Option<DefinitionNodeId>,
         grid_spans: Option<GridSpans>,
         schema_locations: Vec<SchemaLocation>,
@@ -492,6 +493,7 @@ pub mod definition {
         accepts_null: bool,
         choice_options: Vec<ChoiceOption>,
         choice_selectable: bool,
+        multiple_choice: bool,
         owning_array_binding: Option<String>,
         schema_locations: Vec<SchemaLocation>,
     }
@@ -577,6 +579,7 @@ pub mod definition {
                     accepts_null: false,
                     choice_options: Vec::new(),
                     choice_selectable: false,
+                    multiple_choice: false,
                     owning_array_binding: None,
                     schema_locations: collect_schema_locations(object.schema_locations()),
                 })
@@ -599,6 +602,7 @@ pub mod definition {
                             accepts_null: control.accepts_null(),
                             choice_options: control.choices().map(choice_option).collect(),
                             choice_selectable: control.is_choice(),
+                            multiple_choice: false,
                             owning_array_binding: None,
                             schema_locations: collect_schema_locations(control.schema_locations()),
                         }
@@ -618,8 +622,9 @@ pub mod definition {
                     creation_seed: Some(array.creation_seed().clone()),
                     required: array.is_required(),
                     accepts_null: false,
-                    choice_options: Vec::new(),
+                    choice_options: array.choices().map(choice_option).collect(),
                     choice_selectable: false,
+                    multiple_choice: array.is_multiple_choice(),
                     owning_array_binding: None,
                     schema_locations: collect_schema_locations(array.schema_locations()),
                 });
@@ -636,6 +641,7 @@ pub mod definition {
                     accepts_null: false,
                     choice_options: Vec::new(),
                     choice_selectable: false,
+                    multiple_choice: false,
                     owning_array_binding: Some(array_binding.clone()),
                     schema_locations: collect_schema_locations(object.schema_locations()),
                 }));
@@ -652,6 +658,7 @@ pub mod definition {
                     accepts_null: item.accepts_null(),
                     choice_options: item.choices().map(choice_option).collect(),
                     choice_selectable: item.is_choice(),
+                    multiple_choice: false,
                     owning_array_binding: Some(array_binding.clone()),
                     schema_locations: collect_schema_locations(item.schema_locations()),
                 }));
@@ -692,6 +699,7 @@ pub mod definition {
                 accepts_null: false,
                 choice_options: Vec::new(),
                 choice_selectable: false,
+                multiple_choice: false,
                 owning_array_binding: None,
                 schema_locations: collect_schema_locations(region.schema_locations()),
             }));
@@ -765,6 +773,7 @@ pub mod definition {
                     accepts_null: false,
                     choice_options: Vec::new(),
                     choice_selectable: false,
+                    multiple_choice: false,
                     owning_array: None,
                     grid_spans: None,
                     schema_locations: collect_schema_locations(engine.root_schema_locations()),
@@ -1041,6 +1050,7 @@ pub mod definition {
             accepts_null: false,
             choice_options: Vec::new(),
             choice_selectable: false,
+            multiple_choice: false,
             owning_array: None,
             grid_spans: None,
             schema_locations: root_schema_locations,
@@ -1099,17 +1109,23 @@ pub mod definition {
                     ));
                 }
                 let binding = control.binding().pointer().as_str();
-                let Some(generated) = generated_nodes.iter().find(|node| {
-                    node.owning_array_binding.as_deref()
-                        == binding_context
-                            .owning_array_binding
-                            .map(JsonPointer::as_str)
-                        && node.binding == binding
-                        && node.kind == DefinitionNodeKind::Control
-                        && (node.semantic_kind != Some(SemanticKind::HomogeneousArray)
-                            || (binding_context.origin == ui::v1::BindingOrigin::Root
-                                && control.item_template_value().is_some()))
-                }) else {
+                // An authored control may bind an array only with an item template to instantiate
+                // per item, except a multiple choice, which is presented as one control and
+                // borrows the compiled template when none is authored.
+                let Some((generated_index, generated)) =
+                    generated_nodes.iter().enumerate().find(|(_, node)| {
+                        node.owning_array_binding.as_deref()
+                            == binding_context
+                                .owning_array_binding
+                                .map(JsonPointer::as_str)
+                            && node.binding == binding
+                            && node.kind == DefinitionNodeKind::Control
+                            && (node.semantic_kind != Some(SemanticKind::HomogeneousArray)
+                                || (binding_context.origin == ui::v1::BindingOrigin::Root
+                                    && (control.item_template_value().is_some()
+                                        || node.multiple_choice)))
+                    })
+                else {
                     return Err(invalid_ui_schema(
                         format!("{value_location}/binding/pointer"),
                         UiSchemaInputErrorKind::UnknownBinding,
@@ -1177,6 +1193,7 @@ pub mod definition {
                         accepts_null: generated.accepts_null,
                         choice_options: generated.choice_options.clone(),
                         choice_selectable: generated.choice_selectable,
+                        multiple_choice: generated.multiple_choice,
                         owning_array: binding_context.owning_array,
                         grid_spans: None,
                         schema_locations: generated.schema_locations.clone(),
@@ -1248,6 +1265,7 @@ pub mod definition {
                                     accepts_null: item_object.accepts_null,
                                     choice_options: item_object.choice_options.clone(),
                                     choice_selectable: item_object.choice_selectable,
+                                    multiple_choice: item_object.multiple_choice,
                                     owning_array: Some(id),
                                     grid_spans: None,
                                     schema_locations: item_object.schema_locations.clone(),
@@ -1256,6 +1274,23 @@ pub mod definition {
                             )]
                         })
                         .unwrap_or(authored_children);
+                    nodes[id.0 as usize].children = children;
+                } else if generated.multiple_choice {
+                    let roots = generated_child_indices(generated_index, generated_nodes);
+                    let mut template_bindings = HashSet::new();
+                    let children = materialize_generated_region(
+                        generated_nodes,
+                        None,
+                        &roots,
+                        AuthoredBindingContext {
+                            origin: ui::v1::BindingOrigin::ItemTemplate,
+                            owning_array_binding: Some(control.binding().pointer()),
+                            owning_array: Some(id),
+                        },
+                        &format!("{value_location}/binding/pointer"),
+                        &mut template_bindings,
+                        nodes,
+                    )?;
                     nodes[id.0 as usize].children = children;
                 }
                 Ok(vec![id])
@@ -1709,6 +1744,7 @@ pub mod definition {
                 accepts_null: generated.accepts_null,
                 choice_options: generated.choice_options.clone(),
                 choice_selectable: generated.choice_selectable,
+                multiple_choice: generated.multiple_choice,
                 owning_array,
                 grid_spans: None,
                 schema_locations: generated.schema_locations.clone(),
@@ -1801,6 +1837,7 @@ pub mod definition {
             accepts_null: false,
             choice_options: Vec::new(),
             choice_selectable: false,
+            multiple_choice: false,
             owning_array: None,
             grid_spans: None,
             schema_locations: Vec::new(),
@@ -2438,20 +2475,34 @@ pub mod definition {
             self.node.accepts_null
         }
 
-        /// Iterates the compiled scalar choices in deterministic display order.
-        pub fn choice_options(&self) -> impl Iterator<Item = ChoiceOptionView<'a>> + 'a {
+        /// Iterates the compiled choices in deterministic display order: a scalar
+        /// choice's own options, or the item options of a multiple choice.
+        pub fn choice_options(&self) -> impl Iterator<Item = ChoiceOptionView<'a>> + 'a + use<'a> {
             self.node
                 .choice_options
                 .iter()
                 .map(|option| ChoiceOptionView { option })
         }
 
-        /// Returns whether the choices represent a user-selectable set.
+        /// Returns whether the choices represent a user-selectable scalar set.
         ///
         /// A fixed scalar constant can expose one option for display while not
-        /// allowing selection.
+        /// allowing selection. A multiple choice is not a scalar selection and
+        /// reports `false` here; consult [`Self::is_multiple_choice`] instead.
         pub fn is_choice_selectable(&self) -> bool {
             self.node.choice_selectable
+        }
+
+        /// Returns whether this array node is a multiple choice: an array that
+        /// asserts `uniqueItems` over a finite item choice, so it holds distinct
+        /// members drawn from [`Self::choice_options`].
+        ///
+        /// The node remains a [`SemanticKind::HomogeneousArray`] with its item
+        /// template, identities and collection operations; the flag tells a
+        /// presentation it may offer one toggle per option and edit members by
+        /// value through [`crate::form::UserActions::toggle_choice`].
+        pub fn is_multiple_choice(&self) -> bool {
+            self.node.multiple_choice
         }
 
         /// Iterates child definition IDs in presentation order.
@@ -3101,7 +3152,7 @@ pub mod definition {
         profile: &CompilationProfile,
     ) -> DefinitionFingerprint {
         let mut hasher = Sha256::new();
-        hasher.update(b"schemaform-definition-v20\0");
+        hasher.update(b"schemaform-definition-v21\0");
         hash_bytes(&mut hasher, engine.fingerprint_bytes());
         hash_bytes(&mut hasher, root_uri.as_str().as_bytes());
         for maximum in profile.ui_schema_limits().values() {
@@ -3188,6 +3239,7 @@ pub mod definition {
             }
             hasher.update([node.required as u8]);
             hasher.update([node.choice_selectable as u8]);
+            hasher.update([node.multiple_choice as u8]);
             if let Some(owner) = node.owning_array {
                 hasher.update([1]);
                 hasher.update(owner.0.to_be_bytes());
@@ -4079,8 +4131,7 @@ pub mod form {
                     self.engine.submission_attempted()
                         || self
                             .engine
-                            .control(finding.instance_location().as_str())
-                            .is_some_and(|control| control.is_touched())
+                            .binding_is_touched(finding.instance_location().as_str())
                 }
             }
         }
@@ -4102,8 +4153,7 @@ pub mod form {
                     self.engine.submission_attempted()
                         || self
                             .engine
-                            .control(finding.instance_location().as_str())
-                            .is_some_and(|control| control.is_touched())
+                            .binding_is_touched(finding.instance_location().as_str())
                 }
             }
         }
@@ -5093,6 +5143,9 @@ pub mod form {
                 if self.form.engine.array_can_move(binding.as_str()) {
                     operations |= AllowedOperations::MOVE_ITEM;
                 }
+                if self.form.engine.array_can_toggle_choice(binding.as_str()) {
+                    operations |= AllowedOperations::TOGGLE_CHOICE;
+                }
                 match self.current_data() {
                     Some(value) if !value.is_array() => {
                         operations |= AllowedOperations::REPLACE_VALUE;
@@ -5103,8 +5156,15 @@ pub mod form {
                     None if self.parent_is_object() => {
                         operations |= AllowedOperations::MATERIALIZE;
                     }
-                    Some(_) if !definition.is_required() => {
-                        operations |= AllowedOperations::REMOVE_VALUE;
+                    Some(value) => {
+                        if !definition.is_required() {
+                            operations |= AllowedOperations::REMOVE_VALUE;
+                        }
+                        if definition.is_multiple_choice()
+                            && self.has_member_outside_choice_options(value)
+                        {
+                            operations |= AllowedOperations::REPLACE_VALUE;
+                        }
                     }
                     _ => {}
                 }
@@ -5233,6 +5293,19 @@ pub mod form {
                 .split_back()
                 .and_then(|(parent, _)| parent.resolve(self.form.form_data()).ok())
                 .is_some_and(Value::is_object)
+        }
+
+        /// Whether `array` holds a member that is none of this node's compiled
+        /// options: data a multiple choice can present only as incompatible.
+        fn has_member_outside_choice_options(&self, array: &Value) -> bool {
+            let options = self.definition().choice_options().collect::<Vec<_>>();
+            array.as_array().is_some_and(|members| {
+                members.iter().any(|member| {
+                    !options
+                        .iter()
+                        .any(|option| engine::json_values_equal(option.value(), member))
+                })
+            })
         }
 
         /// Iterates current child instance identities in display order.
@@ -5396,7 +5469,11 @@ pub mod form {
 
         fn finding_attached(&self, location: &JsonPointer) -> bool {
             match self.binding() {
-                Some(binding) => binding.pointer() == location,
+                Some(binding) => {
+                    binding.pointer() == location
+                        || self.definition().is_multiple_choice()
+                            && self.is_direct_item_location(binding.pointer(), location)
+                }
                 None => {
                     self.identity == self.form.identity(self.form.definition.root())
                         && self.form.identity_for_binding(location.as_str()).is_none()
@@ -5404,11 +5481,22 @@ pub mod form {
             }
         }
 
+        /// Whether `location` is one of this array's items: the array binding plus one index
+        /// token. A multiple choice presents no item of its own, so it presents its items'
+        /// findings, such as a member that is no option.
+        fn is_direct_item_location(&self, array: &JsonPointer, location: &JsonPointer) -> bool {
+            let Ok(location) = jsonptr::Pointer::parse(location.as_str()) else {
+                return false;
+            };
+            location.split_back().is_some_and(|(parent, index)| {
+                parent.as_str() == array.as_str() && index.to_index().is_ok()
+            })
+        }
+
         /// Returns whether the user has blurred this control in the current state.
         pub fn is_touched(&self) -> bool {
             self.binding()
-                .and_then(|binding| self.form.engine.control(binding.as_str()))
-                .is_some_and(|control| control.is_touched())
+                .is_some_and(|binding| self.form.engine.binding_is_touched(binding.as_str()))
         }
 
         /// Returns whether the bound value differs from the form's baseline.
@@ -5471,6 +5559,33 @@ pub mod form {
             self.definition()
                 .choice_options()
                 .find(|option| engine::json_values_equal(option.value(), current))
+        }
+
+        /// Iterates the compiled options current canonical data selects, in
+        /// option order.
+        ///
+        /// A scalar choice selects at most one option, the one
+        /// [`Self::selected_choice`] returns. A multiple-choice array selects
+        /// every option that is a member of the current array; a member that
+        /// is repeated selects its option once, and a member that is no option
+        /// selects nothing. Absent or non-array data selects nothing.
+        pub fn selected_choices(
+            &self,
+        ) -> impl Iterator<Item = crate::definition::ChoiceOptionView<'a>> + 'a + use<'a> {
+            let definition = self.definition();
+            let current = self.current_data();
+            let multiple_choice = definition.is_multiple_choice();
+            definition
+                .choice_options()
+                .filter(move |option| match current {
+                    Some(Value::Array(members)) if multiple_choice => members
+                        .iter()
+                        .any(|member| engine::json_values_equal(option.value(), member)),
+                    Some(current) if !multiple_choice => {
+                        engine::json_values_equal(option.value(), current)
+                    }
+                    _ => false,
+                })
         }
 
         /// Formats current scalar data for display, preferring an edit buffer and
@@ -5618,6 +5733,7 @@ pub mod form {
         const APPEND_ITEM: Self = Self(1 << 6);
         const REMOVE_ITEM: Self = Self(1 << 7);
         const MOVE_ITEM: Self = Self(1 << 8);
+        const TOGGLE_CHOICE: Self = Self(1 << 9);
 
         pub fn can_input_text(self) -> bool {
             self.0 & Self::INPUT_TEXT.0 != 0
@@ -5653,6 +5769,13 @@ pub mod form {
 
         pub fn can_move_item(self) -> bool {
             self.0 & Self::MOVE_ITEM.0 != 0
+        }
+
+        /// Whether a multiple-choice array accepts [`UserActions::toggle_choice`]
+        /// right now: the node is a present, writable multiple choice. Array
+        /// length bounds do not gate toggling.
+        pub fn can_toggle_choice(self) -> bool {
+            self.0 & Self::TOGGLE_CHOICE.0 != 0
         }
     }
 
@@ -6480,6 +6603,92 @@ pub mod form {
                 after_state: after.1,
                 changed,
                 removed: Vec::new(),
+            })
+        }
+
+        /// Toggles whether `value` is a member of a multiple-choice array.
+        ///
+        /// `value` must be one of the array's compiled options. A member is
+        /// removed together with every other item carrying the same value, and
+        /// the removed items' runtime subtrees are listed by
+        /// [`Transition::removed`]. A non-member is inserted before the first
+        /// item whose option comes later in option order, else appended, so
+        /// checked members land in option order rather than the order of
+        /// checking while existing items keep their places; the new item's
+        /// identities appear in the changed set. `minItems` and `maxItems` do
+        /// not gate the toggle: their findings remain and the reader resolves
+        /// them.
+        pub fn toggle_choice(
+            &mut self,
+            array: InstanceIdentity,
+            value: Value,
+        ) -> Result<Transition, UserOperationError> {
+            let binding =
+                self.binding_for_operation(array, AllowedOperations::can_toggle_choice)?;
+            let template = self
+                .form
+                .definition
+                .array_template(DefinitionNodeId(array.node))
+                .ok_or(UserOperationError::OperationNotAllowed)?;
+            check_runtime_input_value(&value, &binding, self.form.limits)
+                .map_err(UserOperationError::ResourceLimit)?;
+            let before = self.form.revisions();
+            let findings_before = self.form.visible_validation_findings_by_node();
+            let external_targets_before = self.form.visible_external_finding_targets();
+            let mut candidate = self.form.engine.clone();
+            let toggled = candidate
+                .toggle_array_choice(&binding, &value)
+                .map_err(map_user_edit_error)?;
+            check_runtime_form_data(
+                &self.form.definition,
+                candidate.form_data(),
+                self.form.limits,
+            )
+            .map_err(UserOperationError::ResourceLimit)?;
+            let removed_identities = match &toggled {
+                engine::ToggledArrayChoice::Included(_) => Vec::new(),
+                engine::ToggledArrayChoice::Excluded { removed, .. } => removed
+                    .iter()
+                    .flat_map(|item| {
+                        self.form
+                            .item_subtree_identities(template, self.form.item(*item))
+                    })
+                    .collect::<Vec<_>>(),
+            };
+            self.form.engine = candidate;
+            self.form.revalidate();
+            self.form.external_finding_batches.clear();
+            let after = self.form.revisions();
+            let mut changed = vec![array];
+            let shifted = match toggled {
+                engine::ToggledArrayChoice::Included(inserted) => {
+                    changed.extend(
+                        self.form
+                            .item_subtree_identities(template, self.form.item(inserted.identity)),
+                    );
+                    inserted.shifted
+                }
+                engine::ToggledArrayChoice::Excluded { shifted, .. } => shifted,
+            };
+            changed.extend(shifted.into_iter().flat_map(|item| {
+                self.form
+                    .item_subtree_identities(template, self.form.item(item))
+            }));
+            changed.extend(
+                external_targets_before
+                    .into_iter()
+                    .filter(|identity| !removed_identities.contains(identity)),
+            );
+            let changed = self
+                .form
+                .host_changed_nodes(&changed, before, findings_before, after);
+            Ok(Transition {
+                before_data: before.0,
+                after_data: after.0,
+                before_state: before.1,
+                after_state: after.1,
+                changed,
+                removed: removed_identities,
             })
         }
     }

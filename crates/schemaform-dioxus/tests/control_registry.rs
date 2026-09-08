@@ -24,8 +24,10 @@ use schemaform::{
     ui::v1::{Binding, Control, Element as UiElement, Stack, UiSchema},
 };
 use schemaform_dioxus::{
-    BindFinding, BuiltinControlRenderer, ControlMatcher, ControlRegistry, ControlRenderContext,
-    ControlRenderer, RenderConfiguration, SchemaForm, render::BUILTIN_CONTROL_PRIORITY, use_form,
+    BindFinding, BuiltinControlRenderer, CollectionContext, CollectionItemContext,
+    CollectionRenderer, ControlKind, ControlMatcher, ControlRegistry, ControlRenderContext,
+    ControlRenderer, RenderConfiguration, SchemaForm, StructureRenderers,
+    render::BUILTIN_CONTROL_PRIORITY, use_form,
 };
 use serde_json::json;
 
@@ -46,6 +48,47 @@ impl ControlRenderer for CapturingRenderer {
             .or_default()
             .insert(context.control().name.clone());
         rsx! {}
+    }
+}
+
+/// Records the control kind of every control it renders, keyed by control name.
+struct KindCapturingRenderer {
+    kinds: Rc<RefCell<BTreeMap<String, ControlKind>>>,
+}
+
+impl ControlRenderer for KindCapturingRenderer {
+    fn render(&self, context: ControlRenderContext) -> Element {
+        self.kinds
+            .borrow_mut()
+            .insert(context.control().name.clone(), context.control().kind);
+        rsx! {}
+    }
+}
+
+/// A collection renderer that records the label of every collection it is asked to render.
+struct CapturingCollection {
+    collections: Rc<RefCell<Vec<String>>>,
+}
+
+impl CollectionRenderer for CapturingCollection {
+    fn collection(&self, context: CollectionContext) -> Element {
+        self.collections
+            .borrow_mut()
+            .push(context.presentation.label.clone());
+        rsx! {}
+    }
+
+    fn collection_item(&self, _context: CollectionItemContext) -> Element {
+        rsx! {}
+    }
+}
+
+/// Accepts exactly the nodes the core reports as a multiple choice.
+struct MultipleChoices;
+
+impl ControlMatcher for MultipleChoices {
+    fn matches(&self, definition: DefinitionNodeView<'_>) -> bool {
+        definition.is_multiple_choice()
     }
 }
 
@@ -74,6 +117,7 @@ type BindOutcome = Rc<RefCell<Option<Result<(), Vec<BindFinding>>>>>;
 struct RegistryAppProps {
     definition: FormDefinition,
     registry: RegistryFactory,
+    structure: Rc<StructureRenderers>,
     rendered: Rendered,
     outcome: BindOutcome,
 }
@@ -81,6 +125,7 @@ struct RegistryAppProps {
 impl PartialEq for RegistryAppProps {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.registry, &other.registry)
+            && Rc::ptr_eq(&self.structure, &other.structure)
             && Rc::ptr_eq(&self.rendered, &other.rendered)
             && Rc::ptr_eq(&self.outcome, &other.outcome)
     }
@@ -89,12 +134,13 @@ impl PartialEq for RegistryAppProps {
 fn registry_app(props: RegistryAppProps) -> Element {
     let form = use_form(
         props.definition.clone(),
-        json!({ "name": "Ada", "agree": false }),
+        json!({ "name": "Ada", "agree": false, "tags": ["beta"] }),
     )
     .expect("the registry form should be created");
     let bound = use_hook(move || {
         let bound = RenderConfiguration::builder()
             .controls((props.registry)(props.rendered.clone()))
+            .structure((*props.structure).clone())
             .build()
             .bind(&form);
         *props.outcome.borrow_mut() = Some(
@@ -129,10 +175,31 @@ fn data_schema() -> serde_json::Value {
     })
 }
 
+/// The data schema with one more property: a `uniqueItems` array of `enum` items, which the
+/// core reports as a multiple choice.
+fn data_schema_with_multiple_choice() -> serde_json::Value {
+    let mut schema = data_schema();
+    schema["properties"]["tags"] = json!({
+        "type": "array",
+        "title": "Tags",
+        "uniqueItems": true,
+        "items": { "enum": ["alpha", "beta"] }
+    });
+    schema
+}
+
 /// Mounts the app once and returns the bind outcome and what each capturing renderer rendered.
 fn bind_and_mount(
     definition: FormDefinition,
     registry: impl Fn(Rendered) -> ControlRegistry + 'static,
+) -> (Result<(), Vec<BindFinding>>, RenderedByRenderer) {
+    bind_and_mount_with_structure(definition, registry, StructureRenderers::default())
+}
+
+fn bind_and_mount_with_structure(
+    definition: FormDefinition,
+    registry: impl Fn(Rendered) -> ControlRegistry + 'static,
+    structure: StructureRenderers,
 ) -> (Result<(), Vec<BindFinding>>, RenderedByRenderer) {
     let rendered: Rendered = Rc::default();
     let outcome: BindOutcome = Rc::default();
@@ -141,6 +208,7 @@ fn bind_and_mount(
         RegistryAppProps {
             definition,
             registry: Rc::new(registry),
+            structure: Rc::new(structure),
             rendered: rendered.clone(),
             outcome: outcome.clone(),
         },
@@ -284,4 +352,91 @@ fn the_builtin_renderer_can_be_registered_for_an_exact_widget() {
     assert_eq!(outcome, Ok(()));
     // The exact widget never falls back to matching, so only `/agree` reaches the matcher.
     assert_eq!(rendered, BTreeMap::from([("fallback", names(&["/agree"]))]));
+}
+
+#[test]
+fn a_multiple_choice_resolves_through_the_control_registry_by_kind_never_the_collection_renderer() {
+    let definition = FormDefinition::compile(data_schema_with_multiple_choice())
+        .expect("the data schema should compile");
+    let kinds = Rc::new(RefCell::new(BTreeMap::new()));
+    let collections = Rc::new(RefCell::new(Vec::new()));
+
+    let (outcome, rendered) = bind_and_mount_with_structure(
+        definition,
+        {
+            let kinds = kinds.clone();
+            move |rendered| {
+                ControlRegistry::with_builtins()
+                    .matcher(
+                        BUILTIN_CONTROL_PRIORITY + 1,
+                        Arc::new(MultipleChoices),
+                        Arc::new(KindCapturingRenderer {
+                            kinds: kinds.clone(),
+                        }),
+                    )
+                    .matcher(
+                        BUILTIN_CONTROL_PRIORITY - 1,
+                        Arc::new(EveryControl),
+                        Arc::new(CapturingRenderer {
+                            name: "below",
+                            rendered,
+                        }),
+                    )
+            }
+        },
+        StructureRenderers::default().with_collection(CapturingCollection {
+            collections: collections.clone(),
+        }),
+    );
+
+    assert_eq!(outcome, Ok(()));
+    // The matcher for the kind owns the whole `/tags` control and sees the kind the core
+    // reports; the built-in keeps the two scalars, so nothing below it renders.
+    assert_eq!(
+        *kinds.borrow(),
+        BTreeMap::from([("/tags".to_owned(), ControlKind::MultipleChoice)])
+    );
+    assert!(rendered.is_empty());
+    assert_eq!(
+        *collections.borrow(),
+        Vec::<String>::new(),
+        "a recognised multiple choice is never handed to the collection renderer"
+    );
+}
+
+#[test]
+fn a_multiple_choice_with_an_exact_widget_symbol_resolves_that_renderer() {
+    let chips = WidgetSymbol::parse("company:chips").expect("the widget symbol should be valid");
+    let definition = FormDefinition::compiler(data_schema_with_multiple_choice())
+        .ui_schema(UiSchema::new(UiElement::Stack(Stack::new([
+            UiElement::Control(Control::new(Binding::root(
+                JsonPointer::parse("/name").expect("the name pointer should be valid"),
+            ))),
+            UiElement::Control(Control::new(Binding::root(
+                JsonPointer::parse("/agree").expect("the agree pointer should be valid"),
+            ))),
+            UiElement::Control(
+                Control::new(Binding::root(
+                    JsonPointer::parse("/tags").expect("the tags pointer should be valid"),
+                ))
+                .widget(chips.clone()),
+            ),
+        ]))))
+        .compile()
+        .expect("the widget UI schema should compile");
+
+    let (outcome, rendered) = bind_and_mount(definition, move |rendered| {
+        ControlRegistry::with_builtins().widget(
+            chips.clone(),
+            Arc::new(CapturingRenderer {
+                name: "chips",
+                rendered,
+            }),
+        )
+    });
+
+    // A widget on a plain array is `UnsupportedCollectionWidget`; on a multiple choice it is an
+    // ordinary exact-widget request that the registry resolves.
+    assert_eq!(outcome, Ok(()));
+    assert_eq!(rendered, BTreeMap::from([("chips", names(&["/tags"]))]));
 }

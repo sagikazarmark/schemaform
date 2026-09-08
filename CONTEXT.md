@@ -131,3 +131,7 @@ _Avoid_: Validation error, unsupported-schema error
 **Constant choice**:
 A finite scalar choice set declared as a `oneOf` or `anyOf` whose every branch asserts one constant and otherwise only annotates it. It validates like `enum` and carries per-option titles, descriptions and authored order.
 _Avoid_: Titled enum, enumNames, labelled enum, oneOf enum
+
+**Multiple choice**:
+A homogeneous array that asserts `uniqueItems` over a finite item choice — an `enum` or a constant choice — and therefore holds distinct members drawn from a finite set. It stays an array node with its item identities, bindings, findings and collection operations; a presentation may offer one toggle per option, and toggling adds a member in option order or removes every item carrying the value. Length bounds remain findings and never disable an option.
+_Avoid_: Multi-select, checkbox group, tag list, set control

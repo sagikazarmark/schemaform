@@ -417,6 +417,13 @@ fn collect_focus_targets(
             }
             render::BoundNode::Control(control) => {
                 push_target(targets, control.identity, &control.input_id);
+                // A multiple choice presents no item of its own, so a finding on one of its
+                // items (a member that is no option) focuses the control.
+                if control.kind == render::ControlKind::MultipleChoice {
+                    for item in current_children(form, control.identity) {
+                        push_target(targets, item, &control.input_id);
+                    }
+                }
             }
             render::BoundNode::Group(group) => {
                 push_target(targets, group.identity, &group.element_id);
@@ -448,23 +455,14 @@ fn collect_focus_targets(
             render::BoundNode::Text(_) => {}
             render::BoundNode::Array(array) => {
                 push_target(targets, array.identity, &array.element_id);
-                if let Some(rows) = form
-                    .handle()
-                    .node(array.identity)
-                    .ok()
-                    .flatten()
-                    .and_then(|reader| reader.read_untracked().ok().flatten())
-                    .map(|projection| projection.children)
-                {
-                    for identity in rows {
-                        if let Some(node) = instantiate_array_template(
-                            form,
-                            &array.template,
-                            identity,
-                            &array.element_id,
-                        ) {
-                            collect_focus_targets(form, &[node], containing_tabs, targets);
-                        }
+                for identity in current_children(form, array.identity) {
+                    if let Some(node) = instantiate_array_template(
+                        form,
+                        &array.template,
+                        identity,
+                        &array.element_id,
+                    ) {
+                        collect_focus_targets(form, &[node], containing_tabs, targets);
                     }
                 }
             }
@@ -473,6 +471,22 @@ fn collect_focus_targets(
             }
         }
     }
+}
+
+/// The current child identities of `node`, read without subscribing; empty when the node is
+/// unavailable. Focus targets are collected on every summary render, which already follows the
+/// findings, so no subscription is needed here.
+fn current_children(
+    form: &render::BoundForm,
+    node: schemaform::InstanceIdentity,
+) -> Vec<schemaform::InstanceIdentity> {
+    form.handle()
+        .node(node)
+        .ok()
+        .flatten()
+        .and_then(|reader| reader.read_untracked().ok().flatten())
+        .map(|projection| projection.children)
+        .unwrap_or_default()
 }
 
 #[derive(Props, Clone, PartialEq)]
@@ -2689,7 +2703,9 @@ fn control_facets(
         || matches!(
             kind,
             render::ControlKind::Boolean | render::ControlKind::Choice
-        ) && !selectable;
+        ) && !selectable
+        || kind == render::ControlKind::MultipleChoice
+            && edit::multiple_choice_is_disabled(projection);
     let read_only = projection.read_only
         || kind == render::ControlKind::Constant
         || matches!(
@@ -2698,22 +2714,26 @@ fn control_facets(
                 | render::ControlKind::Number
                 | render::ControlKind::Integer
         ) && !operations.can_input_text();
-    let write_only_replacement =
-        (projection.write_only && !projection.read_only && kind != render::ControlKind::Constant)
-            .then(|| render::WriteOnlyReplacement {
-                label: localize_builtin(
-                    form,
-                    BuiltinMessage::WriteOnlyReplace {
-                        label: projection.label.clone(),
-                    },
-                ),
-                placeholder: localize_builtin(
-                    form,
-                    BuiltinMessage::WriteOnlyReplacementPlaceholder {
-                        label: projection.label.clone(),
-                    },
-                ),
-            });
+    let write_only_replacement = (projection.write_only
+        && !projection.read_only
+        && !matches!(
+            kind,
+            render::ControlKind::Constant | render::ControlKind::MultipleChoice
+        ))
+    .then(|| render::WriteOnlyReplacement {
+        label: localize_builtin(
+            form,
+            BuiltinMessage::WriteOnlyReplace {
+                label: projection.label.clone(),
+            },
+        ),
+        placeholder: localize_builtin(
+            form,
+            BuiltinMessage::WriteOnlyReplacementPlaceholder {
+                label: projection.label.clone(),
+            },
+        ),
+    });
     let write_only_status = projection.write_only.then(|| {
         let label = projection.label.clone();
         let message = match value_state {
@@ -2770,55 +2790,79 @@ fn value_state_attribute(state: Option<schemaform::form::ScalarValueState>) -> &
     }
 }
 
-/// Hook-stable callbacks behind one scalar control's presence affordances.
+/// Hook-stable callbacks behind one control's presence affordances.
 ///
 /// The callbacks keep their identity across renders, so a renderer that stores an
 /// [`render::Affordance`] does not accumulate a new callback per keystroke and a child component
 /// that memoizes on the affordance keeps calling a live callback; the scope token tells a stale
-/// affordance from a live one.
+/// affordance from a live one. A scalar control offers set, set null, remove value, and replace;
+/// a multiple choice, being an array node, offers materialize, replace, and remove value.
 #[derive(Clone)]
-struct ScalarPresenceCallbacks {
+struct ControlPresenceCallbacks {
     set: Callback<()>,
     set_null: Callback<()>,
     remove_value: Callback<()>,
     replace: Callback<()>,
+    materialize: Callback<()>,
     scope: render::AffordanceScope,
 }
 
-/// Creates the presence callbacks for one scalar control.
+impl ControlPresenceCallbacks {
+    /// The subset a container offers: a multiple choice is an array node, so its presence is
+    /// computed by the container rules.
+    fn into_container(self) -> ContainerPresenceCallbacks {
+        ContainerPresenceCallbacks {
+            materialize: self.materialize,
+            replace: self.replace,
+            remove_value: self.remove_value,
+            scope: self.scope,
+        }
+    }
+}
+
+/// Creates the presence callbacks for one control.
 ///
 /// Each callback performs its core operation through `actions` at invocation time and reports a
-/// failure to the host's `on_error`. `seed` is the definition's creation seed used by set and
-/// replace. `actions` is `None` and `seed` absent while the node is unavailable; the callbacks are
-/// then no-ops, and the matching affordances are never offered. This is a hook: call it at the
-/// same position on every render.
-fn use_scalar_presence_callbacks(
+/// failure to the host's `on_error`. `seed` is the definition's creation seed used by set;
+/// `replacement` is what replace writes: the seed for a scalar, and for a multiple choice the
+/// members that are options (or the seed while the data is no array). `actions` is `None` and
+/// the values absent while the node is unavailable; the callbacks are then no-ops, and the
+/// matching affordances are never offered. This is a hook: call it at the same position on every
+/// render.
+fn use_control_presence_callbacks(
     actions: Option<&handle::ControlActions>,
     seed: Option<Value>,
+    replacement: Option<Value>,
     error_route: Option<OperationErrorHandler>,
-) -> ScalarPresenceCallbacks {
-    /// One presence operation; `None` when its precondition (a seed) is absent.
+) -> ControlPresenceCallbacks {
+    /// One presence operation; `None` when its precondition (a value to write) is absent.
     type Operation = fn(
         &handle::ControlActions,
         Option<&Value>,
     ) -> Option<Result<schemaform::Transition, handle::HandleError>>;
-    let callback = |operation: Operation| {
+    let callback = |operation: Operation, value: Option<Value>| {
         let actions = actions.cloned();
-        let seed = seed.clone();
         let error_route = error_route.clone();
         use_callback(move |()| {
             if let Some(actions) = &actions
-                && let Some(result) = operation(actions, seed.as_ref())
+                && let Some(result) = operation(actions, value.as_ref())
             {
                 report_operation(&error_route, result);
             }
         })
     };
-    ScalarPresenceCallbacks {
-        set: callback(|actions, seed| seed.map(|value| actions.set_value(value.clone()))),
-        set_null: callback(|actions, _| Some(actions.set_null())),
-        remove_value: callback(|actions, _| Some(actions.remove_value())),
-        replace: callback(|actions, seed| seed.map(|value| actions.replace_value(value.clone()))),
+    ControlPresenceCallbacks {
+        set: callback(
+            |actions, seed| seed.map(|value| actions.set_value(value.clone())),
+            seed,
+        ),
+        set_null: callback(|actions, _| Some(actions.set_null()), None),
+        remove_value: callback(|actions, _| Some(actions.remove_value()), None),
+        replace: callback(
+            |actions, replacement| replacement.map(|value| actions.replace_value(value.clone())),
+            replacement,
+        ),
+        materialize: callback(|actions, _| Some(actions.materialize()), None),
         scope: render::use_affordance_scope(),
     }
 }
@@ -2834,7 +2878,7 @@ fn scalar_presence_affordances(
     form: &render::BoundForm,
     projection: &handle::NodeProjection,
     element_id: &str,
-    callbacks: ScalarPresenceCallbacks,
+    callbacks: ControlPresenceCallbacks,
 ) -> Vec<render::Affordance> {
     use render::{Affordance, AffordanceKind};
     use schemaform::form::ScalarValueState;
@@ -2991,29 +3035,55 @@ fn ControlHost(props: ControlHostProps) -> Element {
     // render, including renders where the node has already been removed or disposed.
     let operation_errors = dioxus_core::try_consume_context::<OperationErrorHandler>();
     let actions = reader.as_ref().map(handle::NodeReader::actions);
-    let presence_callbacks = use_scalar_presence_callbacks(
+    let multiple_choice = props.control.kind == render::ControlKind::MultipleChoice;
+    let seed = projection
+        .as_ref()
+        .and_then(|projection| projection.creation_seed.clone());
+    let replacement = match &projection {
+        Some(projection) if multiple_choice => {
+            Some(multiple_choice_replacement(projection, seed.as_ref()))
+        }
+        _ => seed.clone(),
+    };
+    let presence_callbacks = use_control_presence_callbacks(
         actions.as_ref(),
-        projection
-            .as_ref()
-            .and_then(|projection| projection.creation_seed.clone()),
+        seed,
+        replacement,
         operation_errors.clone(),
     );
     let (Some(reader), Some(mut projection), Some(actions)) = (reader, projection, actions) else {
         return rsx! {};
     };
     localize_node_text(&props.form, &mut projection);
-    let presence = scalar_presence_affordances(
-        &props.form,
-        &projection,
-        &props.control.input_id,
-        presence_callbacks,
-    );
+    // A multiple choice is an array node: its presence is a container's (add, replace, remove),
+    // and its data is replaceable while a member is no option.
+    let (presence, incompatible_value) = if multiple_choice {
+        (
+            container_presence_affordances(
+                &props.form,
+                &projection,
+                &props.control.input_id,
+                presence_callbacks.into_container(),
+            ),
+            container_incompatible_value(&projection),
+        )
+    } else {
+        (
+            scalar_presence_affordances(
+                &props.form,
+                &projection,
+                &props.control.input_id,
+                presence_callbacks,
+            ),
+            incompatible_value(&projection),
+        )
+    };
     let presentation = node_presentation(
         &props.form,
         &projection,
         &props.control.input_id,
         presence,
-        incompatible_value(&projection),
+        incompatible_value,
     );
     let facets = control_facets(&props.form, &props.control, &projection);
     let context = render::ControlRenderContext::new(
@@ -3049,10 +3119,28 @@ fn incompatible_value(projection: &handle::NodeProjection) -> Option<String> {
         })
 }
 
+/// What replace writes for a multiple choice: the members that are options, in option order,
+/// while the data is an array, else the creation seed. Replacing a stray member drops it and
+/// keeps the reader's picks.
+fn multiple_choice_replacement(projection: &handle::NodeProjection, seed: Option<&Value>) -> Value {
+    match &projection.current_data {
+        Some(Value::Array(_)) => Value::Array(
+            projection
+                .choice_options
+                .iter()
+                .filter(|option| option.selected)
+                .map(|option| option.value.clone())
+                .collect(),
+        ),
+        _ => seed.cloned().unwrap_or(Value::Array(Vec::new())),
+    }
+}
+
 /// The value shown beside a container's replace affordance while its data is replaceable.
 ///
 /// Containers have no value state; the core allows replacement exactly when the current data is
-/// not the container shape the data schema expects, so replaceability alone selects the value.
+/// not the container shape the data schema expects, or when a multiple choice holds a member
+/// that is no option, so replaceability alone selects the value.
 fn container_incompatible_value(projection: &handle::NodeProjection) -> Option<String> {
     (projection.allowed_operations.can_replace_value() && !projection.write_only)
         .then(|| projection.current_data.as_ref().map(Value::to_string))
@@ -3445,6 +3533,88 @@ fn BuiltinConstantControl(props: BuiltinControlProps) -> Element {
     }
 }
 
+/// The built-in multiple-choice control: a `fieldset` carrying the node's element id, a
+/// `legend`, and one labelled native checkbox per option.
+///
+/// Built on [`edit::use_multiple_choice_edit`] and the public context, as a custom renderer
+/// would be. Each checkbox carries the option's id from
+/// [`MultipleChoiceEdit::option_element_id`], the node's `name`, `aria-required`, and the
+/// node's `aria-describedby` and `aria-invalid`, so help and findings describe every checkbox.
+/// The fieldset takes `tabindex="-1"` like the array fieldset, so the node can take focus while
+/// staying out of the tab order, and marks itself so the focus script lands on the first
+/// checkbox inside when one is enabled (`data-focus-first-descendant`, which the focus script in
+/// [`dom`] honours). A read-only node renders as noninteractive `output` of its selected labels,
+/// as every
+/// built-in kind does. The presence affordances are the array's: add while absent, replace
+/// while a member is no option, remove while optional.
+#[allow(non_snake_case)]
+fn BuiltinMultipleChoiceControl(props: BuiltinControlProps) -> Element {
+    let context = &props.context;
+    let edit = use_multiple_choice_edit(context);
+    let Some(projection) = context.node().read().ok().flatten() else {
+        return rsx! {};
+    };
+    let chrome = BuiltinChrome::new(context, &projection);
+    let selected = edit.selected.cloned();
+    if projection.read_only {
+        let labels = edit
+            .options
+            .iter()
+            .filter(|option| selected.contains(&option.identity))
+            .map(|option| option.label.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        return chrome.read_only_output(labels);
+    }
+    let facets = context.control();
+    let required = facets.required;
+    let write_only_status = facets.write_only_status.clone();
+    let incompatible_value = context.presentation().incompatible_value.clone();
+    let options = edit.options.clone();
+    let toggle = edit.toggle;
+    let blur = edit.blur;
+    rsx! {
+        fieldset {
+            id: chrome.element_id.clone(),
+            class: "schemaform-control schemaform-multiple-choice",
+            "data-schemaform-control": chrome.kind.data_attribute(),
+            tabindex: "-1",
+            "data-focus-first-descendant": "",
+            legend { "{chrome.label}" }
+            if let Some(status) = write_only_status {
+                output { "data-write-only-status": "", "{status}" }
+            }
+            for option in options {
+                div {
+                    class: "schemaform-multiple-choice-option",
+                    input {
+                        id: edit.option_element_id(&option.identity),
+                        name: chrome.name.clone(),
+                        r#type: "checkbox",
+                        checked: selected.contains(&option.identity),
+                        disabled: option.disabled,
+                        "aria-required": required,
+                        "aria-invalid": chrome.invalid,
+                        "aria-describedby": chrome.described_by.clone(),
+                        oninput: {
+                            let identity = option.identity.clone();
+                            move |_| toggle.call(identity.clone())
+                        },
+                        onblur: move |_| blur.call(()),
+                    }
+                    label { r#for: edit.option_element_id(&option.identity), "{option.label}" }
+                }
+            }
+            {chrome.supplements}
+            if let Some(incompatible_value) = incompatible_value {
+                output { "data-incompatible-value": "", "{incompatible_value}" }
+            }
+            {chrome.presence_actions}
+            {chrome.presented_findings}
+        }
+    }
+}
+
 fn render_local_findings(
     form: &render::BoundForm,
     findings: Vec<render::FindingDescriptor>,
@@ -3472,8 +3642,8 @@ fn validation_finding_fallback(finding: &schemaform::ValidationFinding) -> Strin
 }
 
 pub use edit::{
-    BooleanEdit, ChoiceEdit, ChoiceOption, TextEdit, use_boolean_edit, use_choice_edit,
-    use_text_edit,
+    BooleanEdit, ChoiceEdit, ChoiceOption, MultipleChoiceEdit, TextEdit, use_boolean_edit,
+    use_choice_edit, use_multiple_choice_edit, use_text_edit,
 };
 pub use handle::{
     ChoiceIdentity, ChoiceOptionProjection, CollectionActions, CollectionItemProjection,

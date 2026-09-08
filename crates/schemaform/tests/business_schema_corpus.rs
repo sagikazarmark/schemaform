@@ -308,6 +308,7 @@ fn support_profile_is_complete_and_matches_corpus_classifications() {
             "editing",
             "implemented",
         ),
+        ("structure.array.multiple-choice", "editing", "implemented"),
         (
             "structure.array.nullable",
             "capability-blocking",
@@ -557,6 +558,7 @@ fn support_profile_evidence_is_complete_and_resolvable() {
                 "user.remove-item",
                 "user.move-item-up",
                 "user.move-item-down",
+                "user.toggle-choice",
                 "host.set",
                 "host.remove",
                 "host.replace-all",

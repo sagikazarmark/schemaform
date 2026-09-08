@@ -6,11 +6,14 @@ use serde_json::json;
 use crate::components::{StatusLine, schemaform_daisyui};
 
 /// Generated presentation needs only a Draft 2020-12 data schema. This one
-/// exercises text, integer, boolean, choice, nullable, constant, read-only, and
-/// write-only controls as well as validation and submission. The two choices
-/// show both spellings side by side: a plain `enum` whose options read as their
-/// values, and a constant choice (`oneOf` of titled constants) whose options
-/// read as their titles in authored order. Five strings carry a `format` the
+/// exercises text, integer, boolean, choice, multiple choice, nullable,
+/// constant, read-only, and write-only controls as well as validation and
+/// submission. The two choices show both spellings side by side: a plain
+/// `enum` whose options read as their values, and a constant choice (`oneOf`
+/// of titled constants) whose options read as their titles in authored order.
+/// The multiple choice is a `uniqueItems` array of titled constants: one
+/// checkbox per option, members kept in option order, `minItems` left as a
+/// finding rather than a disabled option. Five strings carry a `format` the
 /// browser has a widget for, one per widget: `email`, `uri`, `date`,
 /// `date-time`, and `time`. The controls are the built-in renderer's; only the
 /// shell and the finding summary come from the demo's daisyUI component.
@@ -25,6 +28,7 @@ pub fn GeneratedControlsExample() -> Element {
             "active": true,
             "plan": "team",
             "priority": "normal",
+            "channels": ["email"],
             "nickname": null,
             "email": "ada@example.test",
             "homepage": "https://example.test/ada",
@@ -88,7 +92,7 @@ fn definition() -> FormDefinition {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "age", "active", "plan", "priority", "account_type"],
+        "required": ["name", "age", "active", "plan", "priority", "channels", "account_type"],
         "properties": {
             "name": {
                 "type": "string",
@@ -128,6 +132,20 @@ fn definition() -> FormDefinition {
                         "description": "Escalated within the hour."
                     }
                 ]
+            },
+            "channels": {
+                "type": "array",
+                "title": "Notification channels",
+                "description": "Pick at least one.",
+                "uniqueItems": true,
+                "minItems": 1,
+                "items": {
+                    "oneOf": [
+                        { "const": "email", "title": "Email" },
+                        { "const": "sms", "title": "Text message" },
+                        { "const": "push", "title": "Push notification" }
+                    ]
+                }
             },
             "nickname": {
                 "type": ["string", "null"],

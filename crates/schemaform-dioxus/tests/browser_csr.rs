@@ -2024,6 +2024,60 @@ fn constant_choice_test_app(props: TestAppProps) -> Element {
     }
 }
 
+/// Two multiple choices: `/channels`, a `uniqueItems` array of titled constants with
+/// `minItems`, so the built-in renders a fieldset of checkboxes whose findings and focus can be
+/// exercised; and `/granted`, the same shape marked `readOnly`.
+fn multiple_choice_test_app(props: TestAppProps) -> Element {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["channels"],
+        "properties": {
+            "channels": {
+                "type": "array",
+                "title": "Channels",
+                "description": "How we may reach you.",
+                "uniqueItems": true,
+                "minItems": 1,
+                "items": {
+                    "oneOf": [
+                        { "const": "email", "title": "Email" },
+                        { "const": "sms", "title": "SMS" },
+                        { "const": "push", "title": "Push" }
+                    ]
+                }
+            },
+            "granted": {
+                "type": "array",
+                "title": "Granted",
+                "readOnly": true,
+                "uniqueItems": true,
+                "items": { "enum": ["read", "write"] }
+            }
+        }
+    }))
+    .expect("the multiple choice data schema should compile");
+    let form = use_form(
+        definition,
+        json!({ "channels": ["sms"], "granted": ["write", "read"] }),
+    )
+    .expect("the multiple choice form should be created");
+    let bound = RenderConfiguration::default()
+        .bind(&form)
+        .expect("a multiple choice should bind to the built-in renderer");
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+
+    rsx! {
+        SchemaForm {
+            form: bound,
+            on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
+        }
+    }
+}
+
 fn unsupported_one_of_test_app(props: TestAppProps) -> Element {
     let definition = FormDefinition::compiler(json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -7060,6 +7114,362 @@ async fn boolean_and_scalar_constant_controls_preserve_native_semantics() {
         SubmissionOutcome::Ready(_)
     ));
     assert_eq!(snapshot.form_data(), &baseline);
+
+    root.remove();
+}
+
+/// The multiple-choice fieldset and its checkboxes in option order.
+fn multiple_choice_checkboxes(
+    root: &web_sys::Element,
+    binding: &str,
+) -> (web_sys::Element, Vec<HtmlInputElement>) {
+    let checkboxes = root
+        .query_selector_all(&format!("input[type='checkbox'][name='{binding}']"))
+        .expect("the checkbox selector should be valid");
+    let checkboxes = (0..checkboxes.length())
+        .map(|index| {
+            checkboxes
+                .get(index)
+                .expect("the checkbox list should be dense")
+                .unchecked_into::<HtmlInputElement>()
+        })
+        .collect::<Vec<_>>();
+    let fieldset = checkboxes
+        .first()
+        .expect("the multiple choice should render at least one checkbox")
+        .closest("fieldset[data-schemaform-control='multiple-choice']")
+        .expect("the fieldset selector should be valid")
+        .expect("the checkboxes should be grouped in the multiple-choice fieldset");
+    (fieldset, checkboxes)
+}
+
+#[wasm_bindgen_test]
+async fn a_multiple_choice_is_a_fieldset_of_checkboxes_toggled_from_the_keyboard_in_option_order() {
+    let MountedTestApp {
+        root,
+        form_handle,
+        submitted: _,
+    } = mount_test_app(multiple_choice_test_app).await;
+    let (fieldset, checkboxes) = multiple_choice_checkboxes(&root, "/channels");
+    let channels = control_with_binding(&form_handle, "/channels");
+    let fieldset_id = fieldset.id();
+    assert!(
+        !fieldset_id.is_empty(),
+        "the array-level element id is on the fieldset"
+    );
+    assert_eq!(
+        fieldset
+            .query_selector("legend")
+            .expect("the legend selector should be valid")
+            .expect("the fieldset should have a legend")
+            .text_content()
+            .as_deref(),
+        Some("Channels")
+    );
+    assert_eq!(
+        checkboxes
+            .iter()
+            .map(|checkbox| {
+                let label = root
+                    .query_selector(&format!("label[for='{}']", checkbox.id()))
+                    .expect("the label selector should be valid")
+                    .expect("every checkbox should have a label");
+                (
+                    checkbox.id(),
+                    label.text_content().unwrap_or_default(),
+                    checkbox.checked(),
+                )
+            })
+            .collect::<Vec<_>>(),
+        [
+            (format!("{fieldset_id}-choice-0"), "Email".to_owned(), false),
+            (format!("{fieldset_id}-choice-1"), "SMS".to_owned(), true),
+            (format!("{fieldset_id}-choice-2"), "Push".to_owned(), false),
+        ]
+    );
+    assert!(
+        root.query_selector("[data-schemaform-array], button[data-append]")
+            .expect("the collection selector should be valid")
+            .is_none(),
+        "no row chrome: the array is presented as checkboxes alone"
+    );
+    let granted = root
+        .query_selector("output[name='/granted']")
+        .expect("the output selector should be valid")
+        .expect("a read-only multiple choice renders as output like every read-only kind");
+    assert_eq!(
+        granted.text_content().as_deref(),
+        Some("read, write"),
+        "the output lists the selected labels in option order"
+    );
+    assert_eq!(granted.get_attribute("tabindex").as_deref(), Some("-1"));
+    assert!(
+        root.query_selector("input[name='/granted']")
+            .expect("the input selector should be valid")
+            .is_none()
+    );
+    let help_text = "How we may reach you.";
+    for checkbox in &checkboxes {
+        assert!(!checkbox.disabled());
+        assert_eq!(
+            checkbox.get_attribute("aria-required").as_deref(),
+            Some("true")
+        );
+        assert_eq!(
+            checkbox.get_attribute("aria-invalid").as_deref(),
+            Some("false")
+        );
+        let referenced = assert_described_by_resolves(checkbox);
+        let document = web_sys::window().unwrap().document().unwrap();
+        assert!(
+            referenced.iter().any(|id| {
+                document
+                    .get_element_by_id(id)
+                    .and_then(|element| element.text_content())
+                    .as_deref()
+                    == Some(help_text)
+            }),
+            "every checkbox is described by the help text"
+        );
+    }
+    assert_eq!(
+        focusable_order(&fieldset),
+        ["/channels", "/channels", "/channels"],
+        "every checkbox is in the tab order"
+    );
+    // Tab reaches a checkbox and Space activates it; activation is the checkbox's own click
+    // behaviour, which the test triggers directly since a synthetic key event has no default
+    // action.
+    checkboxes[2]
+        .focus()
+        .expect("a checkbox should accept focus");
+    assert_focused(&checkboxes[2]);
+    checkboxes[2].click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()?["channels"] == json!(["sms", "push"])).then_some(())
+    })
+    .await;
+    checkboxes[0]
+        .focus()
+        .expect("a checkbox should accept focus");
+    checkboxes[0].click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()?["channels"] == json!(["email", "sms", "push"]))
+            .then_some(())
+    })
+    .await;
+    assert!(
+        checkboxes.iter().all(HtmlInputElement::checked),
+        "checking Push then Email yields option order, not check order"
+    );
+    assert!(
+        form_handle
+            .node(channels)
+            .expect("the form should be readable")
+            .expect("the array node should exist")
+            .read()
+            .expect("the array node should be readable")
+            .expect("the array node should remain present")
+            .dirty
+    );
+
+    checkboxes[1].click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()?["channels"] == json!(["email", "push"]))
+            .then_some(())
+    })
+    .await;
+    assert!(!checkboxes[1].checked());
+    assert_eq!(
+        checkboxes
+            .iter()
+            .map(HtmlInputElement::checked)
+            .collect::<Vec<_>>(),
+        [true, false, true]
+    );
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+async fn a_multiple_choice_describes_every_checkbox_by_its_findings_and_a_blocked_submission_focuses_the_first()
+ {
+    let MountedTestApp {
+        root,
+        form_handle,
+        submitted,
+    } = mount_test_app(multiple_choice_test_app).await;
+    let (fieldset, checkboxes) = multiple_choice_checkboxes(&root, "/channels");
+    let fieldset_id = fieldset.id();
+
+    // Unchecking the only member is accepted: minItems stays a finding, not a disabled option.
+    checkboxes[1].click();
+    poll_dom(|| (form_handle.reader().form_data().ok()?["channels"] == json!([])).then_some(()))
+        .await;
+    assert!(checkboxes.iter().all(|checkbox| !checkbox.disabled()));
+
+    let form: HtmlFormElement = root
+        .query_selector("form")
+        .expect("the form selector should be valid")
+        .expect("the schema form should render a form element")
+        .dyn_into()
+        .expect("the schema form should use semantic form HTML");
+    dispatch_submit(&form);
+    wait_for_summary_focus(&root).await;
+    assert!(submitted.borrow().is_none());
+    let finding = poll_dom(|| {
+        fieldset
+            .query_selector("[data-validation-finding='minItems']")
+            .expect("the finding selector should be valid")
+    })
+    .await;
+    assert!(!finding.id().is_empty());
+    for checkbox in &checkboxes {
+        assert_eq!(
+            checkbox.get_attribute("aria-invalid").as_deref(),
+            Some("true")
+        );
+        let referenced = assert_described_by_resolves(checkbox);
+        assert!(
+            referenced.contains(&finding.id()),
+            "aria-describedby on #{} names the finding, got {referenced:?}",
+            checkbox.id()
+        );
+        assert_eq!(
+            referenced.len(),
+            2,
+            "help and the finding describe the checkbox"
+        );
+    }
+
+    let summary_action = root
+        .query_selector("[data-finding-summary] [data-finding='minItems'] button")
+        .expect("the summary selector should be valid")
+        .expect("the minItems finding should have a summary focus action")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("the summary focus action should be a button");
+    summary_action.click();
+    poll_dom(|| {
+        let focused = web_sys::window()?.document()?.active_element()?;
+        (focused.id() == format!("{fieldset_id}-choice-0")).then_some(())
+    })
+    .await;
+
+    checkboxes[0].click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()?["channels"] == json!(["email"])).then_some(())
+    })
+    .await;
+    poll_dom(|| {
+        (checkboxes[0].get_attribute("aria-invalid").as_deref() == Some("false")).then_some(())
+    })
+    .await;
+    dispatch_submit(&form);
+    let snapshot = poll_dom(|| submitted.borrow().clone()).await;
+    assert_eq!(snapshot.form_data()["channels"], json!(["email"]));
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+async fn a_multiple_choice_member_outside_the_options_is_read_out_and_replaced_by_the_compatible_members()
+ {
+    let MountedTestApp {
+        root,
+        form_handle,
+        submitted,
+    } = mount_test_app(multiple_choice_test_app).await;
+    let (fieldset, checkboxes) = multiple_choice_checkboxes(&root, "/channels");
+    let fieldset_id = fieldset.id();
+
+    form_handle
+        .reinitialize(json!({ "channels": ["sms", "fax"] }))
+        .expect("the browser trace should accept a stray member");
+    let readout = poll_dom(|| {
+        fieldset
+            .query_selector("output[data-incompatible-value]")
+            .expect("the readout selector should be valid")
+    })
+    .await;
+    assert_eq!(readout.text_content().as_deref(), Some(r#"["sms","fax"]"#));
+    assert_eq!(
+        checkboxes
+            .iter()
+            .map(HtmlInputElement::checked)
+            .collect::<Vec<_>>(),
+        [false, true, false],
+        "the stray member is neither dropped nor invented as an option"
+    );
+    assert!(checkboxes.iter().all(|checkbox| !checkbox.disabled()));
+
+    // The stray member fails the items' `oneOf`. A multiple choice presents no item of its own,
+    // so it presents the item's finding itself once blurred or submitted, describes every
+    // checkbox by it, and the summary focuses the fieldset's first checkbox for it.
+    let form: HtmlFormElement = root
+        .query_selector("form")
+        .expect("the form selector should be valid")
+        .expect("the schema form should render a form element")
+        .dyn_into()
+        .expect("the schema form should use semantic form HTML");
+    dispatch_submit(&form);
+    wait_for_summary_focus(&root).await;
+    assert!(submitted.borrow().is_none());
+    let summary_action = poll_dom(|| {
+        root.query_selector("[data-finding-summary] [data-finding='oneOf'] button")
+            .expect("the summary selector should be valid")
+    })
+    .await
+    .dyn_into::<web_sys::HtmlElement>()
+    .expect("the summary focus action should be a button");
+    summary_action.click();
+    poll_dom(|| {
+        let focused = web_sys::window()?.document()?.active_element()?;
+        (focused.id() == format!("{fieldset_id}-choice-0")).then_some(())
+    })
+    .await;
+    let finding = poll_dom(|| {
+        fieldset
+            .query_selector("[data-validation-finding='oneOf']")
+            .expect("the finding selector should be valid")
+    })
+    .await;
+    for checkbox in &checkboxes {
+        assert_eq!(
+            checkbox.get_attribute("aria-invalid").as_deref(),
+            Some("true")
+        );
+        assert!(
+            assert_described_by_resolves(checkbox).contains(&finding.id()),
+            "the item's finding describes #{}",
+            checkbox.id()
+        );
+    }
+
+    let replace = fieldset
+        .query_selector("button[data-replace-value]")
+        .expect("the replace selector should be valid")
+        .expect("a stray member offers the replace affordance")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("the replace affordance should be a button");
+    replace.click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()?["channels"] == json!(["sms"])).then_some(())
+    })
+    .await;
+    poll_dom(|| {
+        fieldset
+            .query_selector("output[data-incompatible-value]")
+            .expect("the readout selector should be valid")
+            .is_none()
+            .then_some(())
+    })
+    .await;
+    assert!(
+        fieldset
+            .query_selector("button[data-replace-value]")
+            .expect("the replace selector should be valid")
+            .is_none()
+    );
 
     root.remove();
 }

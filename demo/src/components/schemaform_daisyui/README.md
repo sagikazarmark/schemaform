@@ -82,6 +82,7 @@ registry without changing shape:
 | choice with `"widget": "daisyui:radio"` | `RadioGroup` with one `RadioItem` per option |
 | choice with `"widget": "daisyui:select"` | the compound `Select` with one `SelectOption` per option |
 | constant | read-only `output` from presentation and facets |
+| multiple choice (a `uniqueItems` array of a finite choice) | not matched by this package; the adapter's built-in fieldset of native checkboxes, driven by `use_multiple_choice_edit`, renders it inside the daisyUI shell |
 | any read-only node | read-only `output` inside the same `Field` |
 
 The null option of a nullable choice is an ordinary option in all three choice

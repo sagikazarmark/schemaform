@@ -303,6 +303,14 @@ impl FormHandle {
         self.apply_user_operation(|form| form.user().materialize(target))
     }
 
+    pub(crate) fn toggle_choice(
+        &self,
+        target: InstanceIdentity,
+        value: Value,
+    ) -> Result<Transition, HandleError> {
+        self.apply_user_operation(|form| form.user().toggle_choice(target, value))
+    }
+
     pub(crate) fn blur(&self, target: InstanceIdentity) -> Result<Transition, HandleError> {
         self.apply_user_operation(|form| form.user().blur(target))
     }
@@ -539,7 +547,13 @@ impl NodeReader {
             return Ok(None);
         };
         let definition = node.definition();
-        let selected_choice = node.selected_choice().map(|option| option.value().clone());
+        // Every option the current data selects: at most one for a scalar choice, one per
+        // member for a multiple choice. Comparing the clones is exact, since both sides are
+        // copies of the same compiled option value.
+        let selected_choices = node
+            .selected_choices()
+            .map(|option| option.value().clone())
+            .collect::<Vec<_>>();
         let choice_options = definition
             .choice_options()
             .enumerate()
@@ -549,9 +563,9 @@ impl NodeReader {
                 label: option.label().to_owned(),
                 title: option.title().map(str::to_owned),
                 description: option.description().map(str::to_owned),
-                selected: selected_choice
-                    .as_ref()
-                    .is_some_and(|selected| selected == option.value()),
+                selected: selected_choices
+                    .iter()
+                    .any(|selected| selected == option.value()),
             })
             .collect();
         let children = node.children().collect::<Vec<_>>();
@@ -892,7 +906,8 @@ pub struct ChoiceOptionProjection {
     /// The core's compiled per-option description: a constant choice's branch `description`.
     /// `enum` and `const` options have none.
     pub description: Option<String>,
-    /// Whether this option matches the node's current value.
+    /// Whether this option matches the node's current value: the scalar it equals, or the
+    /// member of a multiple-choice array it equals.
     pub selected: bool,
 }
 
@@ -958,6 +973,13 @@ impl ControlActions {
     /// definition seed.
     pub fn materialize(&self) -> Result<Transition, HandleError> {
         self.handle.materialize(self.target)
+    }
+
+    /// Toggles whether `value`, one of a multiple-choice array's options, is a member of the
+    /// array: a member is removed together with every duplicate of it, a non-member is
+    /// inserted in option order.
+    pub fn toggle_choice(&self, value: Value) -> Result<Transition, HandleError> {
+        self.handle.toggle_choice(self.target, value)
     }
 }
 

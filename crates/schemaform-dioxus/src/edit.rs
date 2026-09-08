@@ -591,17 +591,17 @@ impl fmt::Debug for ChoiceEdit {
     }
 }
 
-/// One selectable option of a choice control, as a widget should present it.
+/// One option of a choice or multiple-choice control, as a widget should present it.
 ///
 /// Options are compiled from the definition, so their identities, order, and descriptions are
 /// fixed for the lifetime of the bound form; `label` follows the configured localizer and
 /// `disabled` follows the operations the core allows right now. The struct is non-exhaustive
-/// and only ever constructed by [`use_choice_edit`].
+/// and only ever constructed by [`use_choice_edit`] and [`use_multiple_choice_edit`].
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct ChoiceOption {
-    /// Opaque identity to hand back to [`ChoiceEdit::select`]; its
-    /// [`ChoiceIdentity::as_str`] form is a safe DOM value.
+    /// Opaque identity to hand back to [`ChoiceEdit::select`] or [`MultipleChoiceEdit::toggle`];
+    /// its [`ChoiceIdentity::as_str`] form is a safe DOM value.
     pub identity: ChoiceIdentity,
     /// Localized plain-text label: the core's compiled label (a constant choice's branch
     /// `title`, otherwise the value's spelling) through the configured localizer as a keyless
@@ -643,6 +643,71 @@ impl ChoiceState {
             .iter()
             .map(|entry| entry.option.clone())
             .collect()
+    }
+}
+
+/// The state both option-bearing hooks track, tracked through one memo over the node.
+///
+/// `read_state` builds the hook's state from a node read with labels localized through the
+/// configured localizer. The memo, rather than the calling component, subscribes to the node and
+/// the localizer; `None` means the node cannot be read right now. `selected_of` and `options_of`
+/// project the two values a widget reads: `selected` is handed out as a read signal so a widget
+/// that receives it as a prop stays wired to the live control, while the calling component
+/// subscribes to the options alone, so it re-renders when a label or an option's availability
+/// changes, not on every node change.
+struct OptionHookState<State: 'static, Selected: PartialEq + 'static> {
+    state: Memo<Option<State>>,
+    selected: ReadSignal<Selected>,
+    options: Vec<ChoiceOption>,
+}
+
+/// One node read with a label localizer, as the option-bearing hooks consume it.
+type LocalizedRead<State> = fn(
+    Result<Option<NodeProjection>, HandleError>,
+    &mut dyn FnMut(ChoiceLabel<'_>) -> String,
+) -> Option<State>;
+
+fn use_option_hook_state<State, Selected>(
+    context: &ControlRenderContext,
+    read_state: LocalizedRead<State>,
+    selected_of: fn(&State) -> Selected,
+    options_of: fn(&State) -> Vec<ChoiceOption>,
+) -> OptionHookState<State, Selected>
+where
+    State: Clone + PartialEq + 'static,
+    Selected: Clone + Default + PartialEq + 'static,
+{
+    let state = {
+        let reader = context.node().clone();
+        let form = context.presentation().form().clone();
+        use_memo(move || {
+            read_state(reader.read(), &mut |label| match label {
+                ChoiceLabel::Null => {
+                    crate::localize_builtin(&form, crate::BuiltinMessage::ChoiceNull)
+                }
+                ChoiceLabel::Compiled(label) => crate::localize_text(&form, None, label),
+            })
+        })
+    };
+    let selected_memo =
+        use_memo(move || state.read().as_ref().map(selected_of).unwrap_or_default());
+    let selected = use_hook(|| ReadSignal::new(selected_memo));
+    let options = use_memo(move || state.read().as_ref().map(options_of).unwrap_or_default())
+        .read()
+        .clone();
+    OptionHookState {
+        state,
+        selected,
+        options,
+    }
+}
+
+/// Labels for the state a hook decides against in an event handler: a fresh read never shows
+/// labels, so they stay unlocalized.
+fn unlocalized(label: ChoiceLabel<'_>) -> String {
+    match label {
+        ChoiceLabel::Null => String::new(),
+        ChoiceLabel::Compiled(label) => label.to_owned(),
     }
 }
 
@@ -711,39 +776,16 @@ impl ChoiceState {
 /// }
 /// ```
 pub fn use_choice_edit(context: &ControlRenderContext) -> ChoiceEdit {
-    // The state tracks the node and the localizer through this memo, so the memo rather
-    // than the calling component subscribes to them. `None` means the node cannot be read
-    // right now.
-    let state = {
-        let reader = context.node().clone();
-        let form = context.presentation().form().clone();
-        use_memo(move || {
-            choice_state_of(reader.read(), |label| match label {
-                ChoiceLabel::Null => {
-                    crate::localize_builtin(&form, crate::BuiltinMessage::ChoiceNull)
-                }
-                ChoiceLabel::Compiled(label) => crate::localize_text(&form, None, label),
-            })
-        })
-    };
-    let selected_memo = use_memo(move || {
-        state
-            .read()
-            .as_ref()
-            .and_then(|state| state.selected.clone())
-    });
-    let selected = use_hook(|| ReadSignal::new(selected_memo));
-    // The calling component subscribes to the options alone, so it re-renders when a label
-    // or an option's availability changes, not on every node change.
-    let options = use_memo(move || {
-        state
-            .read()
-            .as_ref()
-            .map(ChoiceState::options)
-            .unwrap_or_default()
-    })
-    .read()
-    .clone();
+    let OptionHookState {
+        state,
+        selected,
+        options,
+    } = use_option_hook_state(
+        context,
+        choice_state_of,
+        |state: &ChoiceState| state.selected.clone(),
+        ChoiceState::options,
+    );
     let target = Rc::new(ChoiceEditTarget {
         node: EditTarget::new(context),
         state,
@@ -776,11 +818,8 @@ impl ChoiceEditTarget {
     /// holds the borrow that also rejects the write. Decisions never read labels, so a fresh
     /// read leaves them unlocalized.
     fn current_state(&self) -> Option<ChoiceState> {
-        choice_state_of(self.node.read_untracked(), |label| match label {
-            ChoiceLabel::Null => String::new(),
-            ChoiceLabel::Compiled(label) => label.to_owned(),
-        })
-        .or_else(|| self.state.peek().clone())
+        choice_state_of(self.node.read_untracked(), &mut unlocalized)
+            .or_else(|| self.state.peek().clone())
     }
 
     fn select(&self, identity: Option<ChoiceIdentity>) {
@@ -842,7 +881,7 @@ impl<'a> ChoiceLabel<'a> {
 /// node could not be read.
 fn choice_state_of(
     read: Result<Option<NodeProjection>, HandleError>,
-    mut localize: impl FnMut(ChoiceLabel<'_>) -> String,
+    localize: &mut dyn FnMut(ChoiceLabel<'_>) -> String,
 ) -> Option<ChoiceState> {
     let projection = read.ok().flatten()?;
     let operations = projection.allowed_operations;
@@ -885,4 +924,264 @@ fn choice_state_of(
         operations,
         write_only,
     })
+}
+
+/// Headless editing behaviour for one multiple-choice control: a `uniqueItems` array of a
+/// finite choice, presented as one toggle per option.
+///
+/// Obtained from [`use_multiple_choice_edit`]. The callbacks keep their identity across
+/// renders and `selected` is a read signal, so a widget that receives this value as a prop does
+/// not re-render per edit and stays wired to the live control.
+///
+/// Two values compare equal when they come from the same hook call site with the same options;
+/// `selected`'s current members are not compared. The struct is non-exhaustive so later
+/// releases can add fields without breaking renderers; it is only ever constructed by the hook.
+#[derive(Clone, PartialEq)]
+#[non_exhaustive]
+pub struct MultipleChoiceEdit {
+    /// The options the widget should show as checked right now, in option order.
+    ///
+    /// Empty while the array is absent or holds no option, and always for a write-only
+    /// control, whose members are never echoed. A member the data repeats appears once; a
+    /// member that is no option appears nowhere here and is shown through
+    /// [`NodePresentation::incompatible_value`](crate::render::NodePresentation::incompatible_value)
+    /// instead. It is derived through a memo that subscribes to the node, so the first render
+    /// after a transition already sees the new membership.
+    pub selected: ReadSignal<Vec<ChoiceIdentity>>,
+    /// The options in the core's compiled order, with localized labels. Every option is
+    /// `disabled` while the core allows no toggle: the array is absent, read-only, or
+    /// write-only. `minItems` and `maxItems` never disable an option; they remain findings.
+    pub options: Vec<ChoiceOption>,
+    /// Toggles one option's membership through [`ControlActions::toggle_choice`]: a member is
+    /// removed together with every duplicate of it, a non-member is inserted in option order.
+    /// An identity that is not among `options` runs no core operation. A failure is reported
+    /// to `SchemaForm::on_error` and the checkbox carrying [`Self::option_element_id`] has its
+    /// `checked` property restored to the node's membership, so a native checkbox stays in step
+    /// with the node.
+    pub toggle: Callback<ChoiceIdentity>,
+    /// Marks the control touched through [`ControlActions::blur`].
+    pub blur: Callback<()>,
+    element_id: String,
+}
+
+impl MultipleChoiceEdit {
+    /// The DOM id the widget for `option` must carry: the node's element id followed by the
+    /// option identity, `{element_id}-{identity}`. The hook resynchronises that element after
+    /// a rejected toggle, and the built-in gives each checkbox this id.
+    pub fn option_element_id(&self, option: &ChoiceIdentity) -> String {
+        option_element_id(&self.element_id, option)
+    }
+}
+
+impl fmt::Debug for MultipleChoiceEdit {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // The signal is owned by the component that called the hook; a handle that outlives
+        // it must still be printable.
+        let selected = self
+            .selected
+            .try_peek()
+            .ok()
+            .map(|selected| selected.clone());
+        formatter
+            .debug_struct("MultipleChoiceEdit")
+            .field("selected", &selected)
+            .field("options", &self.options)
+            .finish_non_exhaustive()
+    }
+}
+
+fn option_element_id(element_id: &str, option: &ChoiceIdentity) -> String {
+    format!("{element_id}-{}", option.as_str())
+}
+
+/// What a multiple-choice widget needs from one node read.
+#[derive(Clone, PartialEq)]
+struct MultipleChoiceState {
+    selected: Vec<ChoiceIdentity>,
+    entries: Vec<ChoiceEntry>,
+}
+
+impl MultipleChoiceState {
+    fn options(&self) -> Vec<ChoiceOption> {
+        self.entries
+            .iter()
+            .map(|entry| entry.option.clone())
+            .collect()
+    }
+}
+
+/// Owns the built-in multiple-choice editing behaviour for the control behind `context`.
+///
+/// This is a Dioxus hook: call it unconditionally, in a stable order, inside the renderer's
+/// own child component. [`render::ControlRenderer::render`](crate::render::ControlRenderer)
+/// itself is not a hook-safe call site.
+///
+/// The returned [`MultipleChoiceEdit`] reproduces the built-in multiple choice, a fieldset of
+/// checkboxes, exactly: `toggle`
+/// maps an opaque option identity to the core's toggle, reports a rejected write to
+/// `SchemaForm::on_error`, and restores the checkbox to the node's membership. The same handles
+/// drive a listbox with `aria-multiselectable` or a set of toggle buttons.
+///
+/// ```rust,no_run
+/// use dioxus::prelude::*;
+/// use schemaform_dioxus::{ControlRenderContext, ControlRenderer, use_multiple_choice_edit};
+///
+/// struct CheckboxGroupRenderer;
+///
+/// impl ControlRenderer for CheckboxGroupRenderer {
+///     fn render(&self, context: ControlRenderContext) -> Element {
+///         rsx! { CheckboxGroup { context } }
+///     }
+/// }
+///
+/// #[component]
+/// fn CheckboxGroup(context: ControlRenderContext) -> Element {
+///     let edit = use_multiple_choice_edit(&context);
+///     let presentation = context.presentation();
+///     let control = context.control();
+///     let selected = edit.selected.read().clone();
+///     let options = edit.options.clone();
+///     rsx! {
+///         fieldset {
+///             id: presentation.element_id.clone(),
+///             legend { "{presentation.label}" }
+///             for option in options {
+///                 div {
+///                     input {
+///                         id: edit.option_element_id(&option.identity),
+///                         name: control.name.clone(),
+///                         r#type: "checkbox",
+///                         checked: selected.contains(&option.identity),
+///                         disabled: option.disabled,
+///                         "aria-invalid": presentation.invalid,
+///                         "aria-describedby": presentation.described_by(),
+///                         oninput: {
+///                             let identity = option.identity.clone();
+///                             move |_| edit.toggle.call(identity.clone())
+///                         },
+///                         onblur: move |_| edit.blur.call(()),
+///                     }
+///                     label { r#for: edit.option_element_id(&option.identity), "{option.label}" }
+///                 }
+///             }
+///             {presentation.present_help()}
+///             {presentation.present_findings()}
+///         }
+///     }
+/// }
+/// ```
+pub fn use_multiple_choice_edit(context: &ControlRenderContext) -> MultipleChoiceEdit {
+    let OptionHookState {
+        state,
+        selected,
+        options,
+    } = use_option_hook_state(
+        context,
+        multiple_choice_state_of,
+        |state: &MultipleChoiceState| state.selected.clone(),
+        MultipleChoiceState::options,
+    );
+    let target = Rc::new(MultipleChoiceEditTarget {
+        node: EditTarget::new(context),
+        state,
+    });
+
+    let toggle = {
+        let target = target.clone();
+        use_callback(move |identity: ChoiceIdentity| target.toggle(identity))
+    };
+    let blur = use_callback(move |()| target.node.blur());
+
+    MultipleChoiceEdit {
+        selected,
+        options,
+        toggle,
+        blur,
+        element_id: context.presentation().element_id.clone(),
+    }
+}
+
+/// The node one [`use_multiple_choice_edit`] call edits, with the state its callbacks share.
+struct MultipleChoiceEditTarget {
+    node: EditTarget,
+    /// State tracked through the node; `None` while the node is unreadable.
+    state: Memo<Option<MultipleChoiceState>>,
+}
+
+impl MultipleChoiceEditTarget {
+    /// The state to decide and resynchronise against: a fresh read, or the last rendered
+    /// state when the form cannot be read right now. Decisions never read labels, so a fresh
+    /// read leaves them unlocalized.
+    fn current_state(&self) -> Option<MultipleChoiceState> {
+        multiple_choice_state_of(self.node.read_untracked(), &mut unlocalized)
+            .or_else(|| self.state.peek().clone())
+    }
+
+    fn toggle(&self, identity: ChoiceIdentity) {
+        let Some(state) = self.current_state() else {
+            return;
+        };
+        let Some(entry) = state
+            .entries
+            .iter()
+            .find(|entry| entry.option.identity == identity)
+        else {
+            return;
+        };
+        let result = self.node.actions.toggle_choice(entry.value.clone());
+        if !self.node.report(result) {
+            self.resynchronize(&state, &identity);
+        }
+    }
+
+    fn resynchronize(&self, state: &MultipleChoiceState, identity: &ChoiceIdentity) {
+        let checked = state.selected.contains(identity);
+        crate::dom::resynchronize_boolean(
+            &option_element_id(&self.node.element_id, identity),
+            Some(checked),
+        );
+    }
+}
+
+/// Whether a multiple choice accepts no toggle right now: the core allows none (the array is
+/// absent or read-only), or the control is write-only and must not echo its members. The one
+/// statement behind the built-in's `disabled` facet and every option's `disabled`.
+pub(crate) fn multiple_choice_is_disabled(projection: &NodeProjection) -> bool {
+    projection.write_only || !projection.allowed_operations.can_toggle_choice()
+}
+
+/// The multiple-choice state of a node read, with labels passed through `localize`, or `None`
+/// when the node could not be read.
+fn multiple_choice_state_of(
+    read: Result<Option<NodeProjection>, HandleError>,
+    localize: &mut dyn FnMut(ChoiceLabel<'_>) -> String,
+) -> Option<MultipleChoiceState> {
+    let projection = read.ok().flatten()?;
+    let write_only = projection.write_only;
+    let disabled = multiple_choice_is_disabled(&projection);
+    let selected = if write_only {
+        Vec::new()
+    } else {
+        projection
+            .choice_options
+            .iter()
+            .filter(|option| option.selected)
+            .map(|option| option.identity.clone())
+            .collect()
+    };
+    let entries = projection
+        .choice_options
+        .iter()
+        .map(|option| ChoiceEntry {
+            option: ChoiceOption {
+                identity: option.identity.clone(),
+                label: localize(ChoiceLabel::of(option)),
+                description: option.description.clone(),
+                is_null: option.value.is_null(),
+                disabled,
+            },
+            value: option.value.clone(),
+        })
+        .collect();
+    Some(MultipleChoiceState { selected, entries })
 }

@@ -20,9 +20,12 @@ use serde_json::{Value, json};
 ///
 /// Request: `{ "tabs": [id], "targets": [id], "item": id | null, "row": id | null }`. Every
 /// `tabs` id is clicked first, in order, so a tab button's own handler selects the panel. The
-/// element to focus is then the first `targets` id present in the document, or, when `item` is
-/// set, the item root `#item` if it is focusable, else the first focusable element inside it,
-/// else the first focusable element inside `#row`.
+/// element to focus is then the first `targets` id present in the document — or, when that
+/// element carries `data-focus-first-descendant`, the first focusable element inside it, falling
+/// back to the element itself, as the built-in multiple choice's fieldset focuses its first
+/// checkbox —
+/// or, when `item` is set, the item root `#item` if it is focusable, else the first focusable
+/// element inside it, else the first focusable element inside `#row`.
 ///
 /// Absent request members compare with `== null` rather than `=== null`: the web channel
 /// delivers JSON `null` faithfully, but a transport that drops nulls would deliver `undefined`.
@@ -49,7 +52,11 @@ const resolve = () => {
     }
     for (const id of request.targets) {
         const element = document.getElementById(id);
-        if (element) return element;
+        if (!element) continue;
+        if (element.hasAttribute("data-focus-first-descendant")) {
+            return firstFocusableInside(id) ?? element;
+        }
+        return element;
     }
     return null;
 };

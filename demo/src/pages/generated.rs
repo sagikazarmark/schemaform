@@ -34,7 +34,11 @@ pub fn Generated() -> Element {
                 InlineCode { "enum" }
                 " beside a constant choice (a "
                 InlineCode { "oneOf" }
-                " of titled constants), nullable value, constant, read-only value, and a write-only replacement. Five strings carry a "
+                " of titled constants), a multiple choice (a "
+                InlineCode { "uniqueItems" }
+                " array of titled constants rendered as one checkbox per option; uncheck them all to see "
+                InlineCode { "minItems" }
+                " stay a finding), nullable value, constant, read-only value, and a write-only replacement. Five strings carry a "
                 InlineCode { "format" }
                 " the browser has a widget for — email, URL, date, local date-time, and time — and render that widget; the core still stores plain strings and asserts nothing about them. "
                 InlineCode { "SubmissionSnapshot" }

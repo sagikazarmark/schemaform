@@ -1375,6 +1375,9 @@ impl ControlRenderer for BuiltinControlRenderer {
             ControlKind::Constant => {
                 dioxus::prelude::rsx! { crate::BuiltinConstantControl { context } }
             }
+            ControlKind::MultipleChoice => {
+                dioxus::prelude::rsx! { crate::BuiltinMultipleChoiceControl { context } }
+            }
         }
     }
 }
@@ -2089,7 +2092,11 @@ fn assemble_bound_node(
             prepared_extensions,
         ));
     }
-    if node.definition().semantic_kind() == Some(SemanticKind::HomogeneousArray) {
+    // A multiple choice is an array node the core presents as one control, so it binds through
+    // the control registry below like any other control and never reaches the collection path.
+    if node.definition().semantic_kind() == Some(SemanticKind::HomogeneousArray)
+        && !definition.is_multiple_choice()
+    {
         if let Some(widget) = definition.widget() {
             findings.push(BindFinding::UnsupportedCollectionWidget(widget.clone()));
         }
@@ -2420,7 +2427,9 @@ impl PartialEq for BoundControl {
 ///
 /// The derivation uses only definition-time information, so the kind is fixed for the
 /// lifetime of a [`BoundForm`]. `Constant` covers nodes that present a fixed value without
-/// offering a selection: non-selectable choices and null-typed nodes.
+/// offering a selection: non-selectable choices and null-typed nodes. `MultipleChoice` is a
+/// homogeneous array the core reports as a multiple choice; it binds as a control, so a
+/// registered renderer owns the whole node, and its data stays an array.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ControlKind {
@@ -2436,6 +2445,9 @@ pub enum ControlKind {
     Choice,
     /// Fixed value presented without a selection.
     Constant,
+    /// Distinct members drawn from compiled choice options: a `uniqueItems` array of a finite
+    /// choice, toggled one option at a time.
+    MultipleChoice,
 }
 
 impl ControlKind {
@@ -2447,6 +2459,9 @@ impl ControlKind {
             SemanticKind::Boolean => Some(Self::Boolean),
             SemanticKind::Choice if definition.is_choice_selectable() => Some(Self::Choice),
             SemanticKind::Choice | SemanticKind::Null => Some(Self::Constant),
+            SemanticKind::HomogeneousArray if definition.is_multiple_choice() => {
+                Some(Self::MultipleChoice)
+            }
             _ => None,
         }
     }
@@ -2459,6 +2474,7 @@ impl ControlKind {
             Self::Boolean => "boolean",
             Self::Choice => "choice",
             Self::Constant => "constant",
+            Self::MultipleChoice => "multiple-choice",
         }
     }
 
@@ -2467,7 +2483,7 @@ impl ControlKind {
             Self::String => "text",
             Self::Number => "decimal",
             Self::Integer => "numeric",
-            Self::Boolean | Self::Choice | Self::Constant => "text",
+            Self::Boolean | Self::Choice | Self::Constant | Self::MultipleChoice => "text",
         }
     }
 }
@@ -2525,6 +2541,9 @@ pub enum BindFinding {
     /// More than one renderer was registered for an exact widget.
     AmbiguousWidget(WidgetSymbol),
     /// A homogeneous array requested a widget, but collection composition is adapter-owned.
+    ///
+    /// A multiple choice is exempt: it binds as a control, so its widget request resolves
+    /// through the registry like any other control's.
     UnsupportedCollectionWidget(WidgetSymbol),
     /// More than one renderer won semantic matching at the highest priority.
     AmbiguousMatcher,

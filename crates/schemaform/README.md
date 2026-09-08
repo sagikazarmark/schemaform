@@ -28,9 +28,23 @@ labeled by its branch `title`, carrying its branch `description`, in authored
 branch order; `enum` options stay sorted by value as before. Every other `oneOf`
 or `anyOf` — a branch with any further assertion, applicator or annotation such
 as `default`, a boolean-schema branch, or a `oneOf` with duplicate constants —
-remains capability-blocking, and the finding names the reason. A multi-select
-presentation for arrays of constant choices is out of scope; such an array
-compiles to a homogeneous array of labeled choice items.
+remains capability-blocking, and the finding names the reason.
+
+An array that asserts `uniqueItems: true` over a finite item choice (`enum`, or
+a constant choice) is a multiple choice: distinct members drawn from a finite
+set. It still compiles to a homogeneous array — same node, item identities,
+bindings, findings and collection operations — and additionally reports
+`DefinitionNodeView::is_multiple_choice` with the item options as the array
+node's `choice_options`, so a presentation can offer one toggle per option.
+`UserActions::toggle_choice` adds a member in option order (checking B then A
+yields `[A, B]`) or removes every item carrying it, without being gated by
+`minItems` or `maxItems`, which remain findings. A member the data holds that is
+no option is incompatible data offered for replacement, not dropped or invented
+as an option. Because a multiple choice presents no item of its own, the array
+node also attaches findings located at its items and can be blurred like a
+scalar control, so its findings follow its own interaction state. Without
+`uniqueItems`, or without a finite item choice, the array is a list of rows as
+before.
 
 Use [`schemaform-dioxus`](../schemaform-dioxus/README.md) to render a compiled
 definition in a Dioxus browser application.
