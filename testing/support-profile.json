@@ -164,6 +164,17 @@
         ]
       },
       {
+        "id": "seeded-defaults-facade",
+        "path": "crates/schemaform/tests/seeded_defaults_facade.rs",
+        "platforms": ["native"],
+        "tests": [
+          "seeding_fills_absent_scalars_from_their_default_and_leaves_present_members_alone",
+          "seeding_fills_scalars_inside_present_objects_and_leaves_absent_objects_absent",
+          "a_default_violating_its_own_schema_is_seeded_and_reported_as_a_finding",
+          "create_form_and_the_plain_builder_never_seed_defaults"
+        ]
+      },
+      {
         "id": "annotation-authority-facade",
         "path": "crates/schemaform/tests/annotation_authority_facade.rs",
         "platforms": ["native"],
@@ -388,6 +399,10 @@
         "tests": [
           "generated-annotation-facade::nonasserting_annotations_neither_mutate_data_nor_block_submission",
           "generated-annotation-facade::title_and_description_are_fallbacks_with_deterministic_conflict_warnings",
+          "seeded-defaults-facade::seeding_fills_absent_scalars_from_their_default_and_leaves_present_members_alone",
+          "seeded-defaults-facade::seeding_fills_scalars_inside_present_objects_and_leaves_absent_objects_absent",
+          "seeded-defaults-facade::a_default_violating_its_own_schema_is_seeded_and_reported_as_a_finding",
+          "seeded-defaults-facade::create_form_and_the_plain_builder_never_seed_defaults",
           "annotation-authority-facade::read_only_rejects_user_mutation_while_host_updates_remain_atomic",
           "annotation-authority-facade::write_only_data_can_be_explicitly_replaced_and_is_preserved_for_submission"
         ]
@@ -1396,7 +1411,7 @@
     {
       "id": "metadata.default",
       "construct": "default",
-      "context": "Declared default without implicit materialization",
+      "context": "Declared default stays an annotation; seeded into absent scalars only on request",
       "target": "annotation",
       "current": "implemented"
     },

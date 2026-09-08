@@ -184,6 +184,69 @@ assert_eq!(advisory.findings().count(), 1);
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+## Defaults
+
+JSON Schema gives `default` no semantics: it is an annotation, and a form
+library that fills form data from it has made a policy decision on the host's
+behalf. So the library's own position is never to seed defaults on its own.
+`create_form` and the `FormBuilder` leave an absent member absent whatever its
+data schema says; the `default` reaches presentation as
+`DataSchemaAnnotations::defaults` and shapes a control's `creation_seed`, and
+the user or the host puts a value there explicitly. An absent optional object is
+materialized by an explicit presence operation, never because it had a default.
+
+The other policy — most form libraries seed defaults, and several protocols say
+a client SHOULD — is one call away rather than a walk over the definition tree
+by hand:
+
+```rust
+use schemaform::FormDefinition;
+use serde_json::json;
+
+let definition = FormDefinition::compile(json!({
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "name": { "type": "string", "default": "Ada" },
+        "quantity": { "type": "integer", "minimum": 1, "default": 1 },
+        "shipping": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "country": { "type": "string", "default": "GB" } }
+        }
+    }
+}))?;
+
+let form = definition.create_form_with_defaults(json!({ "quantity": 4 }))?;
+assert_eq!(form.form_data(), &json!({ "name": "Ada", "quantity": 4 }));
+
+// The same switch on the builder, for combining with limits or visibility:
+let form = definition.form(json!({})).seed_defaults().build()?;
+assert_eq!(form.form_data(), &json!({ "name": "Ada", "quantity": 1 }));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`create_form_with_defaults` (and `FormBuilder::seed_defaults`) seeds at
+creation, and the seeded data is the baseline: seeded controls are neither
+touched nor dirty, `reset` restores the seeded data, and the revisions start
+where an equivalently seeded `create_form` would. The rules are:
+
+- Only absent scalars inside objects the data already holds are seeded. An
+  absent optional object stays absent even when it declares its own `default`
+  — `shipping` above — and an array's item defaults apply to the items the data
+  holds, never to items that do not exist.
+- Host-supplied data wins. A member present in the form data the host
+  supplies is never overwritten, including a present `null`.
+- A `default` that does not satisfy its own data schema is seeded anyway and
+  reported as a finding, exactly as if the user had typed it. A `null` default
+  on a nullable scalar is seeded as `null`. The core does not second-guess an
+  authored default; it says so.
+- A scalar whose applicable data schemas declare two different defaults has
+  no single authored default and is left absent.
+- Seeding follows the data schema, not the UI schema: a control an authored
+  layout omits is still seeded, because `default` describes the data.
+
 ## Trust Boundary
 
 Data schemas must be application-trusted for evaluator work. The package

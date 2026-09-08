@@ -42,7 +42,13 @@ pub fn Generated() -> Element {
                 InlineCode { "format" }
                 " the browser has a widget for — email, URL, date, local date-time, and time — and render that widget; the core still stores plain strings and asserts nothing about them. "
                 InlineCode { "SubmissionSnapshot" }
-                " is emitted only after every parse and validation blocker is clear."
+                " is emitted only after every parse and validation blocker is clear. Four members declare a "
+                InlineCode { "default" }
+                " and are missing from the form data the host supplies; the switch above the form picks the policy for them. "
+                InlineCode { "use_form" }
+                " leaves them absent, which is the library's own position, while "
+                InlineCode { "use_form_with_defaults" }
+                " seeds each from its default as baseline data, so they start filled but neither touched nor dirty."
             },
             demo: rsx! { GeneratedControlsExample {} },
             code: rsx! {

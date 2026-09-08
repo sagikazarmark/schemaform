@@ -3648,7 +3648,7 @@ pub use edit::{
 pub use handle::{
     ChoiceIdentity, ChoiceOptionProjection, CollectionActions, CollectionItemProjection,
     ControlActions, FindingProjection, FormHandle, FormProjection, FormReader, HandleError,
-    HandleTransactionError, NodeProjection, NodeReader, use_form,
+    HandleTransactionError, NodeProjection, NodeReader, use_form, use_form_with_defaults,
 };
 pub use render::{
     Affordance, AffordanceKind, BUILTIN_CONTROL_PRIORITY, BindError, BindFinding, BooleanLabels,

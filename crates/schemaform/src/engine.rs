@@ -265,6 +265,36 @@ impl FormDefinition {
         &self.root_annotations
     }
 
+    /// Fills every absent scalar control whose parent object exists in
+    /// `form_data` with its single declared `default`.
+    ///
+    /// Present members are never overwritten, including a present `null`.
+    /// Absent objects and arrays stay absent; item-template controls are
+    /// seeded only inside array items the data already holds. A scalar whose
+    /// applicable schemas declare more than one distinct `default` is skipped.
+    /// The seeded value is not checked against its schema: an authored default
+    /// that violates it is seeded anyway and left for validation to report.
+    pub fn seed_defaults(&self, form_data: &mut Value) {
+        for control in &self.controls {
+            seed_control_default(control, &control.binding, form_data);
+        }
+        for array in &self.arrays {
+            let item_count = array
+                .binding
+                .resolve(form_data)
+                .ok()
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len);
+            for index in 0..item_count {
+                let item = array_item_pointer(&array.binding, index);
+                for control in &array.item_template.controls {
+                    let binding = append_relative_pointer(&item, &control.binding);
+                    seed_control_default(control, &binding, form_data);
+                }
+            }
+        }
+    }
+
     pub fn create_form(&self, form_data: Value) -> Result<Form, CreateFormError> {
         if !form_data.is_object() {
             return Err(CreateFormError::FormDataMustBeObject);
@@ -5339,6 +5369,19 @@ fn binding_parent_is_object(binding: &PointerBuf, form_data: &Value) -> bool {
         .split_back()
         .and_then(|(parent, _)| parent.resolve(form_data).ok())
         .is_some_and(Value::is_object)
+}
+
+/// Inserts `control`'s single declared `default` at `binding` when the binding
+/// is absent from `form_data` and its parent is a present object.
+fn seed_control_default(control: &ControlDefinition, binding: &PointerBuf, form_data: &mut Value) {
+    let [default] = control.presentation.annotations.defaults.as_slice() else {
+        return;
+    };
+    if !binding_parent_is_object(binding, form_data) || binding.resolve(form_data).is_ok() {
+        return;
+    }
+    set_bound_value(binding, form_data, default.clone())
+        .expect("a present object parent accepts a new member");
 }
 
 fn array_item_pointer(array: &PointerBuf, index: usize) -> PointerBuf {

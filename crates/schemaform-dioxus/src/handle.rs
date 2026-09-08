@@ -430,7 +430,25 @@ pub fn use_form(
     definition: FormDefinition,
     form_data: Value,
 ) -> Result<FormHandle, FormBuildError> {
-    let result = use_hook(move || definition.create_form(form_data).map(FormHandle::new));
+    use_form_created_by(move || definition.create_form(form_data))
+}
+
+/// Creates one client-local [`FormHandle`] whose absent scalars are seeded from their `default`.
+///
+/// This is [`use_form`] over [`FormDefinition::create_form_with_defaults`]: the seeded data is
+/// the form's baseline, so seeded controls start neither touched nor dirty and
+/// [`FormHandle::reset`] restores them. The same hook-order and construction-once rules apply.
+pub fn use_form_with_defaults(
+    definition: FormDefinition,
+    form_data: Value,
+) -> Result<FormHandle, FormBuildError> {
+    use_form_created_by(move || definition.create_form_with_defaults(form_data))
+}
+
+fn use_form_created_by(
+    create: impl FnOnce() -> Result<Form, FormBuildError>,
+) -> Result<FormHandle, FormBuildError> {
+    let result = use_hook(move || create().map(FormHandle::new));
     let inner = result.as_ref().ok().map(|handle| handle.inner.clone());
     use_drop(move || {
         if let Some(inner) = inner {

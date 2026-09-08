@@ -880,6 +880,23 @@ pub mod definition {
             )
         }
 
+        /// Creates form state like [`Self::create_form`], first seeding every
+        /// absent scalar from its declared `default`.
+        ///
+        /// The seeded data is the form's baseline: seeded controls are neither
+        /// touched nor dirty, `reset` restores them, and the data revision
+        /// starts where an equivalently seeded [`Self::create_form`] would.
+        /// Only absent scalars inside objects the data already holds are
+        /// seeded; a member the host supplied — including `null` — is never
+        /// overwritten, an absent optional object stays absent, and array item
+        /// defaults apply only to items that exist. A default that violates its
+        /// own schema is seeded anyway and reported as a finding. See
+        /// [`FormBuilder::seed_defaults`] to combine seeding with other
+        /// construction options.
+        pub fn create_form_with_defaults(&self, form_data: Value) -> Result<Form, FormBuildError> {
+            self.form(form_data).seed_defaults().build()
+        }
+
         /// Starts a form builder over owned canonical JSON data.
         ///
         /// Use this instead of [`Self::create_form`] to customize runtime input
@@ -4872,6 +4889,7 @@ pub mod form {
         visibility: FindingVisibilityPolicy,
         external_finding_limits: ExternalFindingLimits,
         limits: FormDataLimits,
+        seed_defaults: bool,
     }
 
     impl<'a> FormBuilder<'a> {
@@ -4882,7 +4900,19 @@ pub mod form {
                 visibility: FindingVisibilityPolicy::default(),
                 external_finding_limits: ExternalFindingLimits::default(),
                 limits: FormDataLimits::default(),
+                seed_defaults: false,
             }
+        }
+
+        /// Seeds every absent scalar from its declared `default` before the
+        /// data becomes the form's baseline.
+        ///
+        /// Off unless requested: the library never seeds defaults on its own. See
+        /// [`FormDefinition::create_form_with_defaults`] for what is and is not
+        /// seeded.
+        pub fn seed_defaults(mut self) -> Self {
+            self.seed_defaults = true;
+            self
         }
 
         /// Sets when validation and external findings become visible.
@@ -4911,7 +4941,14 @@ pub mod form {
         /// The root must be a JSON object and all construction limits must hold.
         /// Data-schema validation failures are retained as findings rather than
         /// failing construction.
-        pub fn build(self) -> Result<Form, FormBuildError> {
+        pub fn build(mut self) -> Result<Form, FormBuildError> {
+            if self.seed_defaults {
+                // Seeding a non-object root is a no-op; `Form::new` then rejects it.
+                self.definition
+                    .inner
+                    .engine
+                    .seed_defaults(&mut self.form_data);
+            }
             Form::new(
                 self.definition.clone(),
                 self.form_data,

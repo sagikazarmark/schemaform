@@ -135,3 +135,7 @@ _Avoid_: Titled enum, enumNames, labelled enum, oneOf enum
 **Multiple choice**:
 A homogeneous array that asserts `uniqueItems` over a finite item choice — an `enum` or a constant choice — and therefore holds distinct members drawn from a finite set. It stays an array node with its item identities, bindings, findings and collection operations; a presentation may offer one toggle per option, and toggling adds a member in option order or removes every item carrying the value. Length bounds remain findings and never disable an option.
 _Avoid_: Multi-select, checkbox group, tag list, set control
+
+**Default seeding**:
+An opt-in, creation-time policy that fills every absent scalar control inside an object the form data already holds with its single declared `default`, producing the form's baseline. The library never seeds implicitly; host-supplied members — including a present `null` — are never overwritten, absent objects and array items are never invented, and a seeded default that violates its own schema is reported as a finding rather than corrected.
+_Avoid_: Pre-fill, auto-defaults, initial values, default materialization
