@@ -177,7 +177,8 @@ fn initial_form_data() -> serde_json::Value {
         "fixed_mode": "a",
         "secret_mode": "a",
         "priority": "high",
-        "spelled": "yes"
+        "spelled": "yes",
+        "contact": "ada@example.test"
     })
 }
 
@@ -235,7 +236,8 @@ fn headless_app(props: HeadlessAppProps) -> Element {
                         { "const": "yes", "title": "Yes" },
                         { "const": null, "title": "null" }
                     ]
-                }
+                },
+                "contact": { "type": "string", "title": "Contact", "format": "email" }
             }
         }))
         .expect("the headless data schema should compile")
@@ -428,6 +430,28 @@ fn input_produces_an_edit_buffer_parse_blocker_and_invalid_presentation() {
     assert_eq!(mounted.value("/quantity"), "3");
     assert!(!mounted.captured("/quantity").context.presentation().invalid);
     assert_eq!(mounted.form_data()["quantity"], json!(3));
+    assert!(mounted.errors.borrow().is_empty());
+}
+
+#[test]
+fn a_renderer_that_ignores_the_format_facet_edits_a_formatted_string_like_a_plain_one() {
+    let mut mounted = MountedHeadless::mount();
+    let contact = mounted.captured("/contact");
+    assert_eq!(contact.context.control().kind, ControlKind::String);
+    assert_eq!(contact.context.control().format.as_deref(), Some("email"));
+    assert_eq!(mounted.value("/contact"), "ada@example.test");
+
+    // The capturing child never reads the facet. The hook writes whatever text it is handed,
+    // and the core raises no finding: `format` stays an annotation whatever a renderer does.
+    let edit = mounted.edit("/contact");
+    mounted.drive(|| edit.input.call("not an email".to_owned()));
+
+    assert_eq!(mounted.value("/contact"), "not an email");
+    assert_eq!(mounted.form_data()["contact"], json!("not an email"));
+    let projection = mounted.projection("/contact");
+    assert_eq!(projection.parse_blocker, None);
+    assert!(projection.validation_findings.is_empty());
+    assert!(!mounted.captured("/contact").context.presentation().invalid);
     assert!(mounted.errors.borrow().is_empty());
 }
 

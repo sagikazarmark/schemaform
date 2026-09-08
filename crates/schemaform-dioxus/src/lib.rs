@@ -2729,6 +2729,7 @@ fn control_facets(
         false_label: localize_builtin(form, BuiltinMessage::BooleanFalse),
         true_label: localize_builtin(form, BuiltinMessage::BooleanTrue),
     });
+    let format = single_format(&projection.data_schema_annotations);
     render::ControlFacets {
         kind,
         name: control.name.clone(),
@@ -2742,7 +2743,18 @@ fn control_facets(
         write_only_replacement,
         write_only_status,
         boolean_labels,
+        format,
     }
+}
+
+/// The one `format` the applicable subschemas agree on, or none.
+///
+/// The core collects every distinct `format` an `allOf` contributes; a node whose subschemas
+/// name two different formats has no single widget, so it is presented as if none were declared.
+fn single_format(annotations: &schemaform::DataSchemaAnnotations) -> Option<String> {
+    let mut formats = annotations.formats();
+    let format = formats.next()?;
+    formats.next().is_none().then(|| format.to_owned())
 }
 
 fn value_state_attribute(state: Option<schemaform::form::ScalarValueState>) -> &'static str {
@@ -3173,6 +3185,7 @@ fn BuiltinTextControl(props: BuiltinControlProps) -> Element {
     let facets = context.control();
     let write_only = facets.write_only;
     let required = facets.required;
+    let input_type = facets.input_type();
     let label = chrome.label(chrome.widget_label(write_only));
     let incompatible_value = context.presentation().incompatible_value.clone();
     rsx! {
@@ -3183,7 +3196,7 @@ fn BuiltinTextControl(props: BuiltinControlProps) -> Element {
             input {
                 id: chrome.element_id,
                 name: chrome.name,
-                r#type: if write_only { "password" } else { "text" },
+                r#type: input_type,
                 inputmode: chrome.kind.input_mode(),
                 value: display_value,
                 "data-write-only-replacement": write_only.then_some(""),

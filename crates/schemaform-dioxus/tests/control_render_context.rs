@@ -74,7 +74,14 @@ fn contract_app(props: ContractAppProps) -> Element {
                 },
                 "agree": { "type": "boolean", "title": "Agree" },
                 "secret": { "type": "string", "title": "Secret", "writeOnly": true },
-                "level": { "type": ["integer", "null"], "title": "Level" }
+                "level": { "type": ["integer", "null"], "title": "Level" },
+                "email": { "type": "string", "title": "Email", "format": "email" },
+                "conflicting_formats": {
+                    "allOf": [
+                        { "type": "string", "format": "date" },
+                        { "format": "email" }
+                    ]
+                }
             }
         }))
         .expect("the contract data schema should compile")
@@ -357,6 +364,7 @@ fn custom_renderer_receives_localized_node_presentation_and_control_facets() {
     assert_eq!(control.write_only_replacement, None);
     assert_eq!(control.write_only_status, None);
     assert_eq!(control.boolean_labels, None);
+    assert_eq!(control.format, None);
 
     let agree = facets(&contexts, "/agree");
     assert_eq!(agree.kind, ControlKind::Boolean);
@@ -387,6 +395,26 @@ fn custom_renderer_receives_localized_node_presentation_and_control_facets() {
     let level_presentation = captured(&contexts, "/level").presentation().clone();
     assert_eq!(level_presentation.help, None);
     assert_eq!(level_presentation.described_by(), None);
+
+    assert!(errors.borrow().is_empty());
+}
+
+#[test]
+fn control_facets_carry_the_format_annotation_when_the_applicable_schemas_agree_on_one() {
+    let MountedContract {
+        contexts, errors, ..
+    } = mount_contract_app();
+
+    // The annotation reaches a renderer package as authored, without the raw data schema.
+    let email = facets(&contexts, "/email");
+    assert_eq!(email.kind, ControlKind::String);
+    assert_eq!(email.format.as_deref(), Some("email"));
+
+    // Two applicable subschemas naming different formats leave no single widget to choose:
+    // the facet is absent, exactly as it is for a string that declares no `format`.
+    let conflicting = facets(&contexts, "/conflicting_formats");
+    assert_eq!(conflicting.kind, ControlKind::String);
+    assert_eq!(conflicting.format, None);
 
     assert!(errors.borrow().is_empty());
 }

@@ -116,9 +116,12 @@ renderer everything it needs, pre-localized:
   rules.
 - `control()` is the control facets: `kind` (`String`, `Number`, `Integer`,
   `Boolean`, `Choice`, `Constant`), the control binding as `name`, `required`,
-  `disabled`, `read_only`, `write_only`, `touched`, `dirty`, `nullable`, and the
+  `disabled`, `read_only`, `write_only`, `touched`, `dirty`, `nullable`, the
   localized write-only replacement label and placeholder, write-only status
-  text, and boolean value labels the built-in uses.
+  text, and boolean value labels the built-in uses, and `format`: the data
+  schema's `format` annotation as authored, `None` when there is none or the
+  applicable subschemas name different ones (see
+  [String formats and browser widgets](#string-formats-and-browser-widgets)).
 - `node()` is a target-scoped reactive reader, `actions()` the approved scalar
   actions for that node, and `extensions()` the prepared extension decorators.
 - `report(result)` routes a failed `actions()` call to `SchemaForm::on_error`
@@ -361,6 +364,44 @@ special case: the highest matching priority wins, a tie is
 `ControlRegistry::empty()` reports `BindFinding::NoMatchingRenderer` for any
 control no registration accepts. A host can also register
 `BuiltinControlRenderer` under an exact widget symbol or at another priority.
+
+### String formats and browser widgets
+
+A string control whose data schema carries a `format` the browser has a widget
+for renders that widget. The built-in string control maps the `format`
+annotation to the `<input>`'s `type`:
+
+| `format` | `type` |
+| --- | --- |
+| `email`, `idn-email` | `email` |
+| `uri`, `uri-reference`, `iri`, `iri-reference` | `url` |
+| `date` | `date` |
+| `date-time` | `datetime-local` |
+| `time` | `time` |
+| anything else, or none | `text` |
+
+A write-only string stays `type="password"` whatever its `format`. Number and
+integer controls are unaffected. The mapping is presentation only: the core's
+data stays a string, and `format` remains the annotation it is under Draft
+2020-12's default vocabulary — the core asserts nothing about it and raises no
+finding, however the value was entered (see
+[the core README](../schemaform/README.md#format-is-an-annotation)). The form
+element keeps `novalidate`, so the browser's own constraint validation for
+`email` and `url` colours the widget but never blocks submission.
+
+`datetime-local` yields `YYYY-MM-DDTHH:MM[:SS]` with no zone offset, which is
+not an RFC 3339 `date-time`. The widget is still the right one: it is what
+browsers offer for the concept, and the core stores what the browser writes,
+verbatim. A host whose server or downstream validator asserts `format` should
+know that this pairing produces a finding on every value the widget writes;
+normalising the value to RFC 3339 is the host's job. The alternative — no picker
+for `date-time` — was rejected.
+
+`format` reaches custom renderers through the control facets, so a renderer
+package makes the same choice from `control().format` without seeing the raw
+data schema. When an `allOf` contributes two different formats, the facet is
+`None`: no single widget serves both, so the string is presented as if none were
+declared.
 
 ### Structure renderers
 

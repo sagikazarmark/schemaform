@@ -150,7 +150,14 @@ pub(crate) fn gallery_app(props: TestAppProps) -> Element {
                 "quantity": { "type": "integer", "title": "Quantity" },
                 "price": { "type": "number", "title": "Price" },
                 "nickname": { "type": ["string", "null"], "title": "Nickname" },
-                "secret": { "type": "string", "title": "Secret", "writeOnly": true },
+                "email": { "type": "string", "title": "Email", "format": "email" },
+                "born_on": { "type": "string", "title": "Born on", "format": "date" },
+                "secret": {
+                    "type": "string",
+                    "title": "Secret",
+                    "format": "email",
+                    "writeOnly": true
+                },
                 "reference": {
                     "type": "string",
                     "title": "Reference",
@@ -194,6 +201,8 @@ pub(crate) fn gallery_app(props: TestAppProps) -> Element {
             "quantity": 1,
             "price": 9.5,
             "nickname": null,
+            "email": "ada@example.test",
+            "born_on": "1815-12-10",
             "secret": "hunter2",
             "reference": "ref_42",
             "active": true,

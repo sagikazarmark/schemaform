@@ -10,9 +10,10 @@ use crate::components::{StatusLine, schemaform_daisyui};
 /// write-only controls as well as validation and submission. The two choices
 /// show both spellings side by side: a plain `enum` whose options read as their
 /// values, and a constant choice (`oneOf` of titled constants) whose options
-/// read as their titles in authored order. The controls are the built-in
-/// renderer's; only the shell and the finding summary come from the demo's
-/// daisyUI component.
+/// read as their titles in authored order. Five strings carry a `format` the
+/// browser has a widget for, one per widget: `email`, `uri`, `date`,
+/// `date-time`, and `time`. The controls are the built-in renderer's; only the
+/// shell and the finding summary come from the demo's daisyUI component.
 #[component]
 pub fn GeneratedControlsExample() -> Element {
     let definition = use_hook(definition);
@@ -25,6 +26,11 @@ pub fn GeneratedControlsExample() -> Element {
             "plan": "team",
             "priority": "normal",
             "nickname": null,
+            "email": "ada@example.test",
+            "homepage": "https://example.test/ada",
+            "born_on": "1815-12-10",
+            "last_seen": "2024-05-06T09:30",
+            "daily_digest_at": "08:00",
             "account_type": "standard",
             "customer_id": "cus_1843",
             "access_token": "not-rendered"
@@ -126,6 +132,36 @@ fn definition() -> FormDefinition {
             "nickname": {
                 "type": ["string", "null"],
                 "title": "Nickname"
+            },
+            "email": {
+                "type": "string",
+                "title": "Email",
+                "description": "Rendered as the browser's email widget.",
+                "format": "email"
+            },
+            "homepage": {
+                "type": "string",
+                "title": "Homepage",
+                "description": "Rendered as the browser's URL widget.",
+                "format": "uri"
+            },
+            "born_on": {
+                "type": "string",
+                "title": "Born on",
+                "description": "Rendered as the browser's date picker.",
+                "format": "date"
+            },
+            "last_seen": {
+                "type": "string",
+                "title": "Last seen",
+                "description": "Rendered as the browser's local date-time picker; the value carries no zone offset.",
+                "format": "date-time"
+            },
+            "daily_digest_at": {
+                "type": "string",
+                "title": "Daily digest at",
+                "description": "Rendered as the browser's time picker.",
+                "format": "time"
             },
             "account_type": {
                 "title": "Account type",

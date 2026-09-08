@@ -1318,7 +1318,7 @@
     {
       "id": "format.default-annotation",
       "construct": "format",
-      "context": "Default Draft 2020-12 annotation; built-ins remain plain string controls",
+      "context": "Default Draft 2020-12 annotation; the Dioxus built-in string control picks the browser widget for email, uri, date, date-time and time formats without asserting them",
       "target": "annotation",
       "current": "implemented"
     },

@@ -947,6 +947,39 @@ pub struct ControlFacets {
     ///
     /// Present for every boolean control.
     pub boolean_labels: Option<BooleanLabels>,
+    /// The data schema's `format` annotation, as authored.
+    ///
+    /// Present when the applicable subschemas agree on exactly one `format`; absent when none
+    /// declares one, and when they name different formats, since no single widget could
+    /// serve both. The core keeps `format` an annotation: it never validates or produces
+    /// findings, so a renderer package that maps it to a browser widget changes presentation
+    /// only. The built-in string control maps it as the crate README documents.
+    pub format: Option<String>,
+}
+
+impl ControlFacets {
+    /// The `type` the built-in text control renders.
+    ///
+    /// A write-only value is a `password` widget whatever its `format`. A string whose
+    /// `format` names a concept the browser has a widget for gets that widget, per the
+    /// `format`-to-`type` table in the crate README; every other format, no format, and every
+    /// non-string kind render `text`.
+    pub(crate) fn input_type(&self) -> &'static str {
+        if self.write_only {
+            return "password";
+        }
+        if self.kind != ControlKind::String {
+            return "text";
+        }
+        match self.format.as_deref() {
+            Some("email" | "idn-email") => "email",
+            Some("uri" | "uri-reference" | "iri" | "iri-reference") => "url",
+            Some("date") => "date",
+            Some("date-time") => "datetime-local",
+            Some("time") => "time",
+            _ => "text",
+        }
+    }
 }
 
 /// Localized label and placeholder for a write-only replacement widget.

@@ -74,7 +74,7 @@ registry without changing shape:
 
 | Control kind | Widget |
 | --- | --- |
-| string, number, integer | `Input` (`type="password"` when write-only) |
+| string, number, integer | `Input` (`type="password"` when write-only; otherwise the browser widget for a string `format` it has one for — `email`, `url`, `date`, `datetime-local`, `time` — mapped from the `format` facet [as the adapter's built-in does](../../../../crates/schemaform-dioxus/README.md#string-formats-and-browser-widgets); else `type="text"`) |
 | boolean, not nullable | native `input type="checkbox"` with daisyUI's `checkbox` class, driven by `use_boolean_edit` |
 | boolean, nullable | registry `Checkbox`; JSON null is the indeterminate state |
 | boolean, write-only | `NativeSelect<bool>` over the localized false/true labels, resting on the replacement placeholder |

@@ -356,11 +356,34 @@ fn the_select_widget_symbol_selects_the_daisyui_compound_select() {
 fn a_write_only_control_uses_the_password_type_and_the_replacement_label() {
     let rendered = mount();
 
+    // The secret also declares `format: email`; write-only wins.
     let secret = rendered.control("/secret");
     assert_eq!(secret.attribute("type"), Some("password"));
     assert_eq!(secret.attribute("value"), Some(""));
     assert_eq!(secret.attribute("placeholder"), Some("Choose replacement"));
     assert!(rendered.html().contains("Replace Secret"));
+}
+
+/// The `format` facet reaches this renderer package as the annotation; it maps the formats the
+/// browser has a widget for the way the built-in does, without seeing the data schema.
+#[test]
+fn a_string_with_a_format_the_browser_has_a_widget_for_renders_that_widget() {
+    let rendered = mount();
+
+    for (name, expected_type, value) in [
+        ("/email", "email", "ada@example.test"),
+        ("/born_on", "date", "1815-12-10"),
+    ] {
+        let control = rendered.control(name);
+        assert_eq!(control.element, "input", "{name}");
+        assert_eq!(control.attribute("type"), Some(expected_type), "{name}");
+        assert_eq!(control.attribute("inputmode"), Some("text"), "{name}");
+        assert_eq!(control.attribute("value"), Some(value), "{name}");
+        assert!(
+            control.classes().contains(&"input"),
+            "{name} should still be a daisyUI input: {control:?}"
+        );
+    }
 }
 
 #[test]

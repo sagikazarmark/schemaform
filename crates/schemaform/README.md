@@ -182,6 +182,19 @@ findings, and library-owned state growth are structurally bounded.
 validation, submission snapshots, or custom adapters. Applications remain
 responsible for secrets, persistence, transport, and authorization.
 
+### `format` is an annotation
+
+`format` is collected as an annotation and never asserted, as Draft 2020-12's
+default vocabulary has it: a string that does not look like its `format` is
+valid, and no finding is raised for it. The annotation reaches adapters through
+`DataSchemaAnnotations::formats`. The Dioxus adapter's built-in string control
+uses it to pick the browser widget — `email`, `url`, `date`, `datetime-local`,
+`time` — and its README records the
+[mapping and the `datetime-local` decision](../schemaform-dioxus/README.md#string-formats-and-browser-widgets).
+That is presentation only: the data stays a string, and a host that asserts
+`format` downstream should read that section before pairing the picker with an
+RFC 3339 `date-time`.
+
 ## Feature Flags
 
 The crate has no public Cargo features. Product behavior is unconditional;

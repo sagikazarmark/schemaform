@@ -1578,6 +1578,79 @@ fn annotation_test_app(props: TestAppProps) -> Element {
     }
 }
 
+/// One string control per row of the `format` to `type` table in the adapter README, plus a
+/// string with a format the browser has no widget for, a string with none, and a write-only
+/// string whose `format` must not override `password`.
+fn format_test_app(props: TestAppProps) -> Element {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "email": { "type": "string", "title": "Email", "format": "email" },
+            "idn_email": { "type": "string", "title": "IDN email", "format": "idn-email" },
+            "uri": { "type": "string", "title": "URI", "format": "uri" },
+            "uri_reference": {
+                "type": "string",
+                "title": "URI reference",
+                "format": "uri-reference"
+            },
+            "iri": { "type": "string", "title": "IRI", "format": "iri" },
+            "iri_reference": {
+                "type": "string",
+                "title": "IRI reference",
+                "format": "iri-reference"
+            },
+            "date": { "type": "string", "title": "Date", "format": "date" },
+            "date_time": { "type": "string", "title": "Date and time", "format": "date-time" },
+            "time": { "type": "string", "title": "Time", "format": "time" },
+            "uuid": { "type": "string", "title": "UUID", "format": "uuid" },
+            "plain": { "type": "string", "title": "Plain" },
+            "secret": {
+                "type": "string",
+                "title": "Secret",
+                "format": "email",
+                "writeOnly": true
+            }
+        }
+    }))
+    .expect("the format data schema should compile");
+    let form = use_form(
+        definition,
+        json!({
+            "email": "ada@example.test",
+            "idn_email": "ada@example.test",
+            "uri": "https://example.test/ada",
+            "uri_reference": "/ada",
+            "iri": "https://example.test/ada",
+            "iri_reference": "/ada",
+            "date": "1815-12-10",
+            "date_time": "1815-12-10T09:30",
+            "time": "09:30",
+            "uuid": "not-a-uuid",
+            "plain": "Ada",
+            "secret": "hunter2"
+        }),
+    )
+    .expect("the format browser form should be created");
+    let bound = RenderConfiguration::default()
+        .bind(&form)
+        .expect("the format controls should bind to built-in renderers");
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+    let errors = props.errors.clone();
+
+    rsx! {
+        SchemaForm {
+            form: bound,
+            on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
+            on_error: move |error| errors.borrow_mut().push(error),
+        }
+    }
+}
+
 fn annotation_authority_test_app(props: TestAppProps) -> Element {
     let definition = FormDefinition::compile(json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -4001,7 +4074,15 @@ async fn every_in_profile_business_schema_executes_through_the_default_browser_a
         match execution_control.kind.as_str() {
             "string" | "nullable-string" | "sensitive-string" => {
                 let input = input_with_binding(&fixture_root, &execution_control.binding);
-                dispatch_input(&input, "qualification");
+                // A `format` the browser has a widget for renders that widget, and a date or
+                // time widget sanitises text it cannot parse to the empty string.
+                let typed = match input.type_().as_str() {
+                    "date" => "2024-05-06",
+                    "datetime-local" => "2024-05-06T07:08",
+                    "time" => "07:08",
+                    _ => "qualification",
+                };
+                dispatch_input(&input, typed);
             }
             "boolean" => {
                 let input = input_with_binding(&fixture_root, &execution_control.binding);
@@ -5513,7 +5594,8 @@ async fn scalar_array_add_focuses_the_first_focusable_row_action() {
 }
 
 #[wasm_bindgen_test]
-async fn generated_annotations_supply_accessible_text_without_browser_validation_or_mutation() {
+async fn generated_annotations_supply_accessible_text_without_blocking_browser_validation_or_mutation()
+ {
     let MountedTestApp {
         root,
         form_handle,
@@ -5531,9 +5613,13 @@ async fn generated_annotations_supply_accessible_text_without_browser_validation
             .expect("form should be readable"),
         expected
     );
-    assert_eq!(input.type_(), "text");
+    // The `format` annotation chooses the browser widget and nothing else: the browser's own
+    // constraint validation judges the value, but no `pattern` is added, the value is not
+    // mutated, and the `novalidate` form below submits it regardless.
+    assert_eq!(input.type_(), "email");
     assert!(input.get_attribute("pattern").is_none());
-    assert!(input.check_validity());
+    assert_eq!(input.value(), "not an email or base64");
+    assert!(!input.check_validity());
     let input_id = input.id();
     let label = root
         .query_selector(&format!("label[for='{input_id}']"))
@@ -5595,6 +5681,124 @@ async fn generated_annotations_supply_accessible_text_without_browser_validation
     dispatch_submit(&form);
     let snapshot = poll_dom(|| submitted.borrow().clone()).await;
     assert_eq!(snapshot.form_data(), &seeded);
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+async fn generated_string_controls_render_the_browser_widget_for_their_format() {
+    let MountedTestApp { root, .. } = mount_test_app(format_test_app).await;
+
+    // One control per row of the mapping table, plus the two fall-through rows.
+    for (binding, expected_type) in [
+        ("/email", "email"),
+        ("/idn_email", "email"),
+        ("/uri", "url"),
+        ("/uri_reference", "url"),
+        ("/iri", "url"),
+        ("/iri_reference", "url"),
+        ("/date", "date"),
+        ("/date_time", "datetime-local"),
+        ("/time", "time"),
+        ("/uuid", "text"),
+        ("/plain", "text"),
+    ] {
+        let input = input_with_binding(&root, binding);
+        assert_eq!(input.type_(), expected_type, "{binding}");
+        assert_eq!(
+            input.get_attribute("inputmode").as_deref(),
+            Some("text"),
+            "{binding}"
+        );
+    }
+    // The widgets accepted the canonical form data: a date or time input that rejected its
+    // value would have sanitised it to the empty string.
+    assert_eq!(input_with_binding(&root, "/date").value(), "1815-12-10");
+    assert_eq!(
+        input_with_binding(&root, "/date_time").value(),
+        "1815-12-10T09:30"
+    );
+    assert_eq!(input_with_binding(&root, "/time").value(), "09:30");
+
+    // A write-only string is a password widget whatever its `format`.
+    let secret = input_with_binding(&root, "/secret");
+    assert_eq!(secret.type_(), "password");
+    assert_eq!(secret.value(), "");
+    assert!(secret.has_attribute("data-write-only-replacement"));
+
+    accessibility_checkpoint(
+        "format-widgets",
+        "generated_string_controls_render_the_browser_widget_for_their_format",
+        &root,
+    )
+    .await;
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+async fn format_widgets_round_trip_their_values_to_canonical_form_data_as_strings() {
+    let MountedTestApp {
+        root,
+        form_handle,
+        submitted,
+    } = mount_test_app(format_test_app).await;
+    let mut expected = form_handle
+        .reader()
+        .form_data()
+        .expect("form should be readable");
+
+    // Typing into the email and url widgets, and picking a date, reach canonical form data as
+    // the strings the widget holds. The `datetime-local` widget yields no zone offset; the
+    // core stores what the browser wrote, verbatim.
+    for (binding, typed) in [
+        ("/email", "grace@example.test"),
+        ("/uri", "https://example.test/grace"),
+        ("/date", "1906-12-09"),
+        ("/date_time", "1906-12-09T07:45"),
+    ] {
+        let input = input_with_binding(&root, binding);
+        dispatch_input(&input, typed);
+        expected[&binding[1..]] = json!(typed);
+        let wanted = expected.clone();
+        poll_dom(|| {
+            (form_handle
+                .reader()
+                .form_data()
+                .expect("form should be readable")
+                == wanted)
+                .then_some(())
+        })
+        .await;
+        assert_eq!(input.value(), typed, "{binding}");
+    }
+
+    // A value the browser's own constraint validation rejects is still the form's business:
+    // the form is `novalidate`, `format` is not asserted, and submission proceeds.
+    let email = input_with_binding(&root, "/email");
+    dispatch_input(&email, "not an email");
+    expected["email"] = json!("not an email");
+    let wanted = expected.clone();
+    poll_dom(|| {
+        (form_handle
+            .reader()
+            .form_data()
+            .expect("form should be readable")
+            == wanted)
+            .then_some(())
+    })
+    .await;
+    assert!(!email.check_validity());
+    let form: HtmlFormElement = root
+        .query_selector("form")
+        .expect("the form selector should be valid")
+        .expect("the schema form should render a form element")
+        .dyn_into()
+        .expect("the schema form should use semantic form HTML");
+    assert!(form.no_validate());
+    dispatch_submit(&form);
+    let snapshot = poll_dom(|| submitted.borrow().clone()).await;
+    assert_eq!(snapshot.form_data(), &expected);
 
     root.remove();
 }
