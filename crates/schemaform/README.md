@@ -19,32 +19,10 @@ and nullable arrays are capability-blocking. Optional container properties may
 be absent but do not accept null. Unsupported editing semantics are reported
 explicitly rather than guessed or silently omitted.
 
-Finite scalar choices come from `enum`, `const`, or a constant choice: a `oneOf`
-or `anyOf` whose every branch is one scalar `const` plus annotations (`title`,
-`description`, `$comment`, `deprecated`, `examples`, and keywords outside the
-Draft 2020-12 vocabularies), optionally with a `type` the constant satisfies. A
-constant choice compiles to the same choice control as `enum` with each option
-labeled by its branch `title`, carrying its branch `description`, in authored
-branch order; `enum` options stay sorted by value as before. Every other `oneOf`
-or `anyOf` — a branch with any further assertion, applicator or annotation such
-as `default`, a boolean-schema branch, or a `oneOf` with duplicate constants —
-remains capability-blocking, and the finding names the reason.
-
-An array that asserts `uniqueItems: true` over a finite item choice (`enum`, or
-a constant choice) is a multiple choice: distinct members drawn from a finite
-set. It still compiles to a homogeneous array — same node, item identities,
-bindings, findings and collection operations — and additionally reports
-`DefinitionNodeView::is_multiple_choice` with the item options as the array
-node's `choice_options`, so a presentation can offer one toggle per option.
-`UserActions::toggle_choice` adds a member in option order (checking B then A
-yields `[A, B]`) or removes every item carrying it, without being gated by
-`minItems` or `maxItems`, which remain findings. A member the data holds that is
-no option is incompatible data offered for replacement, not dropped or invented
-as an option. Because a multiple choice presents no item of its own, the array
-node also attaches findings located at its items and can be blurred like a
-scalar control, so its findings follow its own interaction state. Without
-`uniqueItems`, or without a finite item choice, the array is a list of rows as
-before.
+Finite scalar choices come from `enum`, `const`, or a constant choice — a
+`oneOf` or `anyOf` of annotated constants — and a `uniqueItems` array over a
+finite choice is a multiple choice; [Finite Choices](#finite-choices) records
+both.
 
 Use [`schemaform-dioxus`](../schemaform-dioxus/README.md) to render a compiled
 definition in a Dioxus browser application.
@@ -58,9 +36,51 @@ schemaform = "0.1"
 
 ## Quick Start
 
+The examples in this README are files under [`examples/`](examples/), quoted
+verbatim and run by the crate's tests, so what they assert holds against the
+current API. `cargo run -p schemaform --example <name>` runs one.
+
+`examples/quickstart.rs` compiles a trusted data schema, creates a form, edits
+a control, and prepares a gated submission
+(`cargo run -p schemaform --example quickstart`):
+
 ```rust
 use schemaform::{FormDefinition, SubmissionOutcome, Transition};
 use serde_json::json;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+            "name": { "type": "string", "title": "Name", "minLength": 1 }
+        }
+    }))?;
+
+    let mut form = definition.create_form(json!({ "name": "Ada" }))?;
+    let name = form
+        .node(form.view().root())
+        .and_then(|root| root.children().next())
+        .expect("the generated name control should exist");
+
+    let transition = form.user().input_text(name, "Grace")?;
+    process_transition(&transition);
+
+    let (transition, outcome) = form.prepare_submission().into_parts();
+    process_transition(&transition);
+    match outcome {
+        SubmissionOutcome::Ready(snapshot) => {
+            assert_eq!(snapshot.form_data(), &json!({ "name": "Grace" }));
+            println!("{}", snapshot.form_data());
+        }
+        SubmissionOutcome::Blocked(blockers) => {
+            eprintln!("blocked by {} finding(s)", blockers.iter().count());
+        }
+    }
+    Ok(())
+}
 
 fn process_transition(transition: &Transition) {
     for identity in transition.changed() {
@@ -70,37 +90,6 @@ fn process_transition(transition: &Transition) {
         eprintln!("form node removed: {identity:?}");
     }
 }
-
-let definition = FormDefinition::compile(json!({
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
-    "additionalProperties": false,
-    "required": ["name"],
-    "properties": {
-        "name": { "type": "string", "title": "Name", "minLength": 1 }
-    }
-}))?;
-
-let mut form = definition.create_form(json!({ "name": "Ada" }))?;
-let name = form
-    .node(form.view().root())
-    .and_then(|root| root.children().next())
-    .expect("the generated name control should exist");
-
-let transition = form.user().input_text(name, "Grace")?;
-process_transition(&transition);
-
-let (transition, outcome) = form.prepare_submission().into_parts();
-process_transition(&transition);
-match outcome {
-    SubmissionOutcome::Ready(snapshot) => {
-        assert_eq!(snapshot.form_data(), &json!({ "name": "Grace" }));
-    }
-    SubmissionOutcome::Blocked(blockers) => {
-        eprintln!("blocked by {} finding(s)", blockers.iter().count());
-    }
-}
-# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 For inputs received as bytes, use `json::parse_data_schema`,
@@ -163,25 +152,69 @@ findings-laden data by accident. The engine never commits unparseable numeric
 text as a string; what to send for a member that could not be parsed is the
 host's decision about its own wire format.
 
+`examples/advisory_submission.rs` walks the second column: an out-of-range
+value, then an unparseable edit buffer, each handed over with its findings
+(`cargo run -p schemaform --example advisory_submission`):
+
 ```rust
-use schemaform::FormDefinition;
+use schemaform::{FormDefinition, form::SubmissionBlocker};
 use serde_json::json;
 
-let definition = FormDefinition::compile(json!({
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {
-        "quantity": { "type": "integer", "minimum": 1 }
-    }
-}))?;
-let mut form = definition.create_form(json!({ "quantity": 0 }))?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "quantity": { "type": "integer", "minimum": 1 }
+        }
+    }))?;
+    let mut form = definition.create_form(json!({ "quantity": 0 }))?;
+    let quantity = form
+        .node(form.view().root())
+        .and_then(|root| root.children().next())
+        .expect("the generated quantity control should exist");
 
-let (transition, advisory) = form.prepare_advisory_submission().into_parts();
-assert!(!transition.is_empty());
-assert_eq!(advisory.form_data(), &json!({ "quantity": 0 }));
-assert_eq!(advisory.findings().count(), 1);
-# Ok::<(), Box<dyn std::error::Error>>(())
+    // Out of range: the gated path would refuse. The advisory path hands over
+    // the data as it stands, with the `minimum` finding beside it.
+    let (transition, advisory) = form.prepare_advisory_submission().into_parts();
+    assert!(
+        !transition.is_empty(),
+        "preparation marks submission attempted"
+    );
+    assert_eq!(advisory.form_data(), &json!({ "quantity": 0 }));
+    assert_eq!(
+        advisory.findings().map(describe).collect::<Vec<_>>(),
+        ["minimum at /quantity"]
+    );
+
+    // Unparseable: the edit buffer never becomes form data. The member keeps
+    // its prior canonical value, and a parse finding joins the validation one.
+    form.user().input_text(quantity, "-")?;
+    let (_, advisory) = form.prepare_advisory_submission().into_parts();
+    assert_eq!(advisory.form_data(), &json!({ "quantity": 0 }));
+    assert_eq!(
+        advisory.findings().map(describe).collect::<Vec<_>>(),
+        ["parse InvalidInteger", "minimum at /quantity"]
+    );
+
+    println!("{}", advisory.form_data());
+    Ok(())
+}
+
+fn describe(blocker: &SubmissionBlocker) -> String {
+    match blocker {
+        SubmissionBlocker::Parse { kind, .. } => format!("parse {kind:?}"),
+        SubmissionBlocker::Validation(finding) => {
+            format!(
+                "{} at {}",
+                finding.code(),
+                finding.instance_location().as_str()
+            )
+        }
+        other => format!("{other:?}"),
+    }
+}
 ```
 
 ## Defaults
@@ -197,34 +230,54 @@ materialized by an explicit presence operation, never because it had a default.
 
 The other policy — most form libraries seed defaults, and several protocols say
 a client SHOULD — is one call away rather than a walk over the definition tree
-by hand:
+by hand. `examples/seeded_defaults.rs` creates the same form under both
+policies (`cargo run -p schemaform --example seeded_defaults`):
 
 ```rust
 use schemaform::FormDefinition;
 use serde_json::json;
 
-let definition = FormDefinition::compile(json!({
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {
-        "name": { "type": "string", "default": "Ada" },
-        "quantity": { "type": "integer", "minimum": 1, "default": 1 },
-        "shipping": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": { "country": { "type": "string", "default": "GB" } }
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "name": { "type": "string", "default": "Ada" },
+            "quantity": { "type": "integer", "minimum": 1, "default": 1 },
+            "shipping": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "country": { "type": "string", "default": "GB" }
+                }
+            }
         }
+    }))?;
+
+    // `create_form` leaves an absent member absent, whatever its `default` says.
+    let form = definition.create_form(json!({ "quantity": 4 }))?;
+    assert_eq!(form.form_data(), &json!({ "quantity": 4 }));
+
+    // Seeding fills the absent scalars. The host's `quantity` wins, and the
+    // absent `shipping` object is not invented although `country` has a default.
+    let form = definition.create_form_with_defaults(json!({ "quantity": 4 }))?;
+    assert_eq!(form.form_data(), &json!({ "name": "Ada", "quantity": 4 }));
+
+    // The seeded data is the baseline: nothing is dirty until the user edits.
+    let root = form.node(form.view().root()).expect("the root exists");
+    for child in root.children() {
+        let control = form.node(child).expect("a listed node exists");
+        assert!(!control.is_dirty(), "a seeded control is not dirty");
     }
-}))?;
 
-let form = definition.create_form_with_defaults(json!({ "quantity": 4 }))?;
-assert_eq!(form.form_data(), &json!({ "name": "Ada", "quantity": 4 }));
+    // The same switch on the builder, for combining with limits or visibility.
+    let form = definition.form(json!({})).seed_defaults().build()?;
+    assert_eq!(form.form_data(), &json!({ "name": "Ada", "quantity": 1 }));
 
-// The same switch on the builder, for combining with limits or visibility:
-let form = definition.form(json!({})).seed_defaults().build()?;
-assert_eq!(form.form_data(), &json!({ "name": "Ada", "quantity": 1 }));
-# Ok::<(), Box<dyn std::error::Error>>(())
+    println!("{}", form.form_data());
+    Ok(())
+}
 ```
 
 `create_form_with_defaults` (and `FormBuilder::seed_defaults`) seeds at
@@ -246,6 +299,130 @@ where an equivalently seeded `create_form` would. The rules are:
   no single authored default and is left absent.
 - Seeding follows the data schema, not the UI schema: a control an authored
   layout omits is still seeded, because `default` describes the data.
+
+## Finite Choices
+
+Finite scalar choices come from `enum`, `const`, or a constant choice: a `oneOf`
+or `anyOf` whose every branch is one scalar `const` plus annotations (`title`,
+`description`, `$comment`, `deprecated`, `examples`, and keywords outside the
+Draft 2020-12 vocabularies), optionally with a `type` the constant satisfies. A
+constant choice compiles to the same choice control as `enum` with each option
+labeled by its branch `title`, carrying its branch `description`, in authored
+branch order; `enum` options stay sorted by value as before. Every other `oneOf`
+or `anyOf` — a branch with any further assertion, applicator or annotation such
+as `default`, a boolean-schema branch, or a `oneOf` with duplicate constants —
+remains capability-blocking, and the finding names the reason.
+
+An array that asserts `uniqueItems: true` over a finite item choice (`enum`, or
+a constant choice) is a multiple choice: distinct members drawn from a finite
+set. It still compiles to a homogeneous array — same node, item identities,
+bindings, findings and collection operations — and additionally reports
+`DefinitionNodeView::is_multiple_choice` with the item options as the array
+node's `choice_options`, so a presentation can offer one toggle per option.
+`UserActions::toggle_choice` adds a member in option order (checking B then A
+yields `[A, B]`) or removes every item carrying it, without being gated by
+`minItems` or `maxItems`, which remain findings. A member the data holds that is
+no option is incompatible data offered for replacement, not dropped or invented
+as an option. Because a multiple choice presents no item of its own, the array
+node also attaches findings located at its items and can be blurred like a
+scalar control, so its findings follow its own interaction state. Without
+`uniqueItems`, or without a finite item choice, the array is a list of rows as
+before.
+
+`examples/finite_choices.rs` reads both kinds of option back and edits each by
+value (`cargo run -p schemaform --example finite_choices`):
+
+```rust
+use schemaform::{Form, FormDefinition, InstanceIdentity};
+use serde_json::json;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "priority": {
+                "title": "Priority",
+                "oneOf": [
+                    { "const": "low", "title": "Low", "description": "When there is time." },
+                    { "const": "high", "title": "High" }
+                ]
+            },
+            "channels": {
+                "title": "Channels",
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                    "oneOf": [
+                        { "const": "email", "title": "Email" },
+                        { "const": "sms", "title": "SMS" },
+                        { "const": "push", "title": "Push" }
+                    ]
+                }
+            }
+        }
+    }))?;
+    let mut form = definition.create_form(json!({
+        "priority": "low",
+        "channels": []
+    }))?;
+
+    // A constant choice is the scalar choice control `enum` produces: options
+    // in authored order, labeled by their branch `title`, selected by value.
+    let priority = control_at(&form, "/priority");
+    let node = form.node(priority).expect("the priority control exists");
+    assert!(node.definition().is_choice_selectable());
+    assert_eq!(
+        node.definition()
+            .choice_options()
+            .map(|option| (option.label(), option.description()))
+            .collect::<Vec<_>>(),
+        [("Low", Some("When there is time.")), ("High", None)]
+    );
+    assert_eq!(node.display_text().as_deref(), Some("Low"));
+    form.user().set_value(priority, json!("high"))?;
+    assert_eq!(form.form_data()["priority"], json!("high"));
+
+    // A multiple choice stays an array node — items, identities, collection
+    // operations — and additionally offers a toggle per option. Members keep
+    // option order, not check order; toggling a held value removes it.
+    let channels = control_at(&form, "/channels");
+    let node = form.node(channels).expect("the channels array exists");
+    assert!(node.definition().is_multiple_choice());
+    assert_eq!(
+        node.definition()
+            .choice_options()
+            .map(|option| option.label())
+            .collect::<Vec<_>>(),
+        ["Email", "SMS", "Push"]
+    );
+    form.user().toggle_choice(channels, json!("push"))?;
+    form.user().toggle_choice(channels, json!("email"))?;
+    assert_eq!(form.form_data()["channels"], json!(["email", "push"]));
+    form.user().toggle_choice(channels, json!("push"))?;
+    assert_eq!(form.form_data()["channels"], json!(["email"]));
+
+    println!("{}", form.form_data());
+    Ok(())
+}
+
+/// The form-tree node bound to `pointer`.
+fn control_at(form: &Form, pointer: &str) -> InstanceIdentity {
+    let mut pending = vec![form.view().root()];
+    while let Some(identity) = pending.pop() {
+        let node = form.node(identity).expect("a listed node exists");
+        if node
+            .binding()
+            .is_some_and(|binding| binding.pointer().as_str() == pointer)
+        {
+            return identity;
+        }
+        pending.extend(node.children());
+    }
+    panic!("no control is bound to {pointer}")
+}
+```
 
 ## Trust Boundary
 

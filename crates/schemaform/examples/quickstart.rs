@@ -1,7 +1,7 @@
 use schemaform::{FormDefinition, SubmissionOutcome, Transition};
 use serde_json::json;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let definition = FormDefinition::compile(json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -10,39 +10,29 @@ fn main() {
         "properties": {
             "name": { "type": "string", "title": "Name", "minLength": 1 }
         }
-    }))
-    .expect("the trusted data schema should compile");
-    let mut form = definition
-        .create_form(json!({ "name": "Ada" }))
-        .expect("the form should be created");
+    }))?;
+
+    let mut form = definition.create_form(json!({ "name": "Ada" }))?;
     let name = form
         .node(form.view().root())
         .and_then(|root| root.children().next())
         .expect("the generated name control should exist");
 
-    assert!(
-        form.node(name)
-            .expect("the name control should be current")
-            .allowed_operations()
-            .can_input_text()
-    );
-    let transition = form
-        .user()
-        .input_text(name, "Grace")
-        .expect("the name should accept text input");
+    let transition = form.user().input_text(name, "Grace")?;
     process_transition(&transition);
 
     let (transition, outcome) = form.prepare_submission().into_parts();
     process_transition(&transition);
     match outcome {
-        SubmissionOutcome::Ready(snapshot) => println!("{}", snapshot.form_data()),
+        SubmissionOutcome::Ready(snapshot) => {
+            assert_eq!(snapshot.form_data(), &json!({ "name": "Grace" }));
+            println!("{}", snapshot.form_data());
+        }
         SubmissionOutcome::Blocked(blockers) => {
-            eprintln!(
-                "submission blocked by {} finding(s)",
-                blockers.iter().count()
-            )
+            eprintln!("blocked by {} finding(s)", blockers.iter().count());
         }
     }
+    Ok(())
 }
 
 fn process_transition(transition: &Transition) {
