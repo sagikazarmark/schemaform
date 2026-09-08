@@ -5809,8 +5809,11 @@ pub mod form {
         }
 
         /// Whether a multiple-choice array accepts [`UserActions::toggle_choice`]
-        /// right now: the node is a present, writable multiple choice. Array
-        /// length bounds do not gate toggling.
+        /// right now: the node is a writable multiple choice whose array is
+        /// present, or absent below a present object. A multiple choice is a
+        /// leaf control, so the first toggle creates its array as typing into
+        /// an absent scalar creates the value; only containers wait for
+        /// [`Self::can_materialize`]. Array length bounds do not gate toggling.
         pub fn can_toggle_choice(self) -> bool {
             self.0 & Self::TOGGLE_CHOICE.0 != 0
         }
@@ -6652,9 +6655,12 @@ pub mod form {
         /// item whose option comes later in option order, else appended, so
         /// checked members land in option order rather than the order of
         /// checking while existing items keep their places; the new item's
-        /// identities appear in the changed set. `minItems` and `maxItems` do
-        /// not gate the toggle: their findings remain and the reader resolves
-        /// them.
+        /// identities appear in the changed set. An absent array is created
+        /// holding the one member, in the same data transition, as typing
+        /// into an absent scalar creates its value; unchecking the last member
+        /// leaves `[]`, and [`Self::remove_value`] is how absence is reached.
+        /// `minItems` and `maxItems` do not gate the toggle: their findings
+        /// remain and the reader resolves them.
         pub fn toggle_choice(
             &mut self,
             array: InstanceIdentity,

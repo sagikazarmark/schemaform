@@ -3545,8 +3545,10 @@ fn BuiltinConstantControl(props: BuiltinControlProps) -> Element {
 /// checkbox inside when one is enabled (`data-focus-first-descendant`, which the focus script in
 /// [`dom`] honours). A read-only node renders as noninteractive `output` of its selected labels,
 /// as every
-/// built-in kind does. The presence affordances are the array's: add while absent, replace
-/// while a member is no option, remove while optional.
+/// built-in kind does. The checkboxes stay enabled while the array is absent — checking one
+/// creates it, as typing into an absent string does — and the presence affordances are the
+/// array's: add while absent, for a host that wants the explicit step; replace while a member
+/// is no option; remove while optional.
 #[allow(non_snake_case)]
 fn BuiltinMultipleChoiceControl(props: BuiltinControlProps) -> Element {
     let context = &props.context;

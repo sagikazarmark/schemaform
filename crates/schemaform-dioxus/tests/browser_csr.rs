@@ -7292,6 +7292,107 @@ async fn a_multiple_choice_is_a_fieldset_of_checkboxes_toggled_from_the_keyboard
 }
 
 #[wasm_bindgen_test]
+async fn checking_an_option_on_an_absent_multiple_choice_creates_the_array_without_moving_focus_or_announcing()
+ {
+    let MountedTestApp {
+        root,
+        form_handle,
+        submitted: _,
+    } = mount_test_app(multiple_choice_test_app).await;
+    let (fieldset, checkboxes) = multiple_choice_checkboxes(&root, "/channels");
+    let channels = control_with_binding(&form_handle, "/channels");
+
+    form_handle
+        .reinitialize(json!({}))
+        .expect("the form should accept data without the array");
+    poll_dom(|| {
+        form_handle
+            .reader()
+            .form_data()
+            .ok()?
+            .get("channels")
+            .is_none()
+            .then_some(())
+    })
+    .await;
+    // Absence disables nothing: every checkbox is enabled and none is checked.
+    poll_dom(|| {
+        checkboxes
+            .iter()
+            .all(|checkbox| !checkbox.disabled() && !checkbox.checked())
+            .then_some(())
+    })
+    .await;
+    assert!(
+        fieldset
+            .query_selector("button[data-materialize]")
+            .expect("the materialize selector should be valid")
+            .is_some(),
+        "the array's explicit add stays offered while absent"
+    );
+    // Focus the checkbox as Tab would and activate it as Space would; activation is the
+    // checkbox's own click behaviour, triggered directly since a synthetic key event has no
+    // default action.
+    checkboxes[1]
+        .focus()
+        .expect("a checkbox should accept focus");
+    assert_focused(&checkboxes[1]);
+    checkboxes[1].click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()?["channels"] == json!(["sms"])).then_some(())
+    })
+    .await;
+    assert!(
+        checkboxes[1].checked(),
+        "the first toggle checks the box and creates the array holding that one member"
+    );
+    assert_eq!(
+        checkboxes
+            .iter()
+            .map(HtmlInputElement::checked)
+            .collect::<Vec<_>>(),
+        [false, true, false]
+    );
+    assert_focused(&checkboxes[1]);
+    let projection = form_handle
+        .node(channels)
+        .expect("the form should be readable")
+        .expect("the array node should exist")
+        .read()
+        .expect("the array node should be readable")
+        .expect("the array node should remain present");
+    assert!(projection.dirty);
+    assert!(
+        !projection.touched,
+        "creation by toggle is an edit; only blur marks the node touched"
+    );
+    // An edit is not a collection mutation: nothing is announced. The multiple choice has no
+    // live region of its own, and the toggle must not borrow the collection renderer's.
+    let regions = root
+        .query_selector_all("[data-array-status], [role='status'], [aria-live]")
+        .expect("the live region selector should be valid");
+    let announced = (0..regions.length())
+        .filter_map(|index| regions.get(index))
+        .filter_map(|region| region.text_content())
+        .filter(|text| !text.trim().is_empty())
+        .collect::<Vec<_>>();
+    assert!(
+        announced.is_empty(),
+        "no live region carries an announcement after the toggle, got {announced:?}"
+    );
+    poll_dom(|| {
+        fieldset
+            .query_selector("button[data-materialize]")
+            .expect("the materialize selector should be valid")
+            .is_none()
+            .then_some(())
+    })
+    .await;
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
 async fn a_multiple_choice_describes_every_checkbox_by_its_findings_and_a_blocked_submission_focuses_the_first()
  {
     let MountedTestApp {

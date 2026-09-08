@@ -263,6 +263,13 @@ fn headless_app(props: HeadlessAppProps) -> Element {
                             { "const": "push", "title": "public" }
                         ]
                     }
+                },
+                "secret_channels": {
+                    "type": "array",
+                    "title": "Secret channels",
+                    "writeOnly": true,
+                    "uniqueItems": true,
+                    "items": { "enum": ["email", "sms"] }
                 }
             }
         }))
@@ -466,6 +473,33 @@ impl MountedHeadless {
             .read()
             .expect("the node should be readable")
             .expect("the node should still be part of the form tree")
+    }
+
+    /// The kinds of the presence affordances the control named `name` currently offers.
+    fn presence_kinds(&self, name: &str) -> Vec<schemaform_dioxus::AffordanceKind> {
+        self.captured(name)
+            .context
+            .presentation()
+            .presence
+            .iter()
+            .map(|affordance| affordance.kind)
+            .collect()
+    }
+
+    /// The presence affordance of `kind` the control named `name` currently offers.
+    fn presence_affordance(
+        &self,
+        name: &str,
+        kind: schemaform_dioxus::AffordanceKind,
+    ) -> schemaform_dioxus::Affordance {
+        self.captured(name)
+            .context
+            .presentation()
+            .presence
+            .iter()
+            .find(|affordance| affordance.kind == kind)
+            .unwrap_or_else(|| panic!("{name} should offer the {kind:?} affordance"))
+            .clone()
     }
 }
 
@@ -1017,12 +1051,8 @@ fn multiple_choice_with_an_incompatible_member_offers_replacement_with_the_compa
         Some(r#"["sms","fax"]"#),
         "the stray member is shown as incompatible data, not dropped or invented"
     );
-    let replace = presentation
-        .presence
-        .iter()
-        .find(|affordance| affordance.kind == schemaform_dioxus::AffordanceKind::Replace)
-        .expect("the replace affordance is offered")
-        .clone();
+    let replace =
+        mounted.presence_affordance("/channels", schemaform_dioxus::AffordanceKind::Replace);
 
     mounted.drive(|| replace.invoke());
 
@@ -1043,39 +1073,117 @@ fn multiple_choice_with_an_incompatible_member_offers_replacement_with_the_compa
 }
 
 #[test]
-fn multiple_choice_options_are_disabled_until_the_array_is_materialized() {
+fn multiple_choice_options_stay_enabled_while_the_array_is_absent_and_the_first_toggle_creates_it()
+{
+    use schemaform_dioxus::AffordanceKind;
+
     let mut mounted = MountedHeadless::mount();
     let mut absent = initial_form_data();
     absent.as_object_mut().unwrap().remove("channels");
     mounted.reinitialize(absent);
 
-    let captured = mounted.captured("/channels");
-    assert!(captured.context.control().disabled);
+    assert!(
+        !mounted.captured("/channels").context.control().disabled,
+        "absence does not disable the control"
+    );
     assert!(
         mounted
             .multiple_choice_edit("/channels")
             .options
             .iter()
-            .all(|option| option.disabled)
+            .all(|option| !option.disabled),
+        "absence does not disable an option"
     );
-    assert_eq!(mounted.multiple_choice_selected("/channels"), []);
-    let materialize = captured
-        .context
-        .presentation()
-        .presence
-        .iter()
-        .find(|affordance| affordance.kind == schemaform_dioxus::AffordanceKind::Materialize)
-        .expect("the array's materialize affordance is offered")
-        .clone();
+    assert_eq!(
+        mounted.multiple_choice_selected("/channels"),
+        [],
+        "none checked while the array is absent"
+    );
+    assert_eq!(
+        mounted.presence_kinds("/channels"),
+        [AffordanceKind::Materialize],
+        "the container's explicit step stays offered while absent"
+    );
 
-    mounted.drive(|| materialize.invoke());
-
-    assert_eq!(mounted.form_data()["channels"], json!([]));
-    assert!(!mounted.captured("/channels").context.control().disabled);
     let email = mounted.multiple_choice_option("/channels", "Email");
     let edit = mounted.multiple_choice_edit("/channels");
+    mounted.drive(|| edit.toggle.call(email.clone()));
+
+    assert_eq!(
+        mounted.form_data()["channels"],
+        json!(["email"]),
+        "the first toggle creates the array holding that one member"
+    );
+    assert_eq!(
+        mounted.multiple_choice_selected("/channels"),
+        std::slice::from_ref(&email)
+    );
+    let projection = mounted.projection("/channels");
+    assert!(projection.dirty);
+    assert!(
+        !projection.touched,
+        "creation by toggle is an edit, not a blur"
+    );
+    assert_eq!(
+        mounted.presence_kinds("/channels"),
+        [AffordanceKind::RemoveValue],
+        "once present, the optional array offers only remove value"
+    );
+
     mounted.drive(|| edit.toggle.call(email));
-    assert_eq!(mounted.form_data()["channels"], json!(["email"]));
+    assert_eq!(
+        mounted.form_data()["channels"],
+        json!([]),
+        "unchecking the last member leaves the empty array, not absence"
+    );
+    assert_eq!(mounted.multiple_choice_selected("/channels"), []);
+
+    let remove = mounted.presence_affordance("/channels", AffordanceKind::RemoveValue);
+    mounted.drive(|| remove.invoke());
+    assert!(
+        mounted.form_data().get("channels").is_none(),
+        "remove value is how absence is reached"
+    );
+    assert!(
+        mounted
+            .multiple_choice_edit("/channels")
+            .options
+            .iter()
+            .all(|option| !option.disabled),
+        "absent again, and still enabled"
+    );
+
+    // The explicit step still works for a renderer that wants it and materializes the
+    // creation seed: the empty array.
+    let materialize = mounted.presence_affordance("/channels", AffordanceKind::Materialize);
+    mounted.drive(|| materialize.invoke());
+    assert_eq!(mounted.form_data()["channels"], json!([]));
+    assert!(mounted.errors.borrow().is_empty());
+}
+
+#[test]
+fn write_only_multiple_choice_options_stay_disabled_while_the_array_is_absent() {
+    let mounted = MountedHeadless::mount();
+    assert!(
+        mounted.form_data().get("secret_channels").is_none(),
+        "the write-only multiple choice starts absent"
+    );
+    let captured = mounted.captured("/secret_channels");
+    assert_eq!(captured.context.control().kind, ControlKind::MultipleChoice);
+    assert!(captured.context.control().write_only);
+    assert!(
+        captured.context.control().disabled,
+        "write-only disables the control as it does when the array is present"
+    );
+    assert!(
+        mounted
+            .multiple_choice_edit("/secret_channels")
+            .options
+            .iter()
+            .all(|option| option.disabled),
+        "absence never enables what write-only disables"
+    );
+    assert_eq!(mounted.multiple_choice_selected("/secret_channels"), []);
     assert!(mounted.errors.borrow().is_empty());
 }
 

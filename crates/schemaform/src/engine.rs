@@ -3785,16 +3785,22 @@ impl Form {
             .is_some_and(|values| values.len() > 1)
     }
 
-    /// Whether `binding` is a multiple choice whose array is present, so a
-    /// member can be toggled. `minItems` and `maxItems` do not gate toggling:
-    /// they remain findings the reader resolves.
+    /// Whether `binding` is a multiple choice a member can be toggled on: its
+    /// array is present, or absent below a present object, since a toggle
+    /// creates the array as typing into an absent scalar creates the value.
+    /// `minItems` and `maxItems` do not gate toggling: they remain findings the
+    /// reader resolves.
     pub fn array_can_toggle_choice(&self, binding: &str) -> bool {
         self.arrays
             .iter()
             .find(|array| array.definition.binding == binding)
             .filter(|array| array.definition.is_multiple_choice())
-            .and_then(|array| array.definition.binding.resolve(&self.form_data).ok())
-            .is_some_and(Value::is_array)
+            .is_some_and(
+                |array| match array.definition.binding.resolve(&self.form_data) {
+                    Ok(value) => value.is_array(),
+                    Err(_) => binding_parent_is_object(&array.definition.binding, &self.form_data),
+                },
+            )
     }
 
     /// Toggles membership of `value` in the multiple choice at `binding`.
@@ -3804,8 +3810,9 @@ impl Form {
     /// non-member is inserted before the first item whose option comes later
     /// in option order, else appended, so members the user checks land in
     /// option order rather than the order of checking; items already out of
-    /// order, or carrying no option, keep their places. `value` must be one of
-    /// the options.
+    /// order, or carrying no option, keep their places. An absent array is
+    /// created holding the one member, in the same operation. `value` must be
+    /// one of the options.
     pub fn toggle_array_choice(
         &mut self,
         binding: &str,
@@ -3830,13 +3837,13 @@ impl Form {
                 .iter()
                 .position(|choice| json_values_equal(&choice.value, member))
         };
-        let members = self.arrays[array_index]
-            .definition
-            .binding
-            .resolve(&self.form_data)
-            .ok()
+        let array_binding = &self.arrays[array_index].definition.binding;
+        // `array_can_toggle_choice` admitted a present array or an absent one below an
+        // object; an absent array has no members yet.
+        let current = array_binding.resolve(&self.form_data).ok();
+        let members = current
             .and_then(Value::as_array)
-            .ok_or_else(|| EditError::UnresolvedControl(binding.to_owned()))?;
+            .map_or(&[][..], Vec::as_slice);
         let carrying = members
             .iter()
             .enumerate()
@@ -3852,9 +3859,13 @@ impl Form {
                 .unwrap_or(members.len())
         });
 
-        let values = self.arrays[array_index]
-            .definition
-            .binding
+        // An absent array is created empty and receives its first member through the same
+        // insert a present array would, so creation is one operation and one revision.
+        if current.is_none() {
+            set_bound_value(array_binding, &mut self.form_data, Value::Array(Vec::new()))
+                .map_err(|_| EditError::UnresolvedControl(binding.to_owned()))?;
+        }
+        let values = array_binding
             .resolve_mut(&mut self.form_data)
             .ok()
             .and_then(Value::as_array_mut)

@@ -113,7 +113,9 @@
           "unique_items_without_a_finite_item_choice_is_not_a_multiple_choice",
           "unique_items_with_a_constant_choice_is_a_multiple_choice_in_authored_order",
           "checking_options_appends_by_value_in_option_order_not_check_order",
-          "toggling_is_not_offered_on_a_plain_array_or_before_the_array_exists",
+          "toggling_is_not_offered_on_a_plain_array",
+          "checking_an_option_on_an_absent_array_creates_it_as_typing_into_an_absent_scalar_does",
+          "a_read_only_absent_multiple_choice_refuses_the_toggle",
           "unchecking_a_duplicated_member_removes_every_item_carrying_it",
           "length_bounds_stay_findings_and_never_gate_toggling",
           "a_member_that_is_no_option_is_incompatible_data_offered_for_replacement",
@@ -262,6 +264,7 @@
           "locale_and_presenter_changes_update_only_reactive_plain_text_presentation",
           "ime_composition_stays_local_across_presentation_updates_and_commits_on_end",
           "a_multiple_choice_is_a_fieldset_of_checkboxes_toggled_from_the_keyboard_in_option_order",
+          "checking_an_option_on_an_absent_multiple_choice_creates_the_array_without_moving_focus_or_announcing",
           "a_multiple_choice_describes_every_checkbox_by_its_findings_and_a_blocked_submission_focuses_the_first",
           "a_multiple_choice_member_outside_the_options_is_read_out_and_replaced_by_the_compatible_members"
         ]
@@ -635,7 +638,7 @@
       { "id": "user.remove-item", "tests": ["scalar-array-facade::scalar_array_append_and_remove_preserve_surviving_item_identity"] },
       { "id": "user.move-item-up", "tests": ["scalar-array-facade::moving_duplicate_items_preserves_logical_item_state_and_data_revision"] },
       { "id": "user.move-item-down", "tests": ["scalar-array-facade::moving_unequal_items_changes_data_revision_and_rejects_boundaries_atomically"] },
-      { "id": "user.toggle-choice", "tests": ["multiple-choice-facade::checking_options_appends_by_value_in_option_order_not_check_order", "multiple-choice-facade::unchecking_a_duplicated_member_removes_every_item_carrying_it", "multiple-choice-facade::length_bounds_stay_findings_and_never_gate_toggling"] },
+      { "id": "user.toggle-choice", "tests": ["multiple-choice-facade::checking_options_appends_by_value_in_option_order_not_check_order", "multiple-choice-facade::unchecking_a_duplicated_member_removes_every_item_carrying_it", "multiple-choice-facade::length_bounds_stay_findings_and_never_gate_toggling", "multiple-choice-facade::checking_an_option_on_an_absent_array_creates_it_as_typing_into_an_absent_scalar_does"] },
       { "id": "host.set", "tests": ["host-transaction-facade::related_host_pointer_operations_publish_one_final_transition"] },
       { "id": "host.remove", "tests": ["host-transaction-facade::related_host_pointer_operations_publish_one_final_transition"] },
       { "id": "host.replace-all", "tests": ["host-transaction-facade::failed_host_transactions_roll_back_all_observable_form_state"] },
@@ -816,7 +819,7 @@
     {
       "id": "structure.array.multiple-choice",
       "construct": "array",
-      "context": "`uniqueItems` over a finite item choice (`enum` or constant choice): still a homogeneous array, additionally toggled one option at a time in option order",
+      "context": "`uniqueItems` over a finite item choice (`enum` or constant choice): still a homogeneous array, additionally toggled one option at a time in option order; the first toggle on an absent array creates it",
       "target": "editing",
       "current": "implemented"
     },

@@ -28,10 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }))?;
-    let mut form = definition.create_form(json!({
-        "priority": "low",
-        "channels": []
-    }))?;
+    let mut form = definition.create_form(json!({ "priority": "low" }))?;
 
     // A constant choice is the scalar choice control `enum` produces: options
     // in authored order, labeled by their branch `title`, selected by value.
@@ -50,8 +47,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(form.form_data()["priority"], json!("high"));
 
     // A multiple choice stays an array node — items, identities, collection
-    // operations — and additionally offers a toggle per option. Members keep
-    // option order, not check order; toggling a held value removes it.
+    // operations — and additionally offers a toggle per option. It is a leaf
+    // control, so the first toggle creates the absent array as typing into an
+    // absent string creates the string. Members keep option order, not check
+    // order; toggling a held value removes it.
     let channels = control_at(&form, "/channels");
     let node = form.node(channels).expect("the channels array exists");
     assert!(node.definition().is_multiple_choice());
@@ -62,7 +61,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect::<Vec<_>>(),
         ["Email", "SMS", "Push"]
     );
+    assert!(form.form_data().get("channels").is_none());
     form.user().toggle_choice(channels, json!("push"))?;
+    assert_eq!(form.form_data()["channels"], json!(["push"]));
     form.user().toggle_choice(channels, json!("email"))?;
     assert_eq!(form.form_data()["channels"], json!(["email", "push"]));
     form.user().toggle_choice(channels, json!("push"))?;

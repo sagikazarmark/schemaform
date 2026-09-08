@@ -225,8 +225,14 @@ behalf. So the library's own position is never to seed defaults on its own.
 `create_form` and the `FormBuilder` leave an absent member absent whatever its
 data schema says; the `default` reaches presentation as
 `DataSchemaAnnotations::defaults` and shapes a control's `creation_seed`, and
-the user or the host puts a value there explicitly. An absent optional object is
-materialized by an explicit presence operation, never because it had a default.
+the user or the host puts a value there explicitly. Two rules govern absence.
+An absent optional container is materialized by an explicit presence operation,
+never because it had a default: a keystroke in a control nested inside an
+absent object would have to conjure its parents, and which parent is meant is
+ambiguous. An absent leaf control is created by its first edit: typing into an
+absent scalar creates the value. A multiple choice is a leaf control though its
+data is an array, so its first toggle creates the array (see
+[Finite Choices](#finite-choices)).
 
 The other policy — most form libraries seed defaults, and several protocols say
 a client SHOULD — is one call away rather than a walk over the definition tree
@@ -321,7 +327,14 @@ bindings, findings and collection operations — and additionally reports
 node's `choice_options`, so a presentation can offer one toggle per option.
 `UserActions::toggle_choice` adds a member in option order (checking B then A
 yields `[A, B]`) or removes every item carrying it, without being gated by
-`minItems` or `maxItems`, which remain findings. A member the data holds that is
+`minItems` or `maxItems`, which remain findings. The control creates its array
+on the first toggle: a multiple choice is a leaf control, its array-ness a
+storage detail, so checking an option on an absent array yields `[value]` as
+typing into an absent string yields the string — one data transition, dirty,
+not yet touched. Unchecking the last member leaves `[]`, a value the user chose
+and distinct from absent; `remove_value` reaches absence as for any optional
+leaf, and `materialize` stays offered while absent for a host that wants the
+explicit step. A member the data holds that is
 no option is incompatible data offered for replacement, not dropped or invented
 as an option. Because a multiple choice presents no item of its own, the array
 node also attaches findings located at its items and can be blurred like a
@@ -363,10 +376,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }))?;
-    let mut form = definition.create_form(json!({
-        "priority": "low",
-        "channels": []
-    }))?;
+    let mut form = definition.create_form(json!({ "priority": "low" }))?;
 
     // A constant choice is the scalar choice control `enum` produces: options
     // in authored order, labeled by their branch `title`, selected by value.
@@ -385,8 +395,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(form.form_data()["priority"], json!("high"));
 
     // A multiple choice stays an array node — items, identities, collection
-    // operations — and additionally offers a toggle per option. Members keep
-    // option order, not check order; toggling a held value removes it.
+    // operations — and additionally offers a toggle per option. It is a leaf
+    // control, so the first toggle creates the absent array as typing into an
+    // absent string creates the string. Members keep option order, not check
+    // order; toggling a held value removes it.
     let channels = control_at(&form, "/channels");
     let node = form.node(channels).expect("the channels array exists");
     assert!(node.definition().is_multiple_choice());
@@ -397,7 +409,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect::<Vec<_>>(),
         ["Email", "SMS", "Push"]
     );
+    assert!(form.form_data().get("channels").is_none());
     form.user().toggle_choice(channels, json!("push"))?;
+    assert_eq!(form.form_data()["channels"], json!(["push"]));
     form.user().toggle_choice(channels, json!("email"))?;
     assert_eq!(form.form_data()["channels"], json!(["email", "push"]));
     form.user().toggle_choice(channels, json!("push"))?;

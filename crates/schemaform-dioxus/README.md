@@ -368,7 +368,11 @@ control of kind `MultipleChoice`: an array the core reports as a multiple choice
 The node stays an array node: its data is an array, its element id and `name`
 are the array's, and its presence affordances are a container's (`Materialize`
 while the array is absent, `Replace` while a member is no option, `RemoveValue`
-while the array is optional). A recognised array never reaches the collection
+while the array is optional). It is nevertheless a leaf control, so the control
+creates its array on the first toggle: checking an option while the array is
+absent yields `[value]`, as typing into an absent string yields the string, and
+`Materialize` stays offered alongside for a host whose renderer wants the
+explicit step. A recognised array never reaches the collection
 renderer; it resolves through the control registry like every other control, so
 a renderer registered for the kind, or for an exact widget symbol on the node,
 owns the whole control.
@@ -380,14 +384,18 @@ owns the whole control.
   absent and always for a write-only control.
 - `options: Vec<ChoiceOption>` lists the options as `use_choice_edit` does,
   with the same localized labels and descriptions. Every option is `disabled`
-  while the core allows no toggle: the array is absent (materialize it first),
-  read-only, or write-only. `minItems` and `maxItems` never disable an option;
-  they remain findings.
+  while the core allows no toggle (the control is read-only, or its array would
+  have to be created inside an absent parent) or the control is write-only;
+  an absent array below a present object disables nothing. `minItems` and
+  `maxItems` never disable an option; they remain findings.
 - `toggle: Callback<ChoiceIdentity>` toggles one option's membership through
   `ControlActions::toggle_choice`: a member is removed together with every
   duplicate of it (so data that arrived violating `uniqueItems` is repaired by
   one uncheck), a non-member is inserted in option order (checking B then A
-  yields `[A, B]`). An unknown identity runs no core operation. A failure is
+  yields `[A, B]`), and on an absent array the first toggle creates the array
+  holding that one member. Unchecking the last member leaves `[]`; the
+  `RemoveValue` affordance is how absence is reached. An unknown identity runs
+  no core operation. A failure is
   reported to `on_error` and the checkbox carrying
   `MultipleChoiceEdit::option_element_id(&identity)` — `{element_id}-{identity}`
   — has its `checked` property restored.

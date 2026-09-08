@@ -275,7 +275,7 @@ fn checking_options_appends_by_value_in_option_order_not_check_order() {
 }
 
 #[test]
-fn toggling_is_not_offered_on_a_plain_array_or_before_the_array_exists() {
+fn toggling_is_not_offered_on_a_plain_array() {
     let plain = FormDefinition::compile(tags_schema(json!({}))).expect("the array should compile");
     let mut form = plain
         .create_form(json!({ "tags": [] }))
@@ -294,32 +294,121 @@ fn toggling_is_not_offered_on_a_plain_array_or_before_the_array_exists() {
             .expect_err("a plain array has no toggle"),
         UserOperationError::OperationNotAllowed
     );
+}
 
-    let multiple = FormDefinition::compile(tags_schema(json!({ "uniqueItems": true })))
+#[test]
+fn checking_an_option_on_an_absent_array_creates_it_as_typing_into_an_absent_scalar_does() {
+    let definition = FormDefinition::compile(tags_schema(json!({ "uniqueItems": true })))
         .expect("the multiple choice should compile");
-    let mut form = multiple
+    let mut form = definition
         .create_form(json!({}))
         .expect("the form should be created");
     let tags = control_with_binding(&form, "/tags");
-    let operations = form.node(tags).unwrap().allowed_operations();
+    let node = form.node(tags).unwrap();
+    let operations = node.allowed_operations();
     assert!(
-        !operations.can_toggle_choice(),
-        "an absent array cannot be toggled"
+        operations.can_toggle_choice(),
+        "an absent multiple choice can be toggled, as an absent scalar can be typed into"
     );
     assert!(
         operations.can_materialize(),
-        "the array's own presence affordance creates it first"
+        "the container's explicit presence operation stays offered while absent"
     );
-    form.user()
-        .materialize(tags)
-        .expect("materialize creates the empty array");
-    assert_eq!(form.form_data(), &json!({ "tags": [] }));
     assert!(
-        form.node(tags)
-            .unwrap()
-            .allowed_operations()
-            .can_toggle_choice()
+        !operations.can_remove_value(),
+        "there is nothing to remove while the array is absent"
     );
+    assert_eq!(node.selected_choices().count(), 0);
+    assert_eq!(node.children().count(), 0);
+    assert!(!node.is_dirty());
+
+    let transition = form
+        .user()
+        .toggle_choice(tags, json!("beta"))
+        .expect("checking beta should create the array with that one member");
+    assert_eq!(form.form_data(), &json!({ "tags": ["beta"] }));
+    assert_ne!(
+        transition.before_data_revision(),
+        transition.after_data_revision(),
+        "creation is a data transition"
+    );
+    assert!(transition.changed().any(|identity| identity == tags));
+    let node = form.node(tags).unwrap();
+    let beta = node
+        .children()
+        .next()
+        .expect("the created array holds one item");
+    assert!(
+        transition.changed().any(|identity| identity == beta),
+        "the new item's identity is announced as changed, as when a present array grows"
+    );
+    assert_eq!(transition.removed().count(), 0);
+    assert!(node.is_dirty());
+    assert!(
+        !node.is_touched(),
+        "creation by toggle is an edit; only blur marks the node touched"
+    );
+    assert_eq!(
+        node.selected_choices()
+            .map(|option| option.value().clone())
+            .collect::<Vec<_>>(),
+        [json!("beta")]
+    );
+    let operations = node.allowed_operations();
+    assert!(operations.can_toggle_choice());
+    assert!(!operations.can_materialize());
+    assert!(operations.can_remove_value());
+
+    form.user()
+        .toggle_choice(tags, json!("beta"))
+        .expect("unchecking the last member should be accepted");
+    assert_eq!(
+        form.form_data(),
+        &json!({ "tags": [] }),
+        "unchecking the last option leaves the empty array, which is distinct from absent"
+    );
+    let node = form.node(tags).unwrap();
+    assert!(node.is_dirty());
+    assert!(node.allowed_operations().can_toggle_choice());
+    assert!(
+        node.allowed_operations().can_remove_value(),
+        "the array's remove-value presence operation is how absence is reached"
+    );
+
+    form.user()
+        .remove_value(tags)
+        .expect("the optional array can be removed like any optional leaf");
+    assert_eq!(form.form_data(), &json!({}));
+    let node = form.node(tags).unwrap();
+    assert!(!node.is_dirty(), "back at the baseline");
+    assert!(
+        node.allowed_operations().can_toggle_choice(),
+        "and the next check creates it again"
+    );
+}
+
+#[test]
+fn a_read_only_absent_multiple_choice_refuses_the_toggle() {
+    let definition = FormDefinition::compile(tags_schema(json!({
+        "uniqueItems": true,
+        "readOnly": true
+    })))
+    .expect("the multiple choice should compile");
+    let mut form = definition
+        .create_form(json!({}))
+        .expect("the form should be created");
+    let tags = control_with_binding(&form, "/tags");
+    let node = form.node(tags).unwrap();
+    assert!(node.is_read_only());
+    assert!(!node.allowed_operations().can_toggle_choice());
+    assert!(!node.allowed_operations().can_materialize());
+    assert_eq!(
+        form.user()
+            .toggle_choice(tags, json!("alpha"))
+            .expect_err("read-only refuses the toggle, absent or not"),
+        UserOperationError::OperationNotAllowed
+    );
+    assert_eq!(form.form_data(), &json!({}), "nothing was created");
 }
 
 /// The codes of every validation finding located at `binding`, whatever the

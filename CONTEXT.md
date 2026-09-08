@@ -133,7 +133,7 @@ A finite scalar choice set declared as a `oneOf` or `anyOf` whose every branch a
 _Avoid_: Titled enum, enumNames, labelled enum, oneOf enum
 
 **Multiple choice**:
-A homogeneous array that asserts `uniqueItems` over a finite item choice — an `enum` or a constant choice — and therefore holds distinct members drawn from a finite set. It stays an array node with its item identities, bindings, findings and collection operations; a presentation may offer one toggle per option, and toggling adds a member in option order or removes every item carrying the value. Length bounds remain findings and never disable an option.
+A homogeneous array that asserts `uniqueItems` over a finite item choice — an `enum` or a constant choice — and therefore holds distinct members drawn from a finite set. It stays an array node with its item identities, bindings, findings and collection operations; a presentation may offer one toggle per option, and toggling adds a member in option order or removes every item carrying the value. It is a leaf control: the first toggle on an absent array creates it holding that one member, as typing into an absent scalar creates the value, and neither absence nor length bounds disable an option. Length bounds remain findings.
 _Avoid_: Multi-select, checkbox group, tag list, set control
 
 **Default seeding**:

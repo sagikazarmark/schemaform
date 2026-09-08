@@ -949,11 +949,15 @@ pub struct MultipleChoiceEdit {
     /// after a transition already sees the new membership.
     pub selected: ReadSignal<Vec<ChoiceIdentity>>,
     /// The options in the core's compiled order, with localized labels. Every option is
-    /// `disabled` while the core allows no toggle: the array is absent, read-only, or
-    /// write-only. `minItems` and `maxItems` never disable an option; they remain findings.
+    /// `disabled` while the core allows no toggle — the control is read-only, or its array
+    /// would have to be created inside an absent parent — or the control is write-only. An
+    /// absent array below a present object disables nothing: a multiple choice is a leaf
+    /// control, and the first toggle creates its array as typing into an absent string creates
+    /// the string. `minItems` and `maxItems` never disable an option; they remain findings.
     pub options: Vec<ChoiceOption>,
     /// Toggles one option's membership through [`ControlActions::toggle_choice`]: a member is
-    /// removed together with every duplicate of it, a non-member is inserted in option order.
+    /// removed together with every duplicate of it, a non-member is inserted in option order,
+    /// and on an absent array the first toggle creates the array holding that one member.
     /// An identity that is not among `options` runs no core operation. A failure is reported
     /// to `SchemaForm::on_error` and the checkbox carrying [`Self::option_element_id`] has its
     /// `checked` property restored to the node's membership, so a native checkbox stays in step
@@ -1143,9 +1147,11 @@ impl MultipleChoiceEditTarget {
     }
 }
 
-/// Whether a multiple choice accepts no toggle right now: the core allows none (the array is
-/// absent or read-only), or the control is write-only and must not echo its members. The one
-/// statement behind the built-in's `disabled` facet and every option's `disabled`.
+/// Whether a multiple choice accepts no toggle right now: the core allows none (the control is
+/// read-only, or its array would have to be conjured inside an absent parent), or the control
+/// is write-only and must not echo its members. An absent array below a present object is not
+/// a reason: the first toggle creates it. The one statement behind the built-in's `disabled`
+/// facet and every option's `disabled`.
 pub(crate) fn multiple_choice_is_disabled(projection: &NodeProjection) -> bool {
     projection.write_only || !projection.allowed_operations.can_toggle_choice()
 }
