@@ -15,6 +15,7 @@ const CORE_MANIFEST: &str = include_str!("../Cargo.toml");
 const DIOXUS_MANIFEST: &str = include_str!("../../schemaform-dioxus/Cargo.toml");
 const CORE_README: &str = include_str!("../README.md");
 const DIOXUS_README: &str = include_str!("../../schemaform-dioxus/README.md");
+const ROOT_README: &str = include_str!("../../../README.md");
 
 #[derive(Clone, Copy, Debug)]
 enum ExpectedOutcome {
@@ -208,6 +209,17 @@ fn published_readmes_disclose_the_build_wide_arbitrary_precision_effect() {
         core_feature_flags.contains(&format!("```rust\n{HOST_WIRE_RECIPE}```")),
         "the core README recipe block should be tests/fixtures/host_wire_recipe.rs verbatim"
     );
+    // The second failure shape is silent: a default-on-error wrapper decodes successfully with
+    // the float field absent, so a tripwire that only checks `is_ok()` passes. The section has to
+    // name the wrappers and tell the host to assert presence and value instead.
+    assert!(
+        core_feature_flags.contains("`DefaultOnError`"),
+        "the core README should name the default-on-error wrappers that drop float fields silently"
+    );
+    assert!(
+        core_feature_flags.contains("`is_ok()`"),
+        "the core README should say why an `is_ok()` tripwire is not enough"
+    );
 
     let dioxus_feature_flags = DIOXUS_README
         .split("## Feature Flags")
@@ -217,11 +229,31 @@ fn published_readmes_disclose_the_build_wide_arbitrary_precision_effect() {
     assert!(dioxus_feature_flags.contains(
         "../schemaform/README.md#serde_jsonarbitrary_precision-is-enabled-for-the-whole-build"
     ));
+
+    // The root README's pointer names both failure shapes so a host whose wire types never fail
+    // loudly still follows the link. The phrase is checked with its line wrapping collapsed.
+    let root_capability_boundary = ROOT_README
+        .split("## Capability Boundary")
+        .nth(1)
+        .expect("the root README should keep its Capability Boundary section");
+    assert!(root_capability_boundary.contains("`serde_json/arbitrary_precision`"));
+    let root_pointer_unwrapped = root_capability_boundary
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        root_pointer_unwrapped.contains("fail to decode or silently drop"),
+        "the root README pointer should name the silent variant beside the decode failure"
+    );
+    assert!(root_capability_boundary.contains(
+        "crates/schemaform/README.md#serde_jsonarbitrary_precision-is-enabled-for-the-whole-build"
+    ));
 }
 
 /// The wire-type shapes the core README names as affected by `arbitrary_precision`.
 mod host_wire_types {
     use serde::Deserialize;
+    use serde::de::{Deserializer, IgnoredAny};
 
     #[derive(Deserialize)]
     #[serde(tag = "type")]
@@ -265,6 +297,49 @@ mod host_wire_types {
     pub struct Plain {
         pub minimum: f64,
     }
+
+    /// A default-on-error field: buffer the value, try the typed decode, and substitute the
+    /// default when it fails. `serde_with::DefaultOnError` takes this same path through a content
+    /// buffer; a protocol crate's own equivalent is usually a `deserialize_with` like it.
+    pub fn default_on_error<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: Deserialize<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Lenient<T> {
+            Typed(T),
+            Anything(IgnoredAny),
+        }
+
+        Ok(match Lenient::<T>::deserialize(deserializer)? {
+            Lenient::Typed(value) => Some(value),
+            Lenient::Anything(_) => None,
+        })
+    }
+
+    /// A message with an optional float field guarded by a default-on-error wrapper.
+    #[derive(Deserialize)]
+    pub struct Annotations {
+        #[serde(default, deserialize_with = "default_on_error")]
+        pub priority: Option<f64>,
+    }
+
+    /// A message with an optional object guarded by a default-on-error wrapper; the float field
+    /// inside it takes the whole object down with it.
+    #[derive(Deserialize)]
+    pub struct Usage {
+        #[serde(default, deserialize_with = "default_on_error")]
+        pub cost: Option<Cost>,
+    }
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    pub struct Cost {
+        pub amount: f64,
+        pub currency: String,
+    }
 }
 
 /// The recipe the core README hands to hosts, compiled from the file the README block is
@@ -280,12 +355,17 @@ mod host_wire_recipe {
 #[cfg_attr(not(all(target_arch = "wasm32", target_os = "unknown")), test)]
 fn disclosed_host_decoding_effects_match_the_qualified_serde_json() {
     use host_wire_recipe::decode_wire;
-    use host_wire_types::{Flattened, Plain, Tagged, TaggedExact, Untagged};
+    use host_wire_types::{Annotations, Flattened, Plain, Tagged, TaggedExact, Untagged, Usage};
     use serde::de::DeserializeOwned;
 
     fn number_message(spelling: &str) -> String {
         format!(r#"{{"type":"Number","minimum":{spelling}}}"#)
     }
+    fn priority_message(spelling: &str) -> String {
+        format!(r#"{{"priority":{spelling}}}"#)
+    }
+    // The README's tripwire message: a float field inside a default-on-error object.
+    const COST_MESSAGE: &str = r#"{"cost":{"amount":0.10,"currency":"USD"}}"#;
     fn via_value<T: DeserializeOwned>(text: &str) -> serde_json::Result<T> {
         serde_json::from_value(serde_json::from_str::<Value>(text)?)
     }
@@ -329,6 +409,31 @@ fn disclosed_host_decoding_effects_match_the_qualified_serde_json() {
     assert!(serde_json::from_str::<Tagged>(&number_message("1")).is_ok());
     assert!(serde_json::from_str::<Untagged>("1").is_ok());
 
+    // A default-on-error wrapper takes the same buffered path but substitutes the default instead
+    // of failing: the message decodes, the float field is absent, and nothing reaches the host.
+    // An `is_ok()` tripwire passes here; only asserting presence and value catches it.
+    for spelling in ["0.5", "0.50", "1e2"] {
+        let annotations = serde_json::from_str::<Annotations>(&priority_message(spelling))
+            .unwrap_or_else(|error| {
+                panic!("{spelling} behind a default-on-error wrapper should decode: {error}")
+            });
+        assert_eq!(
+            annotations.priority, None,
+            "{spelling} behind a default-on-error wrapper should be dropped, not decoded"
+        );
+    }
+    let usage = serde_json::from_str::<Usage>(COST_MESSAGE)
+        .expect("a default-on-error object with a float field inside should decode");
+    assert!(
+        usage.cost.is_none(),
+        "the float field inside a default-on-error object should take the whole object with it"
+    );
+    // The same wrapper over an integer literal keeps the field, which is why the drop is easy to
+    // miss for the same reason the failure is.
+    let annotations = serde_json::from_str::<Annotations>(&priority_message("1"))
+        .expect("an integer behind a default-on-error wrapper should decode");
+    assert_eq!(annotations.priority, Some(1.0));
+
     // The `Value` detour repairs only spellings that `f64` formatting reproduces.
     for repaired in ["0.5", "1.0"] {
         assert!(
@@ -343,6 +448,16 @@ fn disclosed_host_decoding_effects_match_the_qualified_serde_json() {
             &format!("{unrepaired} through Value"),
         );
     }
+    // The same partial repair applies to the silent shape: `0.5` comes through, `1.50` is dropped.
+    let repaired = via_value::<Annotations>(&priority_message("0.5"))
+        .expect("0.5 behind a default-on-error wrapper should decode through Value");
+    assert_eq!(repaired.priority, Some(0.5));
+    let unrepaired = via_value::<Annotations>(&priority_message("1.50"))
+        .expect("1.50 behind a default-on-error wrapper should decode through Value");
+    assert_eq!(
+        unrepaired.priority, None,
+        "1.50 behind a default-on-error wrapper should still be dropped through Value"
+    );
 
     // The documented recipe restores stock behavior for every spelling named in the README,
     // including integers beyond `u64` becoming floats. A host that owns its wire types can
@@ -372,6 +487,23 @@ fn disclosed_host_decoding_effects_match_the_qualified_serde_json() {
         decode_wire::<Tagged>(r#"{"type":"Integer","minimum":1}"#),
         Ok(Tagged::Integer { minimum: 1 })
     ));
+
+    // The recipe restores the silently dropped field too, with the value stock `serde_json`
+    // would have produced.
+    let annotations = decode_wire::<Annotations>(&priority_message("0.50"))
+        .expect("a default-on-error float field should decode through the recipe");
+    assert_eq!(
+        annotations.priority,
+        Some(0.5),
+        "the recipe should restore a default-on-error float field"
+    );
+    let usage = decode_wire::<Usage>(COST_MESSAGE)
+        .expect("a default-on-error object with a float field should decode through the recipe");
+    assert_eq!(
+        usage.cost.map(|cost| cost.amount),
+        Some(0.1),
+        "the recipe should restore a default-on-error object and its float field"
+    );
 }
 
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]

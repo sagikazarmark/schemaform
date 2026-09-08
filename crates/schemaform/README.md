@@ -310,34 +310,57 @@ With `arbitrary_precision`, `serde_json` hands a number to a type that asks for
 "any value" as a `u64` or `i64` when the literal is an integer that fits, and
 otherwise — a fraction, an exponent, or an integer beyond `u64` or below `i64`
 — as a one-entry map carrying the literal. A plain struct field typed `f64` is
-unaffected: it asks for a float and gets one. Anything that buffers before
-deciding what it is — `#[serde(tag = "…")]`, `#[serde(untagged)]`,
-`#[serde(flatten)]`, or any other path through `serde`'s content buffer —
-receives the map and fails with `invalid type: map, expected f64` or
+unaffected: it asks for a float and gets one. The first failure shape is loud.
+Anything that buffers before deciding what it is — `#[serde(tag = "…")]`,
+`#[serde(untagged)]`, `#[serde(flatten)]`, or any other path through `serde`'s
+content buffer — receives the map and fails with
+`invalid type: map, expected f64` or
 `data did not match any variant of untagged enum …`. Integer-only fields in
 those same types keep working, which is why the failure is easy to miss.
 
+The second shape is silent. A wrapper that decodes an optional field on a
+best-effort basis — `serde_with`'s `DefaultOnError`, a
+`#[serde(default, deserialize_with = …)]` pair that swallows the inner error,
+or a protocol crate's own equivalent — has to buffer the value before it can
+fall back, so it takes the same path: the typed decode receives the map and
+fails, and the wrapper substitutes the default. The enclosing message decodes
+successfully with the field absent, and no error reaches the host.
+`{"cost":{"amount":0.10,"currency":"USD"}}` becomes a message with no cost and
+`{"annotations":{"priority":0.50}}` becomes annotations with no priority.
+Integer literals behind the same wrapper keep their value, so both shapes are
+easy to miss for the same reason.
+
 Decoding through `serde_json::Value` first is only a partial escape. `Value`
 emits a float for a stored literal only when its spelling is what `f64`
-formatting would produce: `0.5` and `1.0` decode; `1.50`, `1e2`, and `2.5E0`
-still fail.
+formatting would produce: `0.5` and `1.0` come through; `1.50`, `1e2`, and
+`2.5E0` still fail, or are still dropped.
 
 #### Add a tripwire; if it fires, canonicalize
 
 Put a test on your wire layer that decodes a representative message through the
-real decode path. Use spellings `f64` formatting would not reproduce — they fail
-on the direct path and through `Value` alike — so the test fires however the
-wire layer decodes today, and it points at the wire layer rather than at the
-form:
+real decode path and asserts the presence and value of a float field that sits
+behind a default-on-error wrapper. `is_ok()` is not enough: a dropped field
+leaves the decode successful, so a tripwire that only checks that decoding
+succeeded passes under the feature. Use spellings `f64` formatting would not
+reproduce — they fail on the direct path and through `Value` alike — so the test
+fires however the wire layer decodes today and however the field is guarded,
+and it points at the wire layer rather than at the form:
 
 ```rust
 #[test]
-fn wire_messages_decode_under_the_current_dependency_set() {
-    // Fires when any dependency enables `serde_json/arbitrary_precision` and a
-    // buffered wire type with a float field meets a non-canonical number.
-    let message = r#"{"type":"number","minimum":1.50,"maximum":1e2}"#;
-    wire::decode::<PropertySchema>(message)
+fn wire_messages_keep_their_float_fields_under_the_current_dependency_set() {
+    // Fires when any dependency enables `serde_json/arbitrary_precision`. The
+    // `expect` catches a buffered float field that fails outright; the
+    // `assert_eq!` catches a default-on-error field that decodes to its
+    // default, which `is_ok()` alone would miss.
+    let message = r#"{"cost":{"amount":0.10,"currency":"USD"}}"#;
+    let usage = wire::decode::<Usage>(message)
         .expect("the wire layer should decode non-canonical numbers");
+    assert_eq!(
+        usage.cost.map(|cost| cost.amount),
+        Some(0.1),
+        "the wire layer should keep a default-on-error float field"
+    );
 }
 ```
 
@@ -378,10 +401,13 @@ data schema or form data bound for `schemaform` — as a protocol that ships the
 form's schema inside its own envelope does — take that subtree from the
 `Value` before the pass and hand it over unchanged; a typed `f64` field could
 not have carried the exact literal anyway, and the engine's exactness depends on
-receiving it. The repository's own qualification tests hold this section to the
-locked `serde_json`: they assert that the direct path fails, that the `Value`
-detour is partial, and that the recipe above — compiled from the same file the
-block is checked against — decodes every spelling listed here.
+receiving it. Because the pass runs before any wrapper sees the value, it
+restores a default-on-error field as well: `0.10` reaches the wrapper as `0.1`
+and decodes to `Some(0.1)`. The repository's own qualification tests hold this
+section to the locked `serde_json`: they assert that the direct path fails, that
+a default-on-error field is dropped, that the `Value` detour is partial, and
+that the recipe above — compiled from the same file the block is checked against
+— decodes every spelling listed here and restores the dropped field.
 
 ## License
 
