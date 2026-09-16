@@ -33,6 +33,12 @@ impl ShellRenderer for DaisyuiShell {
         let appearance = self.appearance;
         rsx! {
             div { class: appearance.utilities("grid gap-4"), "data-schemaform-daisyui": "shell",
+                if let Some(id) = context.heading_id {
+                    h2 { id, class: appearance.utilities("text-xl font-semibold"), "{context.presentation.label}" }
+                }
+                if let Some(help) = context.presentation.help {
+                    p { id: help.id, "{help.text}" }
+                }
                 {context.summary}
                 {context.body}
                 Button {

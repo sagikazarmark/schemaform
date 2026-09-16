@@ -491,6 +491,13 @@ The first slot is the **form shell**. `ShellRenderer::shell` receives a
 
 - `form_id` is the id of the adapter-owned `<form>`, which keeps `novalidate`,
   the submit handling, `tabindex="-1"`, and the error-handler context.
+- `presentation` is the localized root node presentation: its label comes from
+  the root data-schema `title`, and its help from `description`. Without a title,
+  the core label falls back to `"Form"` and `label_visible` is false.
+- `heading_id`, when present, must be placed on an element containing the root
+  label; the adapter associates the form with it through `aria-labelledby`.
+  Place `presentation.help`, when present, with its supplied id: the form's
+  `aria-describedby` references it. Root findings already appear in `summary`.
 - `summary` is the finding summary inside its adapter-owned wrapper
   (`{form_id}-summary`, `role="region"`, a localized `aria-label`,
   `tabindex="-1"`). A blocked gated submission focuses it. It must be placed.
@@ -509,8 +516,10 @@ The first slot is the **form shell**. `ShellRenderer::shell` receives a
   which submits through the form element, or as any element that calls
   `invoke`; not both on one element.
 
-`BuiltinShell` is the public built-in: summary, body, then a `type="submit"`
-button carrying the affordance's id and label.
+`BuiltinShell` is the public built-in: an `h1` for a nonempty root title, a
+paragraph for root help, summary, body, then a `type="submit"` button carrying
+the affordance's id and label. An absent or empty title produces no heading
+element or `aria-labelledby` attribute.
 
 ```rust
 use dioxus::prelude::*;
@@ -524,6 +533,12 @@ impl ShellRenderer for CardShell {
     fn shell(&self, context: ShellContext) -> Element {
         let submit = context.submit;
         rsx! {
+            if let Some(id) = context.heading_id {
+                h2 { id, "{context.presentation.label}" }
+            }
+            if let Some(help) = context.presentation.help {
+                p { id: help.id, "{help.text}" }
+            }
             div { class: "card-body", {context.body} }
             div { class: "card-alerts", {context.summary} }
             div { class: "card-actions",
