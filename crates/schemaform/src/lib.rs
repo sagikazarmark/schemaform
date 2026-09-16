@@ -726,7 +726,7 @@ pub mod definition {
             )
             .collect::<Vec<_>>();
 
-            let (nodes, required_extensions) = if let Some(ui_schema) = ui_schema {
+            let (mut nodes, required_extensions) = if let Some(ui_schema) = ui_schema {
                 let required_extensions = ui_schema
                     .required_extensions()
                     .cloned()
@@ -791,6 +791,10 @@ pub mod definition {
                 .expect("the complete generated projection has unique bindings");
                 (nodes, Vec::new())
             };
+
+            nodes[0].label = engine.root_label().to_owned();
+            nodes[0].label_visible = engine.root_label_visible();
+            nodes[0].help = engine.root_help().map(str::to_owned);
 
             crate::limits::check_compilation_outputs(
                 nodes.len(),
@@ -2421,6 +2425,8 @@ pub mod definition {
         ///
         /// This may come from data-schema `title` or an authored text reference;
         /// consult [`Self::label_reference`] to preserve localization metadata.
+        /// The root uses its data-schema title, falling back to `"Form"` when absent
+        /// or conflicting, for both generated and authored UI schemas.
         pub fn label(&self) -> &'a str {
             &self.node.label
         }
@@ -2433,6 +2439,9 @@ pub mod definition {
         }
 
         /// Returns whether a renderer should present the compiled label.
+        ///
+        /// The root is false when its title is absent, empty, or conflicting;
+        /// its fallback label does not imply a form heading.
         pub fn is_label_visible(&self) -> bool {
             self.node.label_visible
         }

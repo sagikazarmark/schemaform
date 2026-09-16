@@ -17,6 +17,10 @@ use crate::{
 
 const DEFAULT_MAX_CANONICAL_INTEGER_DIGITS: usize = 4096;
 
+fn root_label(title: Option<&str>) -> &str {
+    title.unwrap_or("Form")
+}
+
 #[derive(Clone)]
 pub struct FormDefinition {
     controls: Vec<ControlDefinition>,
@@ -26,6 +30,8 @@ pub struct FormDefinition {
     capability_warnings: Vec<(PointerBuf, UnsupportedFinding)>,
     root_schema_locations: Vec<SchemaLocationDefinition>,
     root_annotations: DataSchemaAnnotations,
+    root_title: Option<String>,
+    root_help: Option<String>,
     fingerprint: DefinitionFingerprint,
 }
 
@@ -78,7 +84,8 @@ impl FormDefinition {
         let root_schema_locations = schema_locations(&root_applicable);
         let root_annotations = data_schema_annotations(&root_applicable);
         let (root_title, root_title_warning) = text_annotation(&root_applicable, "title");
-        let (_, root_description_warning) = text_annotation(&root_applicable, "description");
+        let (root_help, root_description_warning) =
+            text_annotation(&root_applicable, "description");
         let root_kind = infer_kind(&root_applicable);
         let (root_has_scalar_choices, root_choice_findings) =
             match scalar_choices(&root_applicable, root_kind) {
@@ -124,8 +131,8 @@ impl FormDefinition {
                 None,
                 root_schema_locations.clone(),
                 NodePresentation {
-                    label: root_title.unwrap_or_else(|| "Form".to_owned()),
-                    help: None,
+                    label: root_label(root_title.as_deref()).to_owned(),
+                    help: root_help.clone(),
                     annotations: root_annotations.clone(),
                 },
                 true,
@@ -145,6 +152,8 @@ impl FormDefinition {
                 capability_warnings,
                 root_schema_locations,
                 root_annotations,
+                root_title,
+                root_help,
                 fingerprint,
             });
         }
@@ -188,6 +197,8 @@ impl FormDefinition {
             capability_warnings,
             root_schema_locations,
             root_annotations,
+            root_title,
+            root_help,
             fingerprint,
         })
     }
@@ -263,6 +274,20 @@ impl FormDefinition {
 
     pub fn root_annotations(&self) -> &DataSchemaAnnotations {
         &self.root_annotations
+    }
+
+    pub fn root_label(&self) -> &str {
+        root_label(self.root_title.as_deref())
+    }
+
+    pub fn root_help(&self) -> Option<&str> {
+        self.root_help.as_deref()
+    }
+
+    pub fn root_label_visible(&self) -> bool {
+        self.root_title
+            .as_ref()
+            .is_some_and(|title| !title.is_empty())
     }
 
     /// Fills every absent scalar control whose parent object exists in

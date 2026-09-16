@@ -5,6 +5,122 @@ use schemaform::{
 use serde_json::json;
 
 #[test]
+fn the_root_title_and_description_present_the_form_with_or_without_an_authored_ui_schema() {
+    use schemaform::ui::v1::{Auto, Binding, Element, UiSchema};
+
+    for authored in [false, true] {
+        let mut builder = FormDefinition::compiler(json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "title": "Tell me about yourself",
+            "description": "Share what you would like us to know."
+        }));
+        if authored {
+            builder = builder.ui_schema(UiSchema::new(Element::Auto(Auto::new(Binding::root(
+                JsonPointer::parse("").unwrap(),
+            )))));
+        }
+        let definition = builder.compile().unwrap();
+        let root = definition.node(definition.root()).unwrap();
+        assert_eq!(root.label(), "Tell me about yourself");
+        assert_eq!(root.help(), Some("Share what you would like us to know."));
+        assert!(root.is_label_visible());
+    }
+}
+
+#[test]
+fn ordinary_and_unsupported_roots_share_annotations_and_the_untitled_fallback() {
+    for title in [None, Some("Form"), Some("Tell me about yourself")] {
+        let mut schema = json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object", "properties": {},
+            "description": "About this form."
+        });
+        if let Some(title) = title {
+            schema["title"] = json!(title);
+        }
+        let ordinary = FormDefinition::compile(schema.clone()).unwrap();
+        schema["type"] = json!("string");
+        let analysis = FormDefinition::compiler(schema).analyze().unwrap();
+        let definition = analysis.definition();
+        let root = definition.node(definition.root()).unwrap();
+        let unsupported = definition.node(root.children().next().unwrap()).unwrap();
+        for node in [ordinary.node(ordinary.root()).unwrap(), root, unsupported] {
+            assert_eq!(node.label(), title.unwrap_or("Form"));
+            assert_eq!(node.help(), Some("About this form."));
+        }
+        assert_eq!(root.is_label_visible(), title.is_some());
+        assert_eq!(
+            ordinary.node(ordinary.root()).unwrap().is_label_visible(),
+            title.is_some()
+        );
+    }
+}
+
+#[test]
+fn root_annotations_resolve_references_and_conflicts_like_property_annotations() {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": { "form": {
+            "type": "object", "properties": {},
+            "title": "Referenced title", "description": "Referenced help."
+        } },
+        "$ref": "#/$defs/form"
+    }))
+    .unwrap();
+    let root = definition.node(definition.root()).unwrap();
+    assert_eq!(root.label(), "Referenced title");
+    assert_eq!(root.help(), Some("Referenced help."));
+
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object", "properties": {},
+        "allOf": [
+            { "title": "First", "description": "First help." },
+            { "title": "Second", "description": "Second help." }
+        ]
+    }))
+    .unwrap();
+    let root = definition.node(definition.root()).unwrap();
+    assert_eq!(root.label(), "Form");
+    assert_eq!(root.help(), None);
+    assert!(!root.is_label_visible());
+    assert_eq!(
+        definition
+            .capability_findings()
+            .filter(|finding| finding.code() == "annotation.conflict")
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn fingerprints_track_root_title_and_description_independently() {
+    for kind in ["object", "string"] {
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": kind, "properties": {},
+            "title": "About you", "description": "Share a little."
+        });
+        let fingerprint = |schema| {
+            FormDefinition::compiler(schema)
+                .analyze()
+                .unwrap()
+                .definition()
+                .fingerprint()
+        };
+        let original = fingerprint(schema.clone());
+        assert_eq!(original, fingerprint(schema.clone()));
+        for keyword in ["title", "description"] {
+            let mut changed = schema.clone();
+            changed[keyword] = json!("Different text");
+            assert_ne!(original, fingerprint(changed));
+        }
+    }
+}
+
+#[test]
 fn title_and_description_are_fallbacks_with_deterministic_conflict_warnings() {
     let schema = json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",

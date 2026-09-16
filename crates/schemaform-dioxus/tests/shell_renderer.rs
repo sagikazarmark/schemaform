@@ -16,8 +16,8 @@ use dioxus_core::{NoOpMutations, ScopeId, VirtualDom};
 use schemaform::{AdvisorySubmission, FormDefinition, SubmissionSnapshot, form::SubmissionBlocker};
 use schemaform_dioxus::{
     Affordance, AffordanceKind, BoundForm, BuiltinShell, FormHandle, HandleError, Localizer,
-    RenderConfiguration, SchemaForm, ShellContext, ShellRenderer, StructureRenderers,
-    SubmissionMode, render::MessageDescriptor, use_form,
+    NodePresentation, RenderConfiguration, SchemaForm, ShellContext, ShellRenderer,
+    StructureRenderers, SubmissionMode, render::MessageDescriptor, use_form,
 };
 use serde_json::json;
 
@@ -25,6 +25,8 @@ use serde_json::json;
 #[derive(Clone)]
 struct CapturedShell {
     form_id: String,
+    presentation: NodePresentation,
+    heading_id: Option<String>,
     submit: Affordance,
     summary_rendered: bool,
     body_rendered: bool,
@@ -42,12 +44,20 @@ impl ShellRenderer for CapturingShell {
         self.calls.set(self.calls.get() + 1);
         *self.capture.borrow_mut() = Some(CapturedShell {
             form_id: context.form_id.clone(),
+            presentation: context.presentation.clone(),
+            heading_id: context.heading_id.clone(),
             submit: context.submit.clone(),
             summary_rendered: context.summary.is_ok(),
             body_rendered: context.body.is_ok(),
         });
         let submit = context.submit;
         rsx! {
+            if let Some(id) = context.heading_id {
+                h2 { id, "{context.presentation.label}" }
+            }
+            if let Some(help) = context.presentation.help {
+                p { id: help.id, "{help.text}" }
+            }
             div { class: "shell-summary", {context.summary} }
             div { class: "shell-body", {context.body} }
             button {
@@ -110,6 +120,8 @@ fn shell_app(props: ShellAppProps) -> Element {
         FormDefinition::compile(json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "type": "object",
+            "title": "Tell me about yourself",
+            "description": "Share what you would like us to know.",
             "additionalProperties": false,
             "required": ["name"],
             "properties": {
@@ -251,6 +263,19 @@ impl MountedShell {
             self.dom.render_immediate(&mut NoOpMutations);
         }
     }
+}
+
+#[test]
+fn the_shell_receives_the_root_presentation_and_its_heading_association() {
+    let mounted = MountedShell::mount();
+    let shell = mounted.captured();
+    assert_eq!(shell.presentation.element_id, shell.form_id);
+    assert_eq!(shell.presentation.label, "Tell me about yourself");
+    assert!(shell.presentation.label_visible);
+    let help = shell.presentation.help.unwrap();
+    assert_eq!(help.text, "Share what you would like us to know.");
+    assert_eq!(help.id, format!("{}-help", shell.form_id));
+    assert_eq!(shell.heading_id, Some(format!("{}-heading", shell.form_id)));
 }
 
 #[test]

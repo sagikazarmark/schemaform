@@ -964,6 +964,12 @@ impl ShellRenderer for TestShell {
     fn shell(&self, context: ShellContext) -> Element {
         let submit = context.submit;
         rsx! {
+            if let Some(id) = context.heading_id {
+                h2 { id, "{context.presentation.label}" }
+            }
+            if let Some(help) = context.presentation.help {
+                p { id: help.id, "{help.text}" }
+            }
             section { "data-test-shell": "body", {context.body} }
             aside { "data-test-shell": "summary", {context.summary} }
             footer {
@@ -977,6 +983,46 @@ impl ShellRenderer for TestShell {
                     "{submit.label}"
                 }
             }
+        }
+    }
+}
+
+fn titled_shell_test_app(props: TestAppProps) -> Element {
+    root_annotation_test_app(props, Some("Tell me about yourself"))
+}
+
+fn untitled_shell_test_app(props: TestAppProps) -> Element {
+    root_annotation_test_app(props, None)
+}
+
+fn empty_title_shell_test_app(props: TestAppProps) -> Element {
+    root_annotation_test_app(props, Some(""))
+}
+
+fn explicit_form_title_shell_test_app(props: TestAppProps) -> Element {
+    root_annotation_test_app(props, Some("Form"))
+}
+
+fn root_annotation_test_app(props: TestAppProps, title: Option<&str>) -> Element {
+    let mut schema = json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object", "properties": {}, "additionalProperties": false
+    });
+    if let Some(title) = title {
+        schema["title"] = json!(title);
+        schema["description"] = json!("Share what you would like us to know.");
+    }
+    let definition = use_hook(|| FormDefinition::compile(schema).unwrap());
+    let form = use_form(definition, json!({})).unwrap();
+    props
+        .handle
+        .borrow_mut()
+        .get_or_insert_with(|| form.clone());
+    let bound = use_hook(|| RenderConfiguration::default().bind(&form).unwrap());
+    rsx! {
+        SchemaForm {
+            form: bound,
+            on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
         }
     }
 }
@@ -10434,6 +10480,73 @@ async fn rejected_write_resynchronises_hostile_canonical_text_verbatim() {
     assert_eq!(*errors.borrow(), vec![HandleError::BorrowConflict]);
 
     root.remove();
+}
+
+#[wasm_bindgen_test]
+async fn root_titles_label_the_form_through_the_builtin_shell_heading() {
+    for (app, title) in [
+        (
+            titled_shell_test_app as fn(TestAppProps) -> Element,
+            "Tell me about yourself",
+        ),
+        (explicit_form_title_shell_test_app, "Form"),
+    ] {
+        let MountedTestApp { root, .. } = mount_test_app(app).await;
+        let form = root.query_selector("form").unwrap().unwrap();
+        let heading = form
+            .query_selector("h1")
+            .unwrap()
+            .expect("a titled form has a heading");
+        assert_eq!(heading.text_content().as_deref(), Some(title));
+        assert_eq!(form.get_attribute("aria-labelledby"), Some(heading.id()));
+        let help_id = form
+            .get_attribute("aria-describedby")
+            .expect("root help describes the form");
+        let help = form
+            .query_selector(&format!("#{help_id}"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            help.text_content().as_deref(),
+            Some("Share what you would like us to know.")
+        );
+        assert_eq!(form.query_selector_all("h1").unwrap().length(), 1);
+        root.remove();
+    }
+}
+
+#[wasm_bindgen_test]
+async fn untitled_roots_render_no_heading_or_empty_heading_element() {
+    for (app, has_help) in [
+        (
+            untitled_shell_test_app as fn(TestAppProps) -> Element,
+            false,
+        ),
+        (empty_title_shell_test_app, true),
+    ] {
+        let MountedTestApp { root, .. } = mount_test_app(app).await;
+        let form = root.query_selector("form").unwrap().unwrap();
+        assert!(
+            form.query_selector("h1, h2, h3, [role='heading']")
+                .unwrap()
+                .is_none()
+        );
+        assert!(!form.has_attribute("aria-labelledby"));
+        assert!(
+            form.query_selector(&format!("#{}-heading", form.id()))
+                .unwrap()
+                .is_none()
+        );
+        if !has_help {
+            assert!(!form.has_attribute("aria-describedby"));
+            assert_eq!(
+                form.child_element_count(),
+                2,
+                "only summary and submit, without empty chrome"
+            );
+        }
+        root.remove();
+    }
 }
 
 #[wasm_bindgen_test]

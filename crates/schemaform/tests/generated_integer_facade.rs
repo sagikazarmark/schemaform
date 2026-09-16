@@ -331,7 +331,7 @@ fn definition_fingerprints_cover_validation_semantics() {
         }))
         .expect("the trusted data schema should compile")
     };
-    assert_eq!(
+    assert_ne!(
         annotated("first annotation", json!(1)).fingerprint(),
         annotated("second annotation", json!(1)).fingerprint()
     );

@@ -222,7 +222,9 @@ pub struct NodePresentation {
     pub label: String,
     /// Whether the label should be visibly rendered.
     ///
-    /// The label is still required for an accessible name when this is `false`.
+    /// Controls still require the label for an accessible name when this is `false`.
+    /// For the form shell, an untitled root has no heading association; consult
+    /// [`ShellContext::heading_id`].
     pub label_visible: bool,
     /// Localized help text and the DOM id its element must carry, when help exists.
     pub help: Option<Help>,
@@ -602,6 +604,18 @@ pub trait ShellRenderer: 'static {
 pub struct ShellContext {
     /// DOM `id` of the adapter-owned `<form>` element that contains the shell's output.
     pub form_id: String,
+    /// Localized presentation of the definition root. Its primary element is the
+    /// adapter-owned form; the shell must place its help (with the supplied id,
+    /// referenced by the form's `aria-describedby`) and heading.
+    ///
+    /// An untitled root retains the core's `"Form"` fallback with `label_visible = false`.
+    /// The summary already presents root findings, so the shell need not repeat them.
+    pub presentation: NodePresentation,
+    /// The heading id referenced by the form's `aria-labelledby`, when a title exists.
+    ///
+    /// When `Some`, the shell must emit an element carrying this id and the presentation's
+    /// label. When `None`, there is no heading or form label association to place.
+    pub heading_id: Option<String>,
     /// The finding summary region, including its adapter-owned wrapper element.
     ///
     /// The wrapper carries `{form_id}-summary`, `role="region"`, a localized `aria-label`,
@@ -624,12 +638,14 @@ impl fmt::Debug for ShellContext {
         formatter
             .debug_struct("ShellContext")
             .field("form_id", &self.form_id)
+            .field("presentation", &self.presentation)
+            .field("heading_id", &self.heading_id)
             .field("submit", &self.submit)
             .finish_non_exhaustive()
     }
 }
 
-/// The built-in form shell: summary, body, then a `type="submit"` button.
+/// The built-in form shell: root heading and help, summary, body, then a `type="submit"` button.
 ///
 /// The button carries the submit affordance's id and label and submits through the form
 /// element, so pressing Enter in a text control and clicking the button take the same path.
@@ -639,6 +655,12 @@ pub struct BuiltinShell;
 impl ShellRenderer for BuiltinShell {
     fn shell(&self, context: ShellContext) -> Element {
         dioxus::prelude::rsx! {
+            if let Some(id) = context.heading_id {
+                h1 { id, "{context.presentation.label}" }
+            }
+            if let Some(help) = context.presentation.help {
+                p { id: help.id, "{help.text}" }
+            }
             {context.summary}
             {context.body}
             button { id: context.submit.id.clone(), r#type: "submit", "{context.submit.label}" }
@@ -1457,6 +1479,7 @@ impl RenderConfiguration {
                 )
             })
             .collect();
+        let root = root.identity();
         drop(core_form);
 
         if !findings.is_empty() {
@@ -1465,6 +1488,7 @@ impl RenderConfiguration {
         Ok(BoundForm {
             inner: Rc::new(BoundFormInner {
                 handle: form.clone(),
+                root,
                 form_id: format!("schemaform-{bound_form_id}"),
                 nodes,
                 structure: self.structure.clone(),
@@ -1779,6 +1803,7 @@ pub struct BoundForm {
 }
 
 pub(crate) struct BoundFormInner {
+    pub(crate) root: InstanceIdentity,
     pub(crate) handle: FormHandle,
     pub(crate) form_id: String,
     pub(crate) nodes: Vec<BoundNode>,

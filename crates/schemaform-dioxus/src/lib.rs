@@ -186,12 +186,28 @@ pub fn SchemaForm(props: SchemaFormProps) -> Element {
         submit,
         &scope,
     );
+    let handle = props.form.handle();
+    let Some(mut root) = handle
+        .node(props.form.inner.root)
+        .ok()
+        .flatten()
+        .and_then(|reader| reader.read().ok().flatten())
+    else {
+        return rsx! {};
+    };
+    localize_node_text(&props.form, &mut root);
+    let presentation = node_presentation(&props.form, &root, &form_id, Vec::new(), None);
+    let heading_id = (presentation.label_visible && !presentation.label.is_empty())
+        .then(|| format!("{form_id}-heading"));
+    let help_id = presentation.help.as_ref().map(|help| help.id.clone());
     let contents = props
         .form
         .inner
         .structure
         .render_shell(render::ShellContext {
             form_id: form_id.clone(),
+            presentation,
+            heading_id: heading_id.clone(),
             summary: rsx! { FindingSummary { form: props.form.clone() } },
             body: rsx! { FormBody { form: props.form.clone() } },
             submit: submit_affordance,
@@ -220,6 +236,8 @@ pub fn SchemaForm(props: SchemaFormProps) -> Element {
         form {
             id: form_id,
             class: "schemaform",
+            "aria-labelledby": heading_id,
+            "aria-describedby": help_id,
             "data-schemaform": "",
             novalidate: true,
             tabindex: "-1",
