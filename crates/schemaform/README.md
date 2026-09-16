@@ -291,17 +291,24 @@ creation, and the seeded data is the baseline: seeded controls are neither
 touched nor dirty, `reset` restores the seeded data, and the revisions start
 where an equivalently seeded `create_form` would. The rules are:
 
-- Only absent scalars inside objects the data already holds are seeded. An
-  absent optional object stays absent even when it declares its own `default`
-  — `shipping` above — and an array's item defaults apply to the items the data
-  holds, never to items that do not exist.
+- Every absent leaf control — scalar, choice, or multiple choice — inside an
+  object the data already holds is seeded from its property-level `default`.
+  A multiple choice with `"default": ["a"]` starts as `["a"]`, just as a string
+  with `"default": "Ada"` starts as `"Ada"`.
+- Containers are outside this policy: an absent optional object — `shipping`
+  above — or plain homogeneous array stays absent even with its own `default`.
+  Whether property-level defaults should also seed optional objects and
+  homogeneous arrays of rows is an open, separate decision. An array's
+  item-level defaults apply only within items the data already holds, never
+  inventing items that do not exist.
 - Host-supplied data wins. A member present in the form data the host
-  supplies is never overwritten, including a present `null`.
+  supplies is never overwritten, including a present `null` or `[]`.
 - A `default` that does not satisfy its own data schema is seeded anyway and
   reported as a finding, exactly as if the user had typed it. A `null` default
   on a nullable scalar is seeded as `null`. The core does not second-guess an
-  authored default; it says so.
-- A scalar whose applicable data schemas declare two different defaults has
+  authored default; it says so. Multiple-choice defaults with non-option
+  members, duplicates, or too many items are likewise seeded and reported.
+- A leaf control whose applicable data schemas declare two different defaults has
   no single authored default and is left absent.
 - Seeding follows the data schema, not the UI schema: a control an authored
   layout omits is still seeded, because `default` describes the data.

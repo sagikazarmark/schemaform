@@ -68,8 +68,9 @@ fn App() -> Element {
 `use_form` constructs one browser-local `FormHandle`. It never seeds defaults:
 absent optional members stay absent until the user or the host puts something
 there. `use_form_with_defaults` is the same hook over the core's
-`create_form_with_defaults`, for a host that wants every absent scalar seeded
-from its data-schema `default` at creation; the seeded data is the baseline, so
+`create_form_with_defaults`, for a host that wants every absent leaf control
+(scalar, choice, or multiple choice) seeded from its property-level data-schema
+`default` at creation; the seeded data is the baseline, so
 those controls start neither touched nor dirty and `reset` restores them. The
 core README's [Defaults](../schemaform/README.md#defaults) section records what
 is and is not seeded and why the library never seeds on its own.

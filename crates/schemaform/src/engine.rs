@@ -290,20 +290,28 @@ impl FormDefinition {
             .is_some_and(|title| !title.is_empty())
     }
 
-    /// Fills every absent scalar control whose parent object exists in
+    /// Fills every absent leaf control whose parent object exists in
     /// `form_data` with its single declared `default`.
     ///
     /// Present members are never overwritten, including a present `null`.
-    /// Absent objects and arrays stay absent; item-template controls are
-    /// seeded only inside array items the data already holds. A scalar whose
+    /// Multiple choices use their property-level default; absent containers
+    /// stay absent. Item-template controls are seeded only inside array items
+    /// the data already holds. A leaf control whose
     /// applicable schemas declare more than one distinct `default` is skipped.
     /// The seeded value is not checked against its schema: an authored default
     /// that violates it is seeded anyway and left for validation to report.
     pub fn seed_defaults(&self, form_data: &mut Value) {
         for control in &self.controls {
-            seed_control_default(control, &control.binding, form_data);
+            seed_control_default(
+                &control.presentation.annotations,
+                &control.binding,
+                form_data,
+            );
         }
         for array in &self.arrays {
+            if array.is_multiple_choice() {
+                seed_control_default(&array.presentation.annotations, &array.binding, form_data);
+            }
             let item_count = array
                 .binding
                 .resolve(form_data)
@@ -314,7 +322,7 @@ impl FormDefinition {
                 let item = array_item_pointer(&array.binding, index);
                 for control in &array.item_template.controls {
                     let binding = append_relative_pointer(&item, &control.binding);
-                    seed_control_default(control, &binding, form_data);
+                    seed_control_default(&control.presentation.annotations, &binding, form_data);
                 }
             }
         }
@@ -5407,10 +5415,14 @@ fn binding_parent_is_object(binding: &PointerBuf, form_data: &Value) -> bool {
         .is_some_and(Value::is_object)
 }
 
-/// Inserts `control`'s single declared `default` at `binding` when the binding
+/// Inserts the control's single declared `default` at `binding` when the binding
 /// is absent from `form_data` and its parent is a present object.
-fn seed_control_default(control: &ControlDefinition, binding: &PointerBuf, form_data: &mut Value) {
-    let [default] = control.presentation.annotations.defaults.as_slice() else {
+fn seed_control_default(
+    annotations: &DataSchemaAnnotations,
+    binding: &PointerBuf,
+    form_data: &mut Value,
+) {
+    let [default] = annotations.defaults.as_slice() else {
         return;
     };
     if !binding_parent_is_object(binding, form_data) || binding.resolve(form_data).is_ok() {

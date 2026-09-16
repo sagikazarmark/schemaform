@@ -137,5 +137,5 @@ A homogeneous array that asserts `uniqueItems` over a finite item choice — an 
 _Avoid_: Multi-select, checkbox group, tag list, set control
 
 **Default seeding**:
-An opt-in, creation-time policy that fills every absent scalar control inside an object the form data already holds with its single declared `default`, producing the form's baseline. The library never seeds implicitly; host-supplied members — including a present `null` — are never overwritten, absent objects and array items are never invented, and a seeded default that violates its own schema is reported as a finding rather than corrected.
+An opt-in, creation-time policy that fills every absent leaf control — scalar, choice, or multiple choice — inside an object the form data already holds with its single property-level `default`, producing the form's baseline. The library never seeds implicitly; host-supplied members — including a present `null` or `[]` — are never overwritten, absent containers and item-level defaults never invent array items, and a seeded default that violates its own schema is reported as a finding rather than corrected.
 _Avoid_: Pre-fill, auto-defaults, initial values, default materialization

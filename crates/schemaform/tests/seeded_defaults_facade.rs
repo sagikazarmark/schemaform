@@ -7,6 +7,155 @@ use schemaform::{
 use serde_json::json;
 
 #[test]
+fn a_seeded_multiple_choice_is_an_untouched_baseline_that_reset_restores() {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "tags": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "enum": ["a", "b"] },
+                "default": ["a"]
+            }
+        }
+    }))
+    .expect("the multiple-choice data schema should compile");
+
+    let mut form = definition
+        .create_form_with_defaults(json!({}))
+        .expect("the seeded form should be created");
+    assert_eq!(form.form_data(), &json!({ "tags": ["a"] }));
+    let tags = node_with_binding(&form, "/tags");
+    let node = form.node(tags).expect("the multiple choice should exist");
+    assert!(!node.is_touched());
+    assert!(!node.is_dirty());
+    let items = node.children().collect::<Vec<_>>();
+    assert_eq!(items.len(), 1);
+
+    form.user()
+        .toggle_choice(tags, json!("a"))
+        .expect("the seeded option should be removable");
+    assert_eq!(form.form_data(), &json!({ "tags": [] }));
+    assert!(
+        form.node(tags)
+            .expect("the control should exist")
+            .is_dirty()
+    );
+
+    form.reset();
+    assert_eq!(form.form_data(), &json!({ "tags": ["a"] }));
+    let node = form.node(tags).expect("the multiple choice should exist");
+    assert!(!node.is_touched());
+    assert!(!node.is_dirty());
+    assert_eq!(node.children().collect::<Vec<_>>(), items);
+}
+
+#[test]
+fn host_supplied_multiple_choices_win_over_the_default_including_empty_arrays() {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "tags": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "enum": ["a", "b"] },
+                "default": ["a"]
+            }
+        }
+    }))
+    .expect("the multiple-choice data schema should compile");
+
+    for supplied in [json!([]), json!(["b"]), json!(null)] {
+        let form_data = json!({ "tags": supplied });
+        let form = definition
+            .create_form_with_defaults(form_data.clone())
+            .expect("host-supplied data should remain constructible");
+        assert_eq!(form.form_data(), &form_data);
+    }
+}
+
+#[test]
+fn invalid_multiple_choice_defaults_are_seeded_and_reported_without_correction() {
+    for (default, expected_location, expected_code) in [
+        (json!(["unknown"]), "/tags/0", "enum"),
+        (json!(["a", "a"]), "/tags", "uniqueItems"),
+        (json!(["a", "b", "c"]), "/tags", "maxItems"),
+        (json!(null), "/tags", "type"),
+    ] {
+        let definition = FormDefinition::compile(json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "maxItems": 2,
+                    "items": { "enum": ["a", "b", "c"] },
+                    "default": default
+                }
+            }
+        }))
+        .expect("invalid defaults are annotations and should compile");
+        let mut form = definition
+            .create_form_with_defaults(json!({}))
+            .expect("the seeded form should be created");
+
+        assert_eq!(form.form_data(), &json!({ "tags": default }));
+        let view = form.view();
+        let ValidationOutcomeView::Invalid { findings, .. } = view.validation_outcome() else {
+            panic!("the invalid multiple-choice default should produce a finding");
+        };
+        assert_eq!(
+            findings
+                .iter()
+                .map(|finding| (finding.instance_location().as_str(), finding.code()))
+                .collect::<Vec<_>>(),
+            [(expected_location, expected_code)]
+        );
+        assert!(matches!(
+            form.prepare_submission().outcome(),
+            SubmissionOutcome::Blocked(_)
+        ));
+    }
+}
+
+#[test]
+fn an_array_default_is_not_seeded_without_multiple_choice_recognition() {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "tags": {
+                "type": "array",
+                "items": { "enum": ["a", "b"] },
+                "default": ["a"]
+            },
+            "unseeded": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "enum": ["a", "b"], "default": "a" }
+            }
+        }
+    }))
+    .expect("the array data schema should compile");
+    let form = definition
+        .create_form_with_defaults(json!({}))
+        .expect("the form should be created");
+
+    assert_eq!(
+        form.form_data(),
+        &json!({}),
+        "plain array defaults and item-level defaults do not create absent arrays"
+    );
+}
+
+#[test]
 fn seeding_fills_absent_scalars_from_their_default_and_leaves_present_members_alone() {
     let definition = FormDefinition::compile(json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -314,7 +463,15 @@ fn create_form_and_the_plain_builder_never_seed_defaults() {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-            "name": { "type": "string", "default": "Ada" }
+            "name": { "type": "string", "default": "Ada" },
+            "tags": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                    "oneOf": [{ "const": "a" }, { "const": "b" }]
+                },
+                "default": ["a"]
+            }
         }
     }))
     .expect("the data schema should compile");
@@ -335,7 +492,7 @@ fn create_form_and_the_plain_builder_never_seed_defaults() {
 
     assert_eq!(plain.form_data(), &json!({}));
     assert_eq!(built.form_data(), &json!({}));
-    assert_eq!(seeded.form_data(), &json!({ "name": "Ada" }));
+    assert_eq!(seeded.form_data(), &json!({ "name": "Ada", "tags": ["a"] }));
 }
 
 #[test]

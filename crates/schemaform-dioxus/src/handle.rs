@@ -433,7 +433,8 @@ pub fn use_form(
     use_form_created_by(move || definition.create_form(form_data))
 }
 
-/// Creates one client-local [`FormHandle`] whose absent scalars are seeded from their `default`.
+/// Creates one client-local [`FormHandle`] whose absent leaf controls are seeded from their
+/// property-level `default`, including multiple choices.
 ///
 /// This is [`use_form`] over [`FormDefinition::create_form_with_defaults`]: the seeded data is
 /// the form's baseline, so seeded controls start neither touched nor dirty and
