@@ -45,7 +45,7 @@
         { "profile_id": "validation.enum.static", "construct": "enum", "classification": "editing", "locations": ["root#/properties/type/enum"] },
         { "profile_id": "validation.required", "construct": "required", "classification": "editing", "locations": ["country#/required"] },
         { "profile_id": "applicator.properties.fixed", "construct": "properties", "classification": "editing", "locations": ["root#/properties"] },
-        { "profile_id": "applicator.additional-properties.open", "construct": "additionalProperties", "classification": "warning", "locations": ["country#/additionalProperties", "root#/additionalProperties"] },
+        { "profile_id": "applicator.additional-properties.open", "construct": "additionalProperties", "classification": "info", "locations": ["country#/additionalProperties", "root#/additionalProperties"] },
         { "profile_id": "metadata.title", "construct": "title", "classification": "annotation", "locations": ["root#/title"] },
         { "profile_id": "metadata.description", "construct": "description", "classification": "annotation", "locations": ["root#/description"] }
       ],
@@ -64,7 +64,7 @@
         "layouts": ["fixed-object", "nested-object"],
         "generation_alone": "sufficient",
         "authored_ui_needs": [],
-        "capability_findings": [{ "profile_id": "applicator.additional-properties.open", "schema_location": "root#/additionalProperties", "instance_location": "", "parameters": { "implicit": false }, "classification": "warning" }, { "profile_id": "applicator.additional-properties.open", "schema_location": "country#/additionalProperties", "instance_location": "/country", "parameters": { "implicit": false }, "classification": "warning" }]
+        "capability_findings": [{ "profile_id": "applicator.additional-properties.open", "schema_location": "root#/additionalProperties", "instance_location": "", "parameters": { "implicit": false }, "classification": "info" }, { "profile_id": "applicator.additional-properties.open", "schema_location": "country#/additionalProperties", "instance_location": "/country", "parameters": { "implicit": false }, "classification": "info" }]
       }
     },
     {
@@ -923,7 +923,7 @@
         { "profile_id": "validation.type.editable", "construct": "type", "classification": "editing", "locations": ["root#/type"] },
         { "profile_id": "validation.required", "construct": "required", "classification": "editing", "locations": ["root#/required"] },
         { "profile_id": "applicator.properties.fixed", "construct": "properties", "classification": "editing", "locations": ["root#/properties"] },
-        { "profile_id": "applicator.additional-properties.open", "construct": "additionalProperties", "classification": "warning", "locations": ["credential#/additionalProperties", "postal#/additionalProperties", "root#/additionalProperties"] },
+        { "profile_id": "applicator.additional-properties.open", "construct": "additionalProperties", "classification": "info", "locations": ["credential#/additionalProperties", "postal#/additionalProperties", "root#/additionalProperties"] },
         { "profile_id": "applicator.additional-properties.dynamic-map", "construct": "additionalProperties", "classification": "capability-blocking", "locations": ["root#/properties/display/additionalProperties"] },
         { "profile_id": "metadata.title", "construct": "title", "classification": "annotation", "locations": ["root#/title"] },
         { "profile_id": "metadata.description", "construct": "description", "classification": "annotation", "locations": ["root#/description"] }
@@ -943,7 +943,7 @@
         "layouts": ["fixed-object", "nested-object", "unsupported"],
         "generation_alone": "capability-blocked",
         "authored_ui_needs": ["grouping", "widget-selection"],
-        "capability_findings": [{ "profile_id": "applicator.additional-properties.open", "schema_location": "root#/additionalProperties", "instance_location": "", "parameters": { "implicit": false }, "classification": "warning" }, { "profile_id": "applicator.additional-properties.open", "schema_location": "postal#/additionalProperties", "instance_location": "/billing_address", "parameters": { "implicit": false }, "classification": "warning" }, { "profile_id": "applicator.additional-properties.open", "schema_location": "credential#/additionalProperties", "instance_location": "/credential", "parameters": { "implicit": false }, "classification": "warning" }, { "profile_id": "applicator.additional-properties.dynamic-map", "schema_location": "root#/properties/display/additionalProperties", "instance_location": "/display", "parameters": { "implicit": false }, "classification": "capability-blocking" }]
+        "capability_findings": [{ "profile_id": "applicator.additional-properties.open", "schema_location": "root#/additionalProperties", "instance_location": "", "parameters": { "implicit": false }, "classification": "info" }, { "profile_id": "applicator.additional-properties.open", "schema_location": "postal#/additionalProperties", "instance_location": "/billing_address", "parameters": { "implicit": false }, "classification": "info" }, { "profile_id": "applicator.additional-properties.open", "schema_location": "credential#/additionalProperties", "instance_location": "/credential", "parameters": { "implicit": false }, "classification": "info" }, { "profile_id": "applicator.additional-properties.dynamic-map", "schema_location": "root#/properties/display/additionalProperties", "instance_location": "/display", "parameters": { "implicit": false }, "classification": "capability-blocking" }]
       }
     },
     {

@@ -161,6 +161,10 @@ absent but do not accept null. Schema-valued additional properties and pattern
 properties warn when the declared projection is fixed, and block when they are
 required to determine the editable members.
 
+Ordinary open fixed objects (omitted `additionalProperties` or `true`) report an
+informational capability finding for hosts. The default adapter omits it from
+reader-facing presentation; undeclared members are preserved and validated.
+
 Homogeneous array composition and collection actions stay adapter-owned, so the
 Dioxus adapter rejects array-level widget requests during render binding while
 still preflighting inline item templates. Eligible item controls may use custom

@@ -680,6 +680,8 @@ pub mod definition {
                         parameters: finding.parameters().clone(),
                         severity: if finding.is_blocking() {
                             CapabilitySeverity::Blocking
+                        } else if finding.code() == "applicator.additional-properties.open" {
+                            CapabilitySeverity::Info
                         } else {
                             CapabilitySeverity::Warning
                         },
@@ -1982,7 +1984,7 @@ pub mod definition {
         /// Strictly compiles the configured inputs into a reusable definition.
         ///
         /// Unlike [`Self::analyze`], this returns [`CompileError::Capability`] if
-        /// the resulting report contains any blocking finding. Warnings remain on
+        /// the resulting report contains any blocking finding. Advisories remain on
         /// the returned definition. Compilation performs no network or other I/O.
         pub fn compile(self) -> Result<FormDefinition, CompileError> {
             FormDefinition::require_no_blocking_capabilities(self.analyze_definition()?)
@@ -3047,8 +3049,8 @@ pub mod definition {
     /// Deterministically ordered diagnostics about semantics the runtime cannot
     /// represent completely.
     ///
-    /// Warnings preserve operation; blocking findings make strict compilation or
-    /// submission unavailable.
+    /// Informational findings and warnings preserve operation; blocking findings
+    /// make strict compilation or submission unavailable.
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct CapabilityReport {
         findings: Vec<CapabilityFinding>,
@@ -3093,11 +3095,16 @@ pub mod definition {
         severity: CapabilitySeverity,
     }
 
-    /// Whether a capability finding is advisory or prevents strict operation.
+    /// The significance of a capability finding and its effect on strict operation.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     #[non_exhaustive]
     pub enum CapabilitySeverity {
+        /// A supported projection boundary useful to hosts, omitted from ordinary
+        /// reader-facing presentation by the default adapter.
+        Info,
+        /// An authored construct cannot be fully presented, but operation remains available.
         Warning,
+        /// Strict compilation and gated submission are unavailable.
         Blocking,
     }
 
@@ -3159,7 +3166,7 @@ pub mod definition {
             &self.parameters
         }
 
-        /// Returns the finding's effect on strict compilation and submission.
+        /// Returns the finding's significance for presentation and strict operation.
         pub fn severity(&self) -> CapabilitySeverity {
             self.severity
         }
@@ -3179,7 +3186,7 @@ pub mod definition {
         profile: &CompilationProfile,
     ) -> DefinitionFingerprint {
         let mut hasher = Sha256::new();
-        hasher.update(b"schemaform-definition-v21\0");
+        hasher.update(b"schemaform-definition-v22\0");
         hash_bytes(&mut hasher, engine.fingerprint_bytes());
         hash_bytes(&mut hasher, root_uri.as_str().as_bytes());
         for maximum in profile.ui_schema_limits().values() {
@@ -3320,7 +3327,11 @@ pub mod definition {
                 finding.keyword_location().pointer().as_str().as_bytes(),
             );
             hash_bytes(&mut hasher, finding.parameters().to_string().as_bytes());
-            hasher.update([finding.is_blocking() as u8]);
+            hasher.update([match finding.severity() {
+                CapabilitySeverity::Info => 0,
+                CapabilitySeverity::Warning => 1,
+                CapabilitySeverity::Blocking => 2,
+            }]);
         }
         DefinitionFingerprint(hasher.finalize().into())
     }

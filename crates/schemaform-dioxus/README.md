@@ -522,6 +522,12 @@ paragraph for root help, summary, body, then a `type="submit"` button carrying
 the affordance's id and label. An absent or empty title produces no heading
 element or `aria-labelledby` attribute.
 
+Informational capability findings, including ordinary open fixed objects, are
+omitted from the adapter's summary and local node presentation. They create no
+finding focus actions or `aria-describedby` references. Hosts can still inspect
+them in the definition's capability report and the form handle's projections;
+warnings and blocking findings retain their normal presentation.
+
 ```rust
 use dioxus::prelude::*;
 use schemaform_dioxus::{

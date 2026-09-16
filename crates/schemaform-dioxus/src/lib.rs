@@ -326,6 +326,12 @@ fn FindingSummary(props: BoundFormProps) -> Element {
     let summary_findings = projection
         .findings
         .iter()
+        .filter(|finding| match finding {
+            handle::FindingProjection::Capability { finding, .. } => {
+                present_capability_finding(finding)
+            }
+            _ => true,
+        })
         .map(|finding| {
             let target = match finding {
                 handle::FindingProjection::Validation { target, .. }
@@ -2335,6 +2341,12 @@ fn validation_descriptors(
         .collect()
 }
 
+// Filter before creating descriptors so local ARIA references and summary focus
+// actions only name findings the reader is offered. Host projections retain Info.
+fn present_capability_finding(finding: &schemaform::CapabilityFinding) -> bool {
+    finding.severity() != schemaform::CapabilitySeverity::Info
+}
+
 fn capability_descriptors(
     form: &render::BoundForm,
     projection: &handle::NodeProjection,
@@ -2343,6 +2355,7 @@ fn capability_descriptors(
     projection
         .capability_findings
         .iter()
+        .filter(|finding| present_capability_finding(finding))
         .map(|finding| {
             let mut descriptor = capability_descriptor(form, finding);
             descriptor.stable_id = capability_finding_stable_id(stable_id_prefix, finding);

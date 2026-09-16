@@ -6,6 +6,7 @@
     "editing",
     "validation-only",
     "annotation",
+    "info",
     "warning",
     "capability-blocking"
   ],
@@ -151,7 +152,7 @@
         "path": "crates/schemaform/tests/open_object_facade.rs",
         "platforms": ["native"],
         "tests": [
-          "open_fixed_objects_compile_with_deterministic_nonblocking_warnings",
+          "open_fixed_objects_compile_with_deterministic_informational_findings",
           "undeclared_form_data_survives_edits_lifecycle_operations_and_submission",
           "stock_validation_remains_authoritative_for_undeclared_members"
         ]
@@ -380,7 +381,7 @@
           "applicator.property-names"
         ],
         "tests": [
-          "open-object-facade::open_fixed_objects_compile_with_deterministic_nonblocking_warnings",
+          "open-object-facade::open_fixed_objects_compile_with_deterministic_informational_findings",
           "open-object-facade::stock_validation_remains_authoritative_for_undeclared_members",
           "fixed-object-profile::fixed_projection_map_constraints_warn_and_preserve_undeclared_data"
         ]
@@ -1170,7 +1171,7 @@
       "id": "applicator.additional-properties.open",
       "construct": "additionalProperties",
       "context": "Open object with an independently fixed declared projection",
-      "target": "warning",
+      "target": "info",
       "current": "implemented"
     },
     {
