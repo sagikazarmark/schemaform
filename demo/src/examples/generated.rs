@@ -65,7 +65,7 @@ pub fn GeneratedControlsExample() -> Element {
 enum DefaultPolicy {
     /// The library's own position: nothing is seeded.
     LeaveAbsent,
-    /// Every absent scalar is seeded from its `default` at creation.
+    /// Every absent leaf control is seeded from its property-level `default` at creation.
     SeedDefaults,
 }
 

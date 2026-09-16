@@ -885,16 +885,17 @@ pub mod definition {
         }
 
         /// Creates form state like [`Self::create_form`], first seeding every
-        /// absent scalar from its declared `default`.
+        /// absent leaf control from its property-level `default`.
         ///
         /// The seeded data is the form's baseline: seeded controls are neither
         /// touched nor dirty, `reset` restores them, and the data revision
         /// starts where an equivalently seeded [`Self::create_form`] would.
-        /// Only absent scalars inside objects the data already holds are
-        /// seeded; a member the host supplied — including `null` — is never
-        /// overwritten, an absent optional object stays absent, and array item
-        /// defaults apply only to items that exist. A default that violates its
-        /// own schema is seeded anyway and reported as a finding. See
+        /// Leaf controls include scalars, choices, and multiple choices inside
+        /// objects the data already holds. A member the host supplied — including
+        /// `null` or `[]` — is never overwritten. Absent optional objects and
+        /// plain homogeneous arrays stay absent; array item defaults apply only
+        /// to items that exist. A default that violates its own data schema is
+        /// seeded anyway and reported as a finding. See
         /// [`FormBuilder::seed_defaults`] to combine seeding with other
         /// construction options.
         pub fn create_form_with_defaults(&self, form_data: Value) -> Result<Form, FormBuildError> {
@@ -4913,7 +4914,7 @@ pub mod form {
             }
         }
 
-        /// Seeds every absent scalar from its declared `default` before the
+        /// Seeds every absent leaf control from its property-level `default` before the
         /// data becomes the form's baseline.
         ///
         /// Off unless requested: the library never seeds defaults on its own. See
