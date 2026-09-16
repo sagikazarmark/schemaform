@@ -1,4 +1,4 @@
-use schemaform::{FormCompiler, FormDefinition, RetrievalUri, SchemaResource};
+use schemaform::{CapabilitySeverity, FormCompiler, FormDefinition, RetrievalUri, SchemaResource};
 use serde_json::Value;
 
 pub const MANIFEST_SOURCE: &str = include_str!("manifest.json");
@@ -105,7 +105,7 @@ pub struct ExpectedCapabilityFinding {
     pub resource_uri: String,
     pub keyword_pointer: String,
     pub parameters: Value,
-    pub blocking: bool,
+    pub severity: CapabilitySeverity,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -199,7 +199,14 @@ fn load_fixture(fixture: &Value) -> BusinessSchemaFixture {
                 resource_uri: resource_uri(resource_name).to_owned(),
                 keyword_pointer: keyword_pointer.to_owned(),
                 parameters: finding["parameters"].clone(),
-                blocking: string(finding, "classification") == "capability-blocking",
+                severity: match string(finding, "classification") {
+                    "info" => CapabilitySeverity::Info,
+                    "warning" => CapabilitySeverity::Warning,
+                    "capability-blocking" => CapabilitySeverity::Blocking,
+                    classification => {
+                        panic!("fixture {id} has unknown finding classification {classification}")
+                    }
+                },
             }
         })
         .collect::<Vec<_>>();

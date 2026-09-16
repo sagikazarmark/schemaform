@@ -109,6 +109,17 @@ graph, an authored UI schema, a default dialect for known inputs, or custom
 finite limits. Resource retrieval is denied; referenced resources must be
 provided by the application.
 
+Open fixed objects compile strictly. Omitting `additionalProperties` or setting
+it to `true` produces an `Info`-severity capability finding,
+`applicator.additional-properties.open`: declared properties are editable, and
+undeclared members are preserved and validated through edits, reset, and
+submission. Hosts can inspect the finding through `capability_findings()`; the
+default Dioxus presentation omits informational capability findings.
+Schema-valued additional properties and pattern properties still produce
+warnings when the editable projection is fixed, and unsupported dynamic-key
+editing remains blocking. Adding `additionalProperties: false` changes which
+form data is valid; use it only when undeclared members should be rejected.
+
 ## Outcomes And Errors
 
 | Stage | Public result |

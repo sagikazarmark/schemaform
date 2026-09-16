@@ -153,10 +153,11 @@ fn support_profile_is_complete_and_matches_corpus_classifications() {
             "editing",
             "validation-only",
             "annotation",
+            "info",
             "warning",
             "capability-blocking",
         ]),
-        "the support profile should expose exactly the five capability outcomes"
+        "the support profile should expose exactly the six capability outcomes"
     );
     let current_states = support_profile["current_states"]
         .as_array()
@@ -331,7 +332,7 @@ fn support_profile_is_complete_and_matches_corpus_classifications() {
         ),
         (
             "applicator.additional-properties.open",
-            "warning",
+            "info",
             "implemented",
         ),
         (
@@ -1098,7 +1099,7 @@ fn fixtures_record_reproducible_shape_and_expected_form_behavior() {
                         .expect("each occurrence profile should be declared by the fixture");
                     matches!(
                         required_string(construct, "classification"),
-                        "warning" | "capability-blocking"
+                        "info" | "warning" | "capability-blocking"
                     )
                     .then_some((profile_id.to_owned(), occurrence.location.clone()))
                 })
@@ -1136,7 +1137,7 @@ fn fixtures_record_reproducible_shape_and_expected_form_behavior() {
         }
         assert_eq!(
             finding_keys, expected_findings,
-            "fixture {id} should record one finding for every warning or blocking construct occurrence"
+            "fixture {id} should record one finding for every informational, warning or blocking construct occurrence"
         );
         assert_eq!(
             generation == "capability-blocked",

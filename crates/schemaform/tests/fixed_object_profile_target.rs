@@ -663,6 +663,16 @@ fn fixed_projection_map_constraints_warn_and_preserve_undeclared_data() {
                     .all(|finding| finding.instance_location().as_str().is_empty())
             );
             assert!(findings.iter().all(|finding| !finding.is_blocking()));
+            for finding in findings {
+                assert_eq!(
+                    finding.severity(),
+                    if finding.code() == "applicator.additional-properties.open" {
+                        schemaform::CapabilitySeverity::Info
+                    } else {
+                        schemaform::CapabilitySeverity::Warning
+                    }
+                );
+            }
         }
 
         let form_data = json!({ "name": "Ada", "x-extra": 7 });

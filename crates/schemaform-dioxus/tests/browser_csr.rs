@@ -8031,34 +8031,32 @@ async fn unsupported_one_of_region_is_presented_and_blocks_browser_submission() 
 }
 
 #[wasm_bindgen_test]
-async fn open_object_warning_is_accessible_and_does_not_block_browser_submission() {
+async fn open_object_info_is_inspectable_but_hidden_and_does_not_block_browser_submission() {
     let MountedTestApp {
         root,
         form_handle,
         submitted,
     } = mount_test_app(open_object_test_app).await;
-    let warning = root
-        .query_selector(
-            "[data-capability-finding='applicator.additional-properties.open'][data-blocking='false']",
-        )
-        .expect("the capability-warning selector should be valid")
-        .expect("the open-object warning should render in the form summary");
-    assert!(warning.text_content().is_some_and(|text| {
-        text.contains("Undeclared properties are preserved and validated")
-            && text.contains("arbitrary-key editing is unavailable")
-    }));
-    warning
-        .query_selector("button")
-        .expect("the warning focus-action selector should be valid")
-        .expect("the summary warning should expose a focus action")
-        .dyn_into::<web_sys::HtmlElement>()
-        .expect("the focus action should be an HTML button")
-        .click();
-    wait_for_focus_on(
-        &warning.closest("form").unwrap().unwrap().id(),
-        "the summary warning focus action",
-    )
-    .await;
+    assert!(
+        root.query_selector("[data-capability-finding='applicator.additional-properties.open']")
+            .expect("the capability-finding selector should be valid")
+            .is_none(),
+        "informational openness should produce neither local findings nor summary focus actions"
+    );
+    assert!(
+        form_handle
+            .reader()
+            .read()
+            .expect("form should be readable")
+            .findings
+            .iter()
+            .any(|finding| matches!(
+                finding,
+                schemaform_dioxus::handle::FindingProjection::Capability { finding, .. }
+                    if finding.code() == "applicator.additional-properties.open"
+                        && finding.severity() == schemaform::CapabilitySeverity::Info
+            ))
+    );
 
     let name = input_with_binding(&root, "/name");
     dispatch_input(&name, "Grace");
@@ -8263,14 +8261,12 @@ async fn nested_local_reference_edits_validates_and_submits_in_the_browser() {
         .query_selector("fieldset[data-schemaform-fixed-object]")
         .expect("the fixed-object selector should be valid")
         .expect("the nested fixed object should render as a semantic group");
-    let summary_action = root
-        .query_selector("[data-capability-finding='applicator.additional-properties.open'] button")
-        .expect("the nested warning summary-action selector should be valid")
-        .expect("the nested warning should have a summary focus action")
-        .dyn_into::<web_sys::HtmlElement>()
-        .expect("the nested warning summary action should be an HTML button");
-    summary_action.click();
-    wait_for_focus_on(&group.id(), "the nested warning summary action").await;
+    assert!(
+        root.query_selector("[data-capability-finding='applicator.additional-properties.open']")
+            .expect("the nested informational-finding selector should be valid")
+            .is_none()
+    );
+    assert_eq!(group.get_attribute("aria-describedby"), None);
     assert_eq!(
         group
             .query_selector("legend")
@@ -8340,14 +8336,10 @@ async fn nested_local_reference_edits_validates_and_submits_in_the_browser() {
             .expect("the group finding selector should be valid")
     })
     .await;
-    let group_warning = group
-        .query_selector("[data-capability-finding='applicator.additional-properties.open']")
-        .expect("the group warning selector should be valid")
-        .expect("the nested open-object warning should be presented locally");
     assert_eq!(group.get_attribute("aria-invalid").as_deref(), Some("true"));
     assert_eq!(
         group.get_attribute("aria-describedby").as_deref(),
-        Some(format!("{} {}", group_finding.id(), group_warning.id()).as_str())
+        Some(group_finding.id().as_str())
     );
 
     root.remove();

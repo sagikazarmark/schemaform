@@ -161,7 +161,7 @@ fn finding_keys<'a>(
             resource_uri: finding.keyword_location().resource().as_str().to_owned(),
             keyword_pointer: finding.keyword_location().pointer().as_str().to_owned(),
             parameters: finding.parameters().clone(),
-            blocking: finding.is_blocking(),
+            severity: finding.severity(),
         })
         .collect()
 }

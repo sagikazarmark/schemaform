@@ -29,7 +29,7 @@ fn compiler(additional_properties: Option<bool>) -> schemaform::FormCompiler {
 }
 
 #[test]
-fn open_fixed_objects_compile_with_deterministic_nonblocking_warnings() {
+fn open_fixed_objects_compile_with_deterministic_informational_findings() {
     for (additional_properties, expected_pointer, implicit) in [
         (Some(true), "/additionalProperties", false),
         (None, "", true),
@@ -39,7 +39,7 @@ fn open_fixed_objects_compile_with_deterministic_nonblocking_warnings() {
             .expect("an open fixed-object projection should compile in strict mode");
         let analysis = compiler(additional_properties)
             .analyze()
-            .expect("lenient analysis should report the same warning");
+            .expect("lenient analysis should report the same informational finding");
         let findings = definition.capability_findings().collect::<Vec<_>>();
 
         assert_eq!(
@@ -56,7 +56,7 @@ fn open_fixed_objects_compile_with_deterministic_nonblocking_warnings() {
             expected_pointer
         );
         assert_eq!(finding.parameters(), &json!({ "implicit": implicit }));
-        assert_eq!(finding.severity(), CapabilitySeverity::Warning);
+        assert_eq!(finding.severity(), CapabilitySeverity::Info);
         assert!(!finding.is_blocking());
         assert!(!analysis.capability_report().is_blocking());
 
@@ -149,7 +149,9 @@ fn undeclared_form_data_survives_edits_lifecycle_operations_and_submission() {
     let preparation = form.prepare_submission();
     let snapshot = match preparation.outcome() {
         SubmissionOutcome::Ready(snapshot) => snapshot,
-        SubmissionOutcome::Blocked(_) => panic!("a capability warning must not block submission"),
+        SubmissionOutcome::Blocked(_) => {
+            panic!("an informational finding must not block submission")
+        }
     };
     assert_eq!(snapshot.form_data(), &replaced);
 }
