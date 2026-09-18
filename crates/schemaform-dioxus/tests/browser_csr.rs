@@ -2124,6 +2124,63 @@ fn multiple_choice_test_app(props: TestAppProps) -> Element {
     }
 }
 
+/// Presence and cardinality are independent: one required array without a length bound,
+/// one optional array with a minimum length. The notice is localized at the adapter boundary.
+fn multiple_choice_presence_test_app(props: TestAppProps) -> Element {
+    struct PresenceLocalizer;
+    impl schemaform_dioxus::Localizer for PresenceLocalizer {
+        fn localize(&self, message: &schemaform_dioxus::MessageDescriptor) -> String {
+            match message.key.as_deref() {
+                Some("schemaform.multiple-choice.required") => {
+                    "Feld muss vorhanden sein".to_owned()
+                }
+                _ => message.fallback.clone(),
+            }
+        }
+    }
+
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["channels"],
+        "properties": {
+            "channels": {
+                "type": "array", "title": "Channels", "uniqueItems": true,
+                "items": { "enum": ["Email", "SMS"] }
+            },
+            "optional": {
+                "type": "array", "title": "Optional", "uniqueItems": true, "minItems": 1,
+                "items": { "enum": ["Email", "SMS"] }
+            }
+        }
+    }))
+    .expect("the presence data schema should compile");
+    let form = use_form(definition, json!({ "channels": [] }))
+        .expect("the presence form should be created");
+    let form_to_bind = form.clone();
+    let bound = use_hook(move || {
+        RenderConfiguration::builder()
+            .localizer(Arc::new(PresenceLocalizer))
+            .build()
+            .bind(&form_to_bind)
+            .expect("multiple choices should bind")
+    });
+    props.handle.borrow_mut().get_or_insert(form);
+    let fallback_bound = bound.clone();
+    rsx! {
+        button {
+            id: "use-fallback-localizer",
+            onclick: move |_| RenderConfiguration::default().rebind_presentation(&fallback_bound),
+            "Use fallback wording"
+        }
+        SchemaForm {
+            form: bound,
+            on_submit: move |snapshot| *props.submitted.borrow_mut() = Some(snapshot),
+        }
+    }
+}
+
 fn unsupported_one_of_test_app(props: TestAppProps) -> Element {
     let definition = FormDefinition::compiler(json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -7210,7 +7267,7 @@ async fn a_multiple_choice_is_a_fieldset_of_checkboxes_toggled_from_the_keyboard
             .expect("the fieldset should have a legend")
             .text_content()
             .as_deref(),
-        Some("Channels")
+        Some("Channels — Field must be present")
     );
     assert_eq!(
         checkboxes
@@ -7255,12 +7312,11 @@ async fn a_multiple_choice_is_a_fieldset_of_checkboxes_toggled_from_the_keyboard
             .is_none()
     );
     let help_text = "How we may reach you.";
+    assert!(!fieldset.has_attribute("aria-required"));
     for checkbox in &checkboxes {
         assert!(!checkbox.disabled());
-        assert_eq!(
-            checkbox.get_attribute("aria-required").as_deref(),
-            Some("true")
-        );
+        assert!(!checkbox.has_attribute("required"));
+        assert!(!checkbox.has_attribute("aria-required"));
         assert_eq!(
             checkbox.get_attribute("aria-invalid").as_deref(),
             Some("false")
@@ -7334,6 +7390,134 @@ async fn a_multiple_choice_is_a_fieldset_of_checkboxes_toggled_from_the_keyboard
         [true, false, true]
     );
 
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+async fn multiple_choice_required_presence_is_localized_and_independent_of_min_items() {
+    let MountedTestApp {
+        root,
+        form_handle,
+        submitted,
+    } = mount_test_app(multiple_choice_presence_test_app).await;
+    let (required, required_options) = multiple_choice_checkboxes(&root, "/channels");
+    let (optional, optional_options) = multiple_choice_checkboxes(&root, "/optional");
+    let legend = required.query_selector("legend").unwrap().unwrap();
+    assert_eq!(
+        legend.text_content().as_deref(),
+        Some("Channels — Feld muss vorhanden sein")
+    );
+    assert_eq!(
+        optional
+            .query_selector("legend")
+            .unwrap()
+            .unwrap()
+            .text_content()
+            .as_deref(),
+        Some("Optional"),
+        "minItems does not make the field required"
+    );
+    for fieldset in [&required, &optional] {
+        assert!(!fieldset.has_attribute("aria-required"));
+    }
+    for checkbox in required_options.iter().chain(&optional_options) {
+        assert!(!checkbox.has_attribute("required"));
+        assert!(!checkbox.has_attribute("aria-required"));
+        assert!(!checkbox.disabled());
+        assert!(!checkbox.checked());
+    }
+
+    let form: HtmlFormElement = root
+        .query_selector("form")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    dispatch_submit(&form);
+    let snapshot = poll_dom(|| submitted.borrow().clone()).await;
+    assert_eq!(
+        snapshot.form_data(),
+        &json!({ "channels": [] }),
+        "a required empty array and an absent optional array both permit submission"
+    );
+    submitted.borrow_mut().take();
+
+    // The same notice follows reactive localization without rebinding the form.
+    root.query_selector("#use-fallback-localizer")
+        .unwrap()
+        .unwrap()
+        .dyn_into::<web_sys::HtmlElement>()
+        .unwrap()
+        .click();
+    poll_dom(|| {
+        (legend.text_content().as_deref() == Some("Channels — Field must be present")).then_some(())
+    })
+    .await;
+
+    form_handle
+        .reinitialize(json!({}))
+        .expect("absence is accepted as form data");
+    dispatch_submit(&form);
+    wait_for_summary_focus(&root).await;
+    assert!(submitted.borrow().is_none());
+    poll_dom(|| {
+        root.query_selector("[data-validation-finding='required']")
+            .unwrap()
+    })
+    .await;
+    assert_eq!(
+        legend.text_content().as_deref(),
+        Some("Channels — Field must be present")
+    );
+
+    // First selection creates the required array, and unchecking leaves a valid empty array.
+    required_options[0].click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()? == json!({ "channels": ["Email"] })).then_some(())
+    })
+    .await;
+    required_options[0].click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()? == json!({ "channels": [] })).then_some(())
+    })
+    .await;
+    dispatch_submit(&form);
+    poll_dom(|| submitted.borrow().clone()).await;
+    submitted.borrow_mut().take();
+
+    // An optional field may be absent, but once present its minItems still applies.
+    optional_options[0].click();
+    poll_dom(|| {
+        (form_handle.reader().form_data().ok()?["optional"] == json!(["Email"])).then_some(())
+    })
+    .await;
+    optional_options[0].click();
+    poll_dom(|| (form_handle.reader().form_data().ok()?["optional"] == json!([])).then_some(()))
+        .await;
+    dispatch_submit(&form);
+    wait_for_summary_focus(&root).await;
+    assert!(submitted.borrow().is_none());
+    let finding = poll_dom(|| {
+        optional
+            .query_selector("[data-validation-finding='minItems']")
+            .unwrap()
+    })
+    .await;
+    for checkbox in &optional_options {
+        assert!(!checkbox.disabled(), "length bounds leave options enabled");
+        assert!(!checkbox.has_attribute("aria-required"));
+        assert!(!checkbox.has_attribute("required"));
+        assert!(assert_described_by_resolves(checkbox).contains(&finding.id()));
+    }
+    assert_eq!(
+        optional
+            .query_selector("legend")
+            .unwrap()
+            .unwrap()
+            .text_content()
+            .as_deref(),
+        Some("Optional")
+    );
     root.remove();
 }
 

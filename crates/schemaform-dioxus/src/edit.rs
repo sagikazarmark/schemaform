@@ -1026,6 +1026,10 @@ impl MultipleChoiceState {
 /// `SchemaForm::on_error`, and restores the checkbox to the node's membership. The same handles
 /// drive a listbox with `aria-multiselectable` or a set of toggle buttons.
 ///
+/// Required describes the array-valued field's presence, not any option's checked state or
+/// the array's minimum length. Present the adapter's localized requirement in the legend;
+/// never put `required` or `aria-required` on an option, or `aria-required` on the fieldset.
+///
 /// ```rust,no_run
 /// use dioxus::prelude::*;
 /// use schemaform_dioxus::{ControlRenderContext, ControlRenderer, use_multiple_choice_edit};
@@ -1048,7 +1052,12 @@ impl MultipleChoiceState {
 ///     rsx! {
 ///         fieldset {
 ///             id: presentation.element_id.clone(),
-///             legend { "{presentation.label}" }
+///             legend {
+///                 "{presentation.label}"
+///                 if let Some(notice) = control.multiple_choice_required_notice.clone() {
+///                     span { " — {notice}" }
+///                 }
+///             }
 ///             for option in options {
 ///                 div {
 ///                     input {

@@ -934,7 +934,8 @@ impl StructureRenderers {
 /// Control-specific facets derived from the definition node and the node's current state.
 ///
 /// Every string is pre-localized through the configured [`Localizer`], so a custom renderer
-/// can reproduce the built-in write-only and boolean behaviour without the message catalog.
+/// can reproduce the built-in write-only, boolean, and multiple-choice behaviour without the
+/// message catalog.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct ControlFacets {
@@ -943,7 +944,18 @@ pub struct ControlFacets {
     /// Root-origin control binding as a JSON Pointer string, intended as the rendered `name`.
     pub name: String,
     /// Whether the control should present required semantics right now.
+    ///
+    /// For a multiple choice this describes presence of the array-valued field, not selection
+    /// of any option or a minimum number of members. Never map it to `required` or
+    /// `aria-required` on option checkboxes, or `aria-required` on a fieldset/group; present
+    /// [`Self::multiple_choice_required_notice`] at field level instead.
     pub required: bool,
+    /// Localized field-presence requirement for a multiple choice.
+    ///
+    /// Present exactly when `kind` is [`ControlKind::MultipleChoice`] and `required` is true.
+    /// Place it in the legend or an associated description. It does not describe `minItems`:
+    /// a required array may be empty, and an optional array may have a minimum length.
+    pub multiple_choice_required_notice: Option<String>,
     /// Whether the control is unavailable for interaction.
     pub disabled: bool,
     /// Whether the control permits observation but not ordinary editing.
