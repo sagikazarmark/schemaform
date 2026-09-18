@@ -136,7 +136,7 @@ renderer everything it needs, pre-localized:
   rules.
 - `control()` is the control facets: `kind` (`String`, `Number`, `Integer`,
   `Boolean`, `Choice`, `Constant`, `MultipleChoice`), the control binding as
-  `name`, `required`,
+  `name`, `required`, `multiple_choice_required_notice` (localized field-presence wording),
   `disabled`, `read_only`, `write_only`, `touched`, `dirty`, `nullable`, the
   localized write-only replacement label and placeholder, write-only status
   text, and boolean value labels the built-in uses, and `format`: the data
@@ -415,7 +415,7 @@ owns the whole control.
 
 The built-in renders a `fieldset` carrying the node's element id and a `legend`,
 then one native checkbox per option with the option's element id, the node's
-`name`, `aria-required`, `aria-describedby` and `aria-invalid`, and a
+`name`, `aria-describedby` and `aria-invalid`, and a
 `label[for]`; help, the incompatible-value readout, presence buttons, and
 findings follow as in every other built-in control. The fieldset takes
 `tabindex="-1"` and `data-focus-first-descendant`, so focusing the node — from
@@ -426,6 +426,15 @@ that is no option) to the node too: they are presented inside the fieldset,
 describe every checkbox, and focus the same fieldset from the summary. A
 read-only multiple choice renders as `output` of its selected labels, as every
 read-only kind does.
+
+Required describes presence of the array-valued field, not individual options or
+selection cardinality. The legend includes `control().multiple_choice_required_notice`
+when present, localized with key `schemaform.multiple-choice.required` and fallback
+“Field must be present”. Custom renderers place that text in their legend or an
+associated description. Never put `required` or `aria-required` on option checkboxes,
+or `aria-required` on the fieldset/group. A required array without `minItems` may
+submit as `[]`; an optional array with `minItems: 1` may be absent but is invalid
+when present as `[]`. Length bounds remain findings and never disable options.
 
 A widget maps its DOM value back to an identity by looking it up in `options`
 with `ChoiceIdentity::as_str`. Constant controls have no hook: render read-only

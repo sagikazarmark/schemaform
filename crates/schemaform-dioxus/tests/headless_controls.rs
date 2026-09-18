@@ -156,6 +156,9 @@ impl Localizer for HeadlessLocalizer {
         if message.key.as_deref() == Some("schemaform.choice.null") {
             return "Not chosen".to_owned();
         }
+        if message.key.as_deref() == Some("schemaform.multiple-choice.required") {
+            return "Feld muss vorhanden sein".to_owned();
+        }
         message.fallback.clone()
     }
 }
@@ -191,7 +194,8 @@ fn initial_form_data() -> serde_json::Value {
         "priority": "high",
         "spelled": "yes",
         "contact": "ada@example.test",
-        "channels": ["sms"]
+        "channels": ["sms"],
+        "required_channels": []
     })
 }
 
@@ -203,7 +207,7 @@ fn headless_app(props: HeadlessAppProps) -> Element {
             "additionalProperties": false,
             "required": [
                 "quantity", "name", "secret", "note", "enabled", "secret_flag", "mode",
-                "fixed_mode", "secret_mode", "priority", "spelled"
+                "fixed_mode", "secret_mode", "priority", "spelled", "required_channels"
             ],
             "properties": {
                 "quantity": { "type": "integer", "title": "Quantity", "minimum": 0 },
@@ -263,6 +267,12 @@ fn headless_app(props: HeadlessAppProps) -> Element {
                             { "const": "push", "title": "public" }
                         ]
                     }
+                },
+                "required_channels": {
+                    "type": "array",
+                    "title": "Required channels",
+                    "uniqueItems": true,
+                    "items": { "enum": ["email", "sms"] }
                 },
                 "secret_channels": {
                     "type": "array",
@@ -955,6 +965,55 @@ fn selecting_a_titled_null_constant_choice_option_sets_null() {
     assert_eq!(mounted.form_data()["priority"], json!("low"));
     assert_eq!(mounted.selected("/priority"), Some(low));
     assert!(mounted.errors.borrow().is_empty());
+}
+
+#[test]
+fn multiple_choice_renderers_receive_localized_field_presence_not_cardinality() {
+    let mut mounted = MountedHeadless::mount();
+    let required = mounted.captured("/required_channels");
+    assert!(required.context.control().required);
+    assert_eq!(
+        required
+            .context
+            .control()
+            .multiple_choice_required_notice
+            .as_deref(),
+        Some("Feld muss vorhanden sein"),
+        "a custom renderer receives localized wording even for a valid empty array"
+    );
+    let optional = mounted.captured("/channels");
+    assert!(!optional.context.control().required);
+    assert!(
+        optional
+            .context
+            .control()
+            .multiple_choice_required_notice
+            .is_none(),
+        "minItems does not require field presence"
+    );
+    assert!(
+        mounted
+            .captured("/name")
+            .context
+            .control()
+            .multiple_choice_required_notice
+            .is_none(),
+        "the notice is specific to multiple choice"
+    );
+
+    let mut data = initial_form_data();
+    data.as_object_mut().unwrap().remove("required_channels");
+    mounted.reinitialize(data);
+    assert_eq!(
+        mounted
+            .captured("/required_channels")
+            .context
+            .control()
+            .multiple_choice_required_notice
+            .as_deref(),
+        Some("Feld muss vorhanden sein"),
+        "the same requirement is communicated while the array is absent"
+    );
 }
 
 #[test]

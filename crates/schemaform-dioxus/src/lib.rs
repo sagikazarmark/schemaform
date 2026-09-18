@@ -1038,6 +1038,7 @@ enum BuiltinMessage {
     BooleanFalse,
     BooleanTrue,
     ChoiceNull,
+    MultipleChoiceRequired,
     WriteOnlyNotSet { label: String },
     WriteOnlyNeedsReplacement { label: String },
     WriteOnlySet { label: String },
@@ -1224,6 +1225,11 @@ impl BuiltinMessage {
             Self::ChoiceNull => (
                 "schemaform.choice.null",
                 "None".to_owned(),
+                serde_json::json!({}),
+            ),
+            Self::MultipleChoiceRequired => (
+                "schemaform.multiple-choice.required",
+                "Field must be present".to_owned(),
                 serde_json::json!({}),
             ),
             Self::WriteOnlyNotSet { label } => (
@@ -2835,10 +2841,13 @@ fn control_facets(
         true_label: localize_builtin(form, BuiltinMessage::BooleanTrue),
     });
     let format = single_format(&projection.data_schema_annotations);
+    let multiple_choice_required_notice = (kind == render::ControlKind::MultipleChoice && required)
+        .then(|| localize_builtin(form, BuiltinMessage::MultipleChoiceRequired));
     render::ControlFacets {
         kind,
         name: control.name.clone(),
         required,
+        multiple_choice_required_notice,
         disabled,
         read_only,
         write_only: projection.write_only,
@@ -3623,8 +3632,12 @@ fn BuiltinConstantControl(props: BuiltinControlProps) -> Element {
 ///
 /// Built on [`edit::use_multiple_choice_edit`] and the public context, as a custom renderer
 /// would be. Each checkbox carries the option's id from
-/// [`MultipleChoiceEdit::option_element_id`], the node's `name`, `aria-required`, and the
+/// [`MultipleChoiceEdit::option_element_id`], the node's `name`, and the
 /// node's `aria-describedby` and `aria-invalid`, so help and findings describe every checkbox.
+/// The legend includes the localized field-presence requirement from
+/// [`ControlFacets::multiple_choice_required_notice`] when present. Required describes the
+/// array's presence, independently of `minItems`; neither the options nor the fieldset carry
+/// `aria-required`, and options never carry `required`.
 /// The fieldset takes `tabindex="-1"` like the array fieldset, so the node can take focus while
 /// staying out of the tab order, and marks itself so the focus script lands on the first
 /// checkbox inside when one is enabled (`data-focus-first-descendant`, which the focus script in
@@ -3654,7 +3667,7 @@ fn BuiltinMultipleChoiceControl(props: BuiltinControlProps) -> Element {
         return chrome.read_only_output(labels);
     }
     let facets = context.control();
-    let required = facets.required;
+    let required_notice = facets.multiple_choice_required_notice.clone();
     let write_only_status = facets.write_only_status.clone();
     let incompatible_value = context.presentation().incompatible_value.clone();
     let options = edit.options.clone();
@@ -3667,7 +3680,12 @@ fn BuiltinMultipleChoiceControl(props: BuiltinControlProps) -> Element {
             "data-schemaform-control": chrome.kind.data_attribute(),
             tabindex: "-1",
             "data-focus-first-descendant": "",
-            legend { "{chrome.label}" }
+            legend {
+                "{chrome.label}"
+                if let Some(notice) = required_notice {
+                    span { class: "schemaform-required", " — {notice}" }
+                }
+            }
             if let Some(status) = write_only_status {
                 output { "data-write-only-status": "", "{status}" }
             }
@@ -3680,7 +3698,6 @@ fn BuiltinMultipleChoiceControl(props: BuiltinControlProps) -> Element {
                         r#type: "checkbox",
                         checked: selected.contains(&option.identity),
                         disabled: option.disabled,
-                        "aria-required": required,
                         "aria-invalid": chrome.invalid,
                         "aria-describedby": chrome.described_by.clone(),
                         oninput: {
