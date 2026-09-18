@@ -4169,7 +4169,7 @@ pub mod form {
                     self.engine.submission_attempted()
                         || self
                             .engine
-                            .binding_is_touched(finding.instance_location().as_str())
+                            .binding_is_touched(self.validation_target_location(finding).as_str())
                 }
             }
         }
@@ -4280,6 +4280,21 @@ pub mod form {
         fn identity_for_finding_location(&self, location: &JsonPointer) -> InstanceIdentity {
             self.identity_for_binding(location.as_str())
                 .unwrap_or_else(|| self.identity(self.definition.root()))
+        }
+
+        /// `required` validates the parent object, but its repair belongs to the
+        /// missing property's control. Retain the validator's locations as
+        /// evidence; redirect only presentation when that binding is present.
+        fn validation_target_location(&self, finding: &ValidationFinding) -> JsonPointer {
+            if finding.code() == "required"
+                && let Some(property) = finding.parameters().get("property").and_then(Value::as_str)
+            {
+                let escaped = property.replace('~', "~0").replace('/', "~1");
+                let location = format!("{}/{escaped}", finding.instance_location().as_str());
+                return JsonPointer::parse(location)
+                    .expect("a property appended to a valid pointer");
+            }
+            finding.instance_location().clone()
         }
 
         fn transition(
@@ -5051,7 +5066,13 @@ pub mod form {
                 .map(|finding| FindingView::Validation {
                     target: self
                         .form
-                        .identity_for_finding_location(finding.instance_location()),
+                        .identity_for_binding(
+                            self.form.validation_target_location(finding).as_str(),
+                        )
+                        .unwrap_or_else(|| {
+                            self.form
+                                .identity_for_finding_location(finding.instance_location())
+                        }),
                     finding,
                 });
             let validation_truncated = match &self.form.validation {
@@ -5435,7 +5456,7 @@ pub mod form {
                 .validation_findings()
                 .iter()
                 .filter(move |finding| {
-                    self.finding_attached(finding.instance_location())
+                    self.validation_finding_attached(finding)
                         && self.form.validation_finding_visible(finding)
                 })
         }
@@ -5475,7 +5496,7 @@ pub mod form {
                 .map(|kind| FindingView::Parse { target, kind });
             let validation = self.form.validation_findings().iter().filter_map({
                 move |finding| {
-                    (self.finding_attached(finding.instance_location())
+                    (self.validation_finding_attached(finding)
                         && self.form.validation_finding_visible(finding))
                     .then_some(FindingView::Validation { target, finding })
                 }
@@ -5523,6 +5544,23 @@ pub mod form {
                 .chain(capability)
                 .chain(external)
                 .chain(parse)
+        }
+
+        fn validation_finding_attached(&self, finding: &ValidationFinding) -> bool {
+            let target = self.form.validation_target_location(finding);
+            if target == *finding.instance_location() {
+                return self.finding_attached(&target);
+            }
+            if self
+                .binding()
+                .is_some_and(|binding| binding.pointer() == &target)
+            {
+                return true;
+            }
+            // Only the original parent considers fallback. Other nodes never
+            // search the whole form while collecting their local findings.
+            self.finding_attached(finding.instance_location())
+                && self.form.identity_for_binding(target.as_str()).is_none()
         }
 
         fn finding_attached(&self, location: &JsonPointer) -> bool {

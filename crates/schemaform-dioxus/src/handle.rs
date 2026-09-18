@@ -47,6 +47,14 @@ pub(crate) struct HandleInner {
 pub(crate) struct SummaryProjection {
     pub(crate) root: InstanceIdentity,
     pub(crate) findings: Vec<FindingProjection>,
+    pub(crate) targets: HashMap<InstanceIdentity, SummaryTarget>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct SummaryTarget {
+    pub(crate) binding: Option<JsonPointer>,
+    pub(crate) label: String,
+    pub(crate) label_reference: Option<schemaform::ui::v1::TextReference>,
 }
 
 impl PartialEq for FormHandle {
@@ -730,9 +738,34 @@ pub enum FindingProjection {
 }
 
 fn project_summary(form: &Form) -> SummaryProjection {
+    let findings = project_visible_findings(form);
+    let targets = findings
+        .iter()
+        .map(|finding| match finding {
+            FindingProjection::Validation { target, .. }
+            | FindingProjection::ValidationFindingsTruncated { target, .. }
+            | FindingProjection::Indeterminate { target, .. }
+            | FindingProjection::Capability { target, .. }
+            | FindingProjection::External { target, .. }
+            | FindingProjection::Parse { target, .. } => *target,
+        })
+        .filter_map(|identity| {
+            form.node(identity).map(|node| {
+                (
+                    identity,
+                    SummaryTarget {
+                        binding: node.binding().map(|binding| binding.pointer().clone()),
+                        label: node.definition().label().to_owned(),
+                        label_reference: node.definition().label_reference().cloned(),
+                    },
+                )
+            })
+        })
+        .collect();
     SummaryProjection {
         root: form.view().root(),
-        findings: project_visible_findings(form),
+        findings,
+        targets,
     }
 }
 

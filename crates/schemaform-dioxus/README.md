@@ -94,6 +94,17 @@ reports the corresponding `BindFinding::Disposed`.
 
 ## Customization And Localization
 
+Finding summaries identify a bound target as `Label (/current/pointer): message`.
+The label and finding message are localized first, then the summary wrapper uses
+`schemaform.finding.summary-entry` with `label`, `path`, and `message` parameters.
+The current pointer disambiguates repeated item labels and follows array moves;
+node-local finding text stays short. All finding presenters, including registry
+renderers, receive the prepared summary text through `FindingDescriptor::text`.
+Missing-required findings target the missing property's control where one exists,
+while their validation instance and keyword locations still describe the parent
+object's `required` assertion. Findings with no projected property control retain
+the parent/root target.
+
 A custom `ControlRenderer` owns the entire control region: label, widget, help
 text, and local findings. The adapter renders exactly what the renderer
 returns and contributes nothing after it. The `ControlRenderContext` hands the

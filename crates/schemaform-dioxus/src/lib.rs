@@ -333,22 +333,29 @@ fn FindingSummary(props: BoundFormProps) -> Element {
             _ => true,
         })
         .map(|finding| {
-            let target = match finding {
+            let identity = match finding {
                 handle::FindingProjection::Validation { target, .. }
                 | handle::FindingProjection::ValidationFindingsTruncated { target, .. }
                 | handle::FindingProjection::Indeterminate { target, .. }
                 | handle::FindingProjection::Capability { target, .. }
                 | handle::FindingProjection::External { target, .. }
-                | handle::FindingProjection::Parse { target, .. } => target_ids.get(target),
-            }
-            .cloned()
-            .unwrap_or_else(|| FocusTarget {
-                element_id: props.form.inner.form_id.clone(),
-                tab_ids: Vec::new(),
-            });
+                | handle::FindingProjection::Parse { target, .. } => *target,
+            };
+            let target = target_ids
+                .get(&identity)
+                .cloned()
+                .unwrap_or_else(|| FocusTarget {
+                    element_id: props.form.inner.form_id.clone(),
+                    tab_ids: Vec::new(),
+                });
             let stable_id = summary_finding_stable_id(&props.form.inner.form_id, finding);
             (
-                finding_descriptor(&props.form, finding, stable_id),
+                summary_finding_descriptor(
+                    &props.form,
+                    finding,
+                    projection.targets.get(&identity),
+                    stable_id,
+                ),
                 render::TargetFocusAction::new(target.element_id).activate_tabs(target.tab_ids),
             )
         })
@@ -2678,6 +2685,53 @@ fn finding_descriptor(
         } => external_descriptor(form, source, finding, stable_id),
         handle::FindingProjection::Parse { kind, .. } => parse_descriptor(form, *kind, stable_id),
     }
+}
+
+/// A summary has no adjacent field label. Give every renderer the same localized
+/// target context; keep node-local text short because its label is already there.
+fn summary_finding_descriptor(
+    form: &render::BoundForm,
+    finding: &handle::FindingProjection,
+    target: Option<&handle::SummaryTarget>,
+    stable_id: String,
+) -> render::FindingDescriptor {
+    let mut descriptor = finding_descriptor(form, finding, stable_id);
+    if let Some(target) = target {
+        let mut path = target
+            .binding
+            .as_ref()
+            .map(|path| path.as_str())
+            .unwrap_or("")
+            .to_owned();
+        let mut label =
+            localize_projection_text(form, target.label_reference.as_ref(), &target.label);
+        if let handle::FindingProjection::Validation { finding, .. } = finding
+            && finding.code() == "required"
+            && let Some(property) = finding.parameters().get("property").and_then(Value::as_str)
+        {
+            let missing = format!(
+                "{}/{}",
+                finding.instance_location().as_str(),
+                property.replace('~', "~0").replace('/', "~1")
+            );
+            if path != missing {
+                label = localize_projection_text(form, None, property);
+                path = missing;
+            }
+        }
+        if !path.is_empty() {
+            if label.is_empty() {
+                label = path.clone();
+            }
+            let message = render::MessageDescriptor {
+                key: Some("schemaform.finding.summary-entry".into()),
+                fallback: format!("{label} ({path}): {}", descriptor.text),
+                parameters: serde_json::json!({"label":label,"path":path,"message":descriptor.text}),
+            };
+            descriptor.text = localize_message(form, &message);
+        }
+    }
+    descriptor
 }
 
 fn validation_descriptors_from_finding(
