@@ -214,7 +214,7 @@ fn nested_control_edits_validate_and_submit_through_the_public_facade() {
 }
 
 #[test]
-fn fixed_object_findings_are_observable_on_the_group_instance() {
+fn missing_property_findings_are_observable_on_the_child_instance() {
     let definition = FormDefinition::compile(nested_local_reference_schema())
         .expect("the local reference should compile");
     let mut form = definition
@@ -245,10 +245,13 @@ fn fixed_object_findings_are_observable_on_the_group_instance() {
         preparation
             .transition()
             .changed()
-            .any(|identity| identity == contact)
+            .any(|identity| identity == form.node(contact).unwrap().children().next().unwrap())
     );
     let contact_node = form.node(contact).expect("the fixed object should exist");
-    let findings = contact_node.validation_findings().collect::<Vec<_>>();
+    assert_eq!(contact_node.validation_findings().count(), 0);
+    let name = contact_node.children().next().unwrap();
+    let name_node = form.node(name).unwrap();
+    let findings = name_node.validation_findings().collect::<Vec<_>>();
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].code(), "required");
     assert_eq!(findings[0].instance_location().as_str(), "/contact");

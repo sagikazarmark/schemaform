@@ -8330,16 +8330,20 @@ async fn nested_local_reference_edits_validates_and_submits_in_the_browser() {
         })
         .expect("the host should be able to install incomplete nested data");
     dispatch_submit(&form);
-    let group_finding = poll_dom(|| {
+    let field_finding = poll_dom(|| {
         group
             .query_selector("[data-validation-finding='required']")
             .expect("the group finding selector should be valid")
     })
     .await;
-    assert_eq!(group.get_attribute("aria-invalid").as_deref(), Some("true"));
+    assert_eq!(input.get_attribute("aria-invalid").as_deref(), Some("true"));
     assert_eq!(
-        group.get_attribute("aria-describedby").as_deref(),
-        Some(group_finding.id().as_str())
+        input.get_attribute("aria-describedby").as_deref(),
+        Some(field_finding.id().as_str())
+    );
+    assert_eq!(
+        group.get_attribute("aria-invalid").as_deref(),
+        Some("false")
     );
 
     root.remove();
@@ -10639,6 +10643,231 @@ async fn custom_shell_renderer_keeps_submission_and_summary_focus_behaviour() {
     assert!(errors.borrow().is_empty());
 
     root.remove();
+}
+
+#[wasm_bindgen_test]
+async fn finding_summary_names_missing_fields_and_repeated_item_locations() {
+    fn app(props: TestAppProps) -> Element {
+        let definition = use_hook(|| {
+            FormDefinition::compile(json!({
+            "$schema":"https://json-schema.org/draft/2020-12/schema",
+            "type":"object","additionalProperties":false,"required":["name"],
+            "properties":{
+                "name":{"type":"string","title":"Full name"},
+                "age":{"type":"integer","title":"Age","maximum":120},
+                "confidence":{"type":"number","title":"Confidence","maximum":1},
+                "people":{"type":"array","items":{"type":"object","additionalProperties":false,
+                    "properties":{"name":{"type":"string","title":"Person name"},"age":{"type":"integer","title":"Person age"}},"required":["name"]}}
+            }
+        })).unwrap()
+        });
+        let form = use_form(
+            definition,
+            json!({"age":999,"confidence":2,"people":[{},{}]}),
+        )
+        .unwrap();
+        props
+            .handle
+            .borrow_mut()
+            .get_or_insert_with(|| form.clone());
+        let bound = use_hook(|| RenderConfiguration::default().bind(&form).unwrap());
+        rsx! { RequiredSchemaForm { form: bound, submission_mode: SubmissionMode::Advisory,
+            on_submit: |_| {}, on_advisory_submit: |_| {},
+        } }
+    }
+    let mounted = mount_test_app(app).await;
+    let root = &mounted.root;
+    let form: HtmlFormElement = root
+        .query_selector("form")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    let name = input_with_binding(root, "/name");
+    name.focus().unwrap();
+    dispatch_submit(&form);
+    poll_dom(|| {
+        root.query_selector("[data-validation-finding='required']")
+            .unwrap()
+    })
+    .await;
+    let summary = root
+        .query_selector("[data-finding-summary]")
+        .unwrap()
+        .unwrap();
+    let text = summary.text_content().unwrap();
+    for expected in [
+        "Full name (/name):",
+        "Age (/age):",
+        "Confidence (/confidence):",
+        "Person name (/people/0/name):",
+        "Person name (/people/1/name):",
+    ] {
+        assert!(text.contains(expected), "missing {expected}: {text}");
+    }
+    assert_focused(&name);
+    let links = summary.query_selector_all("button").unwrap();
+    let mut followed = false;
+    for index in 0..links.length() {
+        let link: web_sys::HtmlElement = links.item(index).unwrap().dyn_into().unwrap();
+        if link
+            .text_content()
+            .unwrap()
+            .starts_with("Full name (/name):")
+        {
+            input_with_binding(root, "/age").focus().unwrap();
+            link.click();
+            wait_for_input_focus(&name, "required finding link").await;
+            followed = true;
+        }
+    }
+    assert!(followed, "the required finding has a navigable link");
+    assert_eq!(name.get_attribute("aria-invalid").as_deref(), Some("true"));
+    let people = control_with_binding(&mounted.form_handle, "/people");
+    let second = control_with_binding(&mounted.form_handle, "/people/1");
+    let second_field = input_with_binding(root, "/people/1/name");
+    let item = mounted
+        .form_handle
+        .node(second)
+        .unwrap()
+        .unwrap()
+        .read()
+        .unwrap()
+        .unwrap()
+        .item
+        .unwrap();
+    mounted
+        .form_handle
+        .node(people)
+        .unwrap()
+        .unwrap()
+        .collection_actions()
+        .move_up(item)
+        .unwrap();
+    poll_dom(|| {
+        let field = input_with_binding(root, "/people/0/name");
+        (field.id() == second_field.id()).then_some(())
+    })
+    .await;
+    let links = summary.query_selector_all("button").unwrap();
+    let mut followed = false;
+    for index in 0..links.length() {
+        let link: web_sys::HtmlElement = links.item(index).unwrap().dyn_into().unwrap();
+        if link
+            .text_content()
+            .unwrap()
+            .starts_with("Person name (/people/0/name):")
+        {
+            name.focus().unwrap();
+            link.click();
+            wait_for_input_focus(&second_field, "moved item finding link").await;
+            followed = true;
+        }
+    }
+    assert!(followed);
+    // A parse finding's stable identity/kind does not change when its item
+    // moves. Its summary path must nevertheless follow the current binding.
+    mounted
+        .form_handle
+        .reinitialize(
+            json!({"name":"Ada","age":1,"confidence":1,"people":[{"name":"A"},{"name":"B"}]}),
+        )
+        .unwrap();
+    let age = control_with_binding(&mounted.form_handle, "/people/1/age");
+    mounted
+        .form_handle
+        .node(age)
+        .unwrap()
+        .unwrap()
+        .actions()
+        .input_text("-")
+        .unwrap();
+    poll_dom(|| {
+        summary
+            .text_content()
+            .filter(|text| text.contains("Person age (/people/1/age):"))
+    })
+    .await;
+    let second = control_with_binding(&mounted.form_handle, "/people/1");
+    let item = mounted
+        .form_handle
+        .node(second)
+        .unwrap()
+        .unwrap()
+        .read()
+        .unwrap()
+        .unwrap()
+        .item
+        .unwrap();
+    mounted
+        .form_handle
+        .node(people)
+        .unwrap()
+        .unwrap()
+        .collection_actions()
+        .move_up(item)
+        .unwrap();
+    poll_dom(|| {
+        summary.text_content().filter(|text| {
+            text.contains("Person age (/people/0/age):") && !text.contains("/people/1/age")
+        })
+    })
+    .await;
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+async fn summary_identifies_required_properties_without_projected_controls() {
+    struct Labels;
+    impl Localizer for Labels {
+        fn localize(&self, message: &schemaform_dioxus::render::MessageDescriptor) -> String {
+            if message.key.is_none() && message.fallback == "first" {
+                "Prénom".to_owned()
+            } else {
+                message.fallback.clone()
+            }
+        }
+    }
+    fn app(props: TestAppProps) -> Element {
+        let definition = use_hook(|| {
+            FormDefinition::compile(json!({
+                "$schema":"https://json-schema.org/draft/2020-12/schema", "type":"object",
+                "required":["first","second"], "properties":{"visible":{"type":"string"}}
+            }))
+            .unwrap()
+        });
+        let form = use_form(definition, json!({})).unwrap();
+        props
+            .handle
+            .borrow_mut()
+            .get_or_insert_with(|| form.clone());
+        let bound = use_hook(|| {
+            RenderConfiguration::builder()
+                .localizer(Arc::new(Labels))
+                .build()
+                .bind(&form)
+                .unwrap()
+        });
+        rsx! { RequiredSchemaForm {form:bound,on_submit: |_| {}} }
+    }
+    let mounted = mount_test_app(app).await;
+    mounted.form_handle.prepare_submission().unwrap();
+    poll_dom(|| {
+        mounted
+            .root
+            .query_selector("[data-finding='required']")
+            .unwrap()
+    })
+    .await;
+    let summary = mounted
+        .root
+        .query_selector("[data-finding-summary]")
+        .unwrap()
+        .unwrap();
+    let text = summary.text_content().unwrap();
+    assert!(text.contains("Prénom (/first):"), "{text}");
+    assert!(text.contains("second (/second):"), "{text}");
+    mounted.root.remove();
 }
 
 #[wasm_bindgen_test]

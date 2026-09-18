@@ -1807,8 +1807,9 @@ fn authored_fixed_object_template_root_owns_item_authority_findings_and_repair()
         .next()
         .unwrap();
     let row = form.node(array).unwrap().children().next().unwrap();
+    let missing_name = descendant_with_binding(&form, row, "/people/0/name");
     assert!(
-        form.node(row)
+        form.node(missing_name)
             .unwrap()
             .validation_findings()
             .any(|finding| finding.code() == "required")

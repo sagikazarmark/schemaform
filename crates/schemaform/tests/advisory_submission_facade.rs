@@ -6,6 +6,88 @@ use schemaform::{
 use serde_json::{Value, json};
 
 #[test]
+fn missing_required_property_attaches_to_its_control_without_rewriting_validation_locations() {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object", "additionalProperties": false,
+        "properties": {"name": {"type":"string"}}, "required": ["name"]
+    }))
+    .unwrap();
+    let mut form = definition.create_form(json!({})).unwrap();
+    let name = node_with_binding(&form, "/name");
+    form.prepare_advisory_submission();
+    let node = form.node(name).unwrap();
+    let findings = node.validation_findings().collect::<Vec<_>>();
+    assert_eq!(
+        findings.len(),
+        1,
+        "the missing value is reported beside its control"
+    );
+    assert_eq!(findings[0].code(), "required");
+    assert_eq!(findings[0].instance_location().as_str(), "");
+    assert_eq!(findings[0].parameters(), &json!({"property":"name"}));
+    assert!(form.view().visible_findings().any(|finding| matches!(finding,
+        FindingView::Validation { target, finding } if target == name && finding.code() == "required"
+    )));
+}
+
+#[test]
+fn required_target_uses_escaped_nested_binding_and_touched_visibility() {
+    let definition = FormDefinition::compile(json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type":"object", "additionalProperties":false,
+        "properties":{"contact":{"type":"object","additionalProperties":false,
+            "properties":{"a/b~c":{"type":"string"}},"required":["a/b~c"]}}
+    }))
+    .unwrap();
+    let mut form = definition.create_form(json!({"contact":{}})).unwrap();
+    let field = node_with_binding(&form, "/contact/a~1b~0c");
+    assert_eq!(form.node(field).unwrap().validation_findings().count(), 0);
+    form.user().blur(field).unwrap();
+    assert_eq!(form.node(field).unwrap().validation_findings().count(), 1);
+    assert_eq!(
+        form.node(node_with_binding(&form, "/contact"))
+            .unwrap()
+            .validation_findings()
+            .count(),
+        0
+    );
+    form.user().input_text(field, "present").unwrap();
+    assert_eq!(form.node(field).unwrap().validation_findings().count(), 0);
+}
+
+#[test]
+fn required_findings_follow_array_item_identity_and_fall_back_without_a_control() {
+    let definition = FormDefinition::compile(json!({
+        "$schema":"https://json-schema.org/draft/2020-12/schema",
+        "type":"object","additionalProperties":false,
+        "properties":{"people":{"type":"array","items":{
+            "type":"object","properties":{"name":{"type":"string"}},
+            "required":["name","unrendered"]
+        }}}
+    }))
+    .unwrap();
+    let mut form = definition
+        .create_form(json!({"people":[{"name":"Ada","unrendered":true},{}]}))
+        .unwrap();
+    let field = node_with_binding(&form, "/people/1/name");
+    let item_node = node_with_binding(&form, "/people/1");
+    let item = form.node(item_node).unwrap().item_identity().unwrap();
+    let array = node_with_binding(&form, "/people");
+    form.prepare_advisory_submission();
+    assert_eq!(form.node(field).unwrap().validation_findings().count(), 1);
+    assert_eq!(
+        form.node(item_node).unwrap().validation_findings().count(),
+        1
+    );
+    form.user().move_item_up(array, item).unwrap();
+    assert_eq!(node_with_binding(&form, "/people/0/name"), field);
+    assert!(form.view().visible_findings().any(|view| matches!(view,
+        FindingView::Validation {target, finding} if target == field && finding.instance_location().as_str() == "/people/0"
+    )));
+}
+
+#[test]
 fn range_violation_yields_the_out_of_range_value_and_one_validation_finding() {
     let mut form = quantity_definition(json!({ "type": "integer", "minimum": 1 }))
         .create_form(json!({ "quantity": 1 }))
