@@ -757,7 +757,11 @@ takes effect on the next render: the shell is handed the affordance of the new
 mode (`AffordanceKind::Submit` or `AffordanceKind::AdvisorySubmit`) and the
 form's own `submit` event follows it, while an affordance a shell retained from
 an earlier render keeps performing the operation of the kind it was handed out
-as, as every affordance does. `FormHandle::prepare_advisory_submission` is the
+as, as every affordance does. Finding presenters see the mode too:
+`FindingCollectionContext::submission_mode()` reports it for the summary and for
+every node-local collection, and a switch re-renders them, so a presenter that
+shows advisory findings as warnings reads it from the adapter rather than from a
+context its shell provides. `FormHandle::prepare_advisory_submission` is the
 handle-level call behind the advisory path, with the same borrow-conflict and
 disposed-handle semantics as `prepare_submission`; which hosts want which path
 is described in

@@ -5,6 +5,10 @@
 //! outside the VirtualDom. Observations go through the form handle, the captured shell context,
 //! and the host's `on_submit` and `on_error` callbacks only.
 
+// The configuration takes `Arc<dyn FindingCollectionPresenter>`; the recording presenter holds
+// single-threaded `Rc` state, which is all a native `VirtualDom` needs.
+#![allow(clippy::arc_with_non_send_sync)]
+
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -15,9 +19,10 @@ use dioxus::prelude::{Element, Props, Signal, WritableExt, rsx, use_hook, use_si
 use dioxus_core::{NoOpMutations, ScopeId, VirtualDom};
 use schemaform::{AdvisorySubmission, FormDefinition, SubmissionSnapshot, form::SubmissionBlocker};
 use schemaform_dioxus::{
-    Affordance, AffordanceKind, BoundForm, BuiltinShell, FormHandle, HandleError, Localizer,
-    NodePresentation, RenderConfiguration, SchemaForm, ShellContext, ShellRenderer,
-    StructureRenderers, SubmissionMode, render::MessageDescriptor, use_form,
+    Affordance, AffordanceKind, BoundForm, BuiltinShell, FindingCollectionContext,
+    FindingCollectionPresenter, FormHandle, HandleError, Localizer, NodePresentation,
+    RenderConfiguration, SchemaForm, ShellContext, ShellRenderer, StructureRenderers,
+    SubmissionMode, render::MessageDescriptor, use_form,
 };
 use serde_json::json;
 
@@ -70,6 +75,21 @@ impl ShellRenderer for CapturingShell {
     }
 }
 
+/// Every `(is_summary, submission_mode)` pair a finding presenter was rendered with, in order.
+type PresentedModes = Rc<RefCell<Vec<(bool, SubmissionMode)>>>;
+
+/// Records the submission mode each finding collection is presented in and renders nothing.
+struct ModeRecordingPresenter(PresentedModes);
+
+impl FindingCollectionPresenter for ModeRecordingPresenter {
+    fn render(&self, context: FindingCollectionContext) -> Element {
+        self.0
+            .borrow_mut()
+            .push((context.is_summary(), context.submission_mode()));
+        rsx! {}
+    }
+}
+
 /// Localizes the built-in submit label by its stable key; everything else falls back.
 struct ShellLocalizer;
 
@@ -95,6 +115,7 @@ struct ShellAppProps {
     /// `mode` so a test can switch the prop on the mounted form.
     initial_mode: SubmissionMode,
     mode: Rc<RefCell<Option<Signal<SubmissionMode>>>>,
+    presented_modes: PresentedModes,
 }
 
 impl PartialEq for ShellAppProps {
@@ -108,6 +129,7 @@ impl PartialEq for ShellAppProps {
             && Rc::ptr_eq(&self.errors, &other.errors)
             && self.initial_mode == other.initial_mode
             && Rc::ptr_eq(&self.mode, &other.mode)
+            && Rc::ptr_eq(&self.presented_modes, &other.presented_modes)
     }
 }
 
@@ -137,9 +159,12 @@ fn shell_app(props: ShellAppProps) -> Element {
         .get_or_insert_with(|| form.clone());
     let capture = props.capture.clone();
     let calls = props.calls.clone();
+    let presented_modes = props.presented_modes.clone();
     let bound = use_hook(move || {
         RenderConfiguration::builder()
             .structure(StructureRenderers::default().with_shell(CapturingShell { capture, calls }))
+            .local_presenter(Arc::new(ModeRecordingPresenter(presented_modes.clone())))
+            .summary_presenter(Arc::new(ModeRecordingPresenter(presented_modes)))
             .localizer(Arc::new(ShellLocalizer))
             .build()
             .bind(&form)
@@ -175,6 +200,7 @@ struct MountedShell {
     advisory_submissions: Rc<RefCell<Vec<AdvisorySubmission>>>,
     errors: Rc<RefCell<Vec<HandleError>>>,
     mode: Signal<SubmissionMode>,
+    presented_modes: PresentedModes,
 }
 
 impl MountedShell {
@@ -191,6 +217,7 @@ impl MountedShell {
         let advisory_submissions = Rc::new(RefCell::new(Vec::new()));
         let errors = Rc::new(RefCell::new(Vec::new()));
         let mode = Rc::new(RefCell::new(None));
+        let presented_modes = PresentedModes::default();
         let mut dom = VirtualDom::new_with_props(
             shell_app,
             ShellAppProps {
@@ -203,6 +230,7 @@ impl MountedShell {
                 errors: errors.clone(),
                 initial_mode,
                 mode: mode.clone(),
+                presented_modes: presented_modes.clone(),
             },
         );
         dom.rebuild_in_place();
@@ -227,6 +255,7 @@ impl MountedShell {
             advisory_submissions,
             errors,
             mode,
+            presented_modes,
         }
     }
 
@@ -507,4 +536,53 @@ impl Localizer for FallbackOnlyLocalizer {
     fn localize(&self, message: &MessageDescriptor) -> String {
         message.fallback.clone()
     }
+}
+
+impl MountedShell {
+    /// The mode the latest summary and the latest node-local presentation were rendered in.
+    fn latest_presented_modes(&self) -> (SubmissionMode, SubmissionMode) {
+        let presented = self.presented_modes.borrow();
+        let latest = |summary: bool| {
+            presented
+                .iter()
+                .rev()
+                .find(|(is_summary, _)| *is_summary == summary)
+                .map(|(_, mode)| *mode)
+                .expect("both finding presenters should have rendered")
+        };
+        (latest(true), latest(false))
+    }
+}
+
+#[test]
+fn finding_presenters_receive_the_form_submission_mode() {
+    let mounted = MountedShell::mount_in(SubmissionMode::Advisory);
+    assert_eq!(
+        mounted.latest_presented_modes(),
+        (SubmissionMode::Advisory, SubmissionMode::Advisory)
+    );
+
+    let mounted = MountedShell::mount();
+    assert_eq!(
+        mounted.latest_presented_modes(),
+        (SubmissionMode::Gated, SubmissionMode::Gated)
+    );
+}
+
+#[test]
+fn switching_the_submission_mode_prop_re_presents_the_findings_in_the_new_mode() {
+    let mut mounted = MountedShell::mount();
+    mounted.make_invalid();
+
+    mounted.switch_mode(SubmissionMode::Advisory);
+    assert_eq!(
+        mounted.latest_presented_modes(),
+        (SubmissionMode::Advisory, SubmissionMode::Advisory)
+    );
+
+    mounted.switch_mode(SubmissionMode::Gated);
+    assert_eq!(
+        mounted.latest_presented_modes(),
+        (SubmissionMode::Gated, SubmissionMode::Gated)
+    );
 }

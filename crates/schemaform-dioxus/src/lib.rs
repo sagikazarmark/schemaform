@@ -170,6 +170,12 @@ pub struct SchemaFormProps {
 pub fn SchemaForm(props: SchemaFormProps) -> Element {
     let operation_errors = use_context_provider(OperationErrorHandler::default);
     operation_errors.set(Some(props.on_error));
+    // Finding presenters read the mode through the bound form; only a change is written, and
+    // this component never subscribes to the signal, so the write cannot re-render it.
+    let mut submission_mode = props.form.inner.submission_mode;
+    if *submission_mode.peek() != props.submission_mode {
+        submission_mode.set(props.submission_mode);
+    }
     let form_id = props.form.inner.form_id.clone();
     let gated_submit = use_gated_submit_callback(&props);
     let advisory_submit = use_advisory_submit_callback(&props);
@@ -411,8 +417,9 @@ fn FindingCollectionPresentation(props: FindingCollectionPresentationProps) -> E
     } else {
         props.form.inner.local_presenter
     };
+    let submission_mode = *props.form.inner.submission_mode.read();
     let presenter = presenter.read();
-    presenter.render(props.context)
+    presenter.render(props.context.with_submission_mode(submission_mode))
 }
 
 #[derive(Clone)]

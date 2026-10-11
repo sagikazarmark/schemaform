@@ -1071,6 +1071,7 @@ impl PartialEq for PreparedExtensions {
 pub struct FindingCollectionContext {
     entries: Vec<FindingPresentation>,
     summary: bool,
+    submission_mode: crate::SubmissionMode,
 }
 
 impl FindingCollectionContext {
@@ -1084,6 +1085,7 @@ impl FindingCollectionContext {
                 })
                 .collect(),
             summary: false,
+            submission_mode: crate::SubmissionMode::Gated,
         }
     }
 
@@ -1097,6 +1099,7 @@ impl FindingCollectionContext {
                 })
                 .collect(),
             summary: true,
+            submission_mode: crate::SubmissionMode::Gated,
         }
     }
 
@@ -1118,6 +1121,21 @@ impl FindingCollectionContext {
     /// Returns `true` for the form-wide summary and `false` for a node-local collection.
     pub fn is_summary(&self) -> bool {
         self.summary
+    }
+
+    /// The submission mode of the form these findings belong to.
+    ///
+    /// A presenter that styles findings differently when nothing is refused — warnings rather
+    /// than errors in [`SubmissionMode::Advisory`](crate::SubmissionMode::Advisory), say —
+    /// branches on this rather than on a side channel the shell provides. It follows the
+    /// `SchemaForm` prop: switching the mode on a mounted form re-renders its findings.
+    pub fn submission_mode(&self) -> crate::SubmissionMode {
+        self.submission_mode
+    }
+
+    pub(crate) fn with_submission_mode(mut self, mode: crate::SubmissionMode) -> Self {
+        self.submission_mode = mode;
+        self
     }
 }
 
@@ -1507,6 +1525,7 @@ impl RenderConfiguration {
                 local_presenter: Signal::new(self.local_presenter.clone()),
                 summary_presenter: Signal::new(self.summary_presenter.clone()),
                 localizer: Signal::new(self.localizer.clone()),
+                submission_mode: Signal::new(crate::SubmissionMode::Gated),
                 grid_wide_breakpoint_css_px: self.grid_wide_breakpoint_css_px,
                 #[cfg(schemaform_test_validation_faults)]
                 observer: self.observer.clone(),
@@ -1824,6 +1843,9 @@ pub(crate) struct BoundFormInner {
     pub(crate) local_presenter: Signal<Arc<dyn FindingCollectionPresenter>>,
     pub(crate) summary_presenter: Signal<Arc<dyn FindingCollectionPresenter>>,
     pub(crate) localizer: Signal<Arc<dyn Localizer>>,
+    /// The `SchemaForm` submission mode, kept current by the mounted component so finding
+    /// presenters re-render when it changes.
+    pub(crate) submission_mode: Signal<crate::SubmissionMode>,
     pub(crate) grid_wide_breakpoint_css_px: u32,
     #[cfg(schemaform_test_validation_faults)]
     pub(crate) observer: Option<Arc<dyn RenderObserver>>,
