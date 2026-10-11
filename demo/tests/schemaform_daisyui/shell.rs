@@ -6,11 +6,12 @@ fn mount() -> RenderedForm {
     RenderedForm::mount(arrays_app)
 }
 
-/// The shell keeps the adapter's contract — summary first, then the body — and places the
-/// submit affordance as a primary daisyUI button that submits through the form element, so
-/// Enter in a text control and clicking the button take the same path.
+/// The shell places the body, then the submit affordance as a primary daisyUI button that submits
+/// through the form element, so Enter in a text control and clicking the button take the same
+/// path, then the summary last, so a finding revealed when a control is left never moves the
+/// button being clicked.
 #[test]
-fn the_shell_places_summary_then_body_and_a_primary_submit_button() {
+fn the_shell_places_body_then_a_primary_submit_button_then_summary() {
     let rendered = mount();
     let html = rendered.html();
 
@@ -40,5 +41,5 @@ fn the_shell_places_summary_then_body_and_a_primary_submit_button() {
     let submit = html
         .find(&format!("id=\"{form_id}-submit\""))
         .expect("checked above");
-    assert!(summary < body && body < submit, "{html}");
+    assert!(body < submit && submit < summary, "{html}");
 }

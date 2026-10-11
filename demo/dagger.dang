@@ -60,13 +60,19 @@ type Demo {
   """
   Build the demo application.
   """
-  build: Directory! @check {
+  build: Directory! {
     self
       .dioxus
       .bundle(
         release: true,
         debugSymbols: false,
       )
+  }
+
+  buildCheck: Void @check {
+    self.build.sync
+
+    null
   }
 
   """
@@ -77,12 +83,14 @@ type Demo {
   partition, renderer selection, and the control, collection, shell, and
   finding-presenter markup) run here; the wasm bundle above never executes them.
   """
-  test: String! @check {
+  test: Void @check {
     self
       .dioxus
       .container
       .withExec(["cargo", "test", "--locked"])
-      .stdout
+      .sync
+
+    null
   }
 
   """
@@ -106,7 +114,7 @@ type Demo {
   browser image is the one matching the Playwright version `e2e/package.json`
   pins. See `e2e/README.md`.
   """
-  accessibility: String! @check {
+  accessibility: Void @check {
     Dagger
       .container
       .from("mcr.microsoft.com/playwright:v" + self.playwrightVersion + "-noble")
@@ -116,10 +124,12 @@ type Demo {
       .withExec(["npm", "ci"])
       .withMountedDirectory("/work/site", self.build.directory("public"))
       .withExec(["node", "daisyui.mjs", "--site", "/work/site", "--out", "/work/artifacts"])
-      .stdout
+      .sync
+
+    null
   }
 
-  workerBundle: Directory! @check {
+  workerBundle: Directory! {
     let client = self
       .dioxus
       .bundle(
@@ -133,8 +143,10 @@ type Demo {
       .withDirectory("dist", client)
   }
 
-  workerBundleAsContainer: Container! {
-    Dagger.container.withDirectory("", self.workerBundle)
+  workerBundleCheck: Void @check {
+    self.workerBundle.sync
+
+    null
   }
 }
 

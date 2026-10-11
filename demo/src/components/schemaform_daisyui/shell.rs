@@ -1,4 +1,4 @@
-//! The daisyUI form shell: the finding summary, the body, and the submit button inside the
+//! The daisyUI form shell: the body, the submit button, and the finding summary inside the
 //! adapter-owned form element.
 
 use dioxus::prelude::*;
@@ -7,8 +7,14 @@ use schemaform_dioxus::{ShellContext, ShellRenderer};
 use super::Appearance;
 use crate::components::button::{Button, ButtonColor};
 
-/// Lays the form's contents out as a vertical grid — the finding summary, then the body, then a
-/// primary daisyUI button for the submit affordance.
+/// Lays the form's contents out as a vertical grid — the body, then a primary daisyUI button for
+/// the submit affordance, then the finding summary.
+///
+/// The summary comes last so that its growth never moves anything in the form. A finding is
+/// revealed when its control is left, and leaving a control is the `mousedown` of whatever is
+/// clicked next; a summary above the body would push that target down between `mousedown` and
+/// `mouseup`, and the click would land on nothing. A blocked submission still reaches the summary
+/// here, because the adapter focuses it.
 ///
 /// The button is `type="submit"`, so it submits through the adapter-owned form element and
 /// pressing Enter in a text control takes the same path. The summary arrives with its
@@ -39,7 +45,6 @@ impl ShellRenderer for DaisyuiShell {
                 if let Some(help) = context.presentation.help {
                     p { id: help.id, "{help.text}" }
                 }
-                {context.summary}
                 {context.body}
                 Button {
                     id: submit.id.clone(),
@@ -48,6 +53,7 @@ impl ShellRenderer for DaisyuiShell {
                     class: appearance.utilities("w-fit"),
                     "{submit.label}"
                 }
+                {context.summary}
             }
         }
     }
