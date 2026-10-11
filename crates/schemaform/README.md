@@ -474,12 +474,11 @@ responsible for secrets, persistence, transport, and authorization.
 default vocabulary has it: a string that does not look like its `format` is
 valid, and no finding is raised for it. The annotation reaches adapters through
 `DataSchemaAnnotations::formats`. The Dioxus adapter's built-in string control
-uses it to pick the browser widget — `email`, `url`, `date`, `datetime-local`,
-`time` — and its README records the
-[mapping and the `datetime-local` decision](../schemaform-dioxus/README.md#string-formats-and-browser-widgets).
-That is presentation only: the data stays a string, and a host that asserts
-`format` downstream should read that section before pairing the picker with an
-RFC 3339 `date-time`.
+uses it to pick the browser widget — `email`, `url`, `date` — and takes
+`date-time` and `time` as RFC 3339 text, since no browser widget writes a zone
+offset; its README records the
+[mapping, the host override, and why `date-time` has no picker](../schemaform-dioxus/README.md#string-formats-and-browser-widgets).
+That is presentation only: the data stays the string the user entered.
 
 ## Feature Flags
 

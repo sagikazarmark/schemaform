@@ -1046,6 +1046,8 @@ enum BuiltinMessage {
     BooleanTrue,
     ChoiceNull,
     MultipleChoiceRequired,
+    DateTimePlaceholder,
+    TimePlaceholder,
     WriteOnlyNotSet { label: String },
     WriteOnlyNeedsReplacement { label: String },
     WriteOnlySet { label: String },
@@ -1237,6 +1239,16 @@ impl BuiltinMessage {
             Self::MultipleChoiceRequired => (
                 "schemaform.multiple-choice.required",
                 "Field must be present".to_owned(),
+                serde_json::json!({}),
+            ),
+            Self::DateTimePlaceholder => (
+                "schemaform.format.date-time.placeholder",
+                "2025-01-31T09:30:00Z".to_owned(),
+                serde_json::json!({}),
+            ),
+            Self::TimePlaceholder => (
+                "schemaform.format.time.placeholder",
+                "09:30:00Z".to_owned(),
                 serde_json::json!({}),
             ),
             Self::WriteOnlyNotSet { label } => (
@@ -2848,6 +2860,20 @@ fn control_facets(
         true_label: localize_builtin(form, BuiltinMessage::BooleanTrue),
     });
     let format = single_format(&projection.data_schema_annotations);
+    let input_type = form
+        .inner
+        .input_type(kind, projection.write_only, format.as_deref());
+    // No browser widget writes an RFC 3339 `date-time` or `time`; a text widget shows the shape.
+    let placeholder = match (kind, format.as_deref(), input_type) {
+        (render::ControlKind::String, Some("date-time"), render::InputType::Text) => {
+            Some(BuiltinMessage::DateTimePlaceholder)
+        }
+        (render::ControlKind::String, Some("time"), render::InputType::Text) => {
+            Some(BuiltinMessage::TimePlaceholder)
+        }
+        _ => None,
+    }
+    .map(|message| localize_builtin(form, message));
     let multiple_choice_required_notice = (kind == render::ControlKind::MultipleChoice && required)
         .then(|| localize_builtin(form, BuiltinMessage::MultipleChoiceRequired));
     render::ControlFacets {
@@ -2865,6 +2891,8 @@ fn control_facets(
         write_only_status,
         boolean_labels,
         format,
+        input_type,
+        placeholder,
     }
 }
 
@@ -3374,7 +3402,8 @@ fn BuiltinTextControl(props: BuiltinControlProps) -> Element {
     let facets = context.control();
     let write_only = facets.write_only;
     let required = facets.required;
-    let input_type = facets.input_type();
+    let input_type = facets.input_type.as_str();
+    let placeholder = facets.placeholder.clone();
     let label = chrome.label(chrome.widget_label(write_only));
     let incompatible_value = context.presentation().incompatible_value.clone();
     rsx! {
@@ -3386,6 +3415,7 @@ fn BuiltinTextControl(props: BuiltinControlProps) -> Element {
                 id: chrome.element_id,
                 name: chrome.name,
                 r#type: input_type,
+                placeholder,
                 inputmode: chrome.kind.input_mode(),
                 value: display_value,
                 "data-write-only-replacement": write_only.then_some(""),
@@ -3768,9 +3798,9 @@ pub use render::{
     ControlRegistry, ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
     ExtensionPrepareError, ExtensionRenderContext, FindingCollectionContext,
     FindingCollectionPresenter, FindingDescriptor, FindingKind, FindingPresentation, Help,
-    Localizer, MessageDescriptor, NodePresentation, PreparedExtension, PreparedExtensions,
-    RenderConfiguration, RenderConfigurationBuilder, ShellContext, ShellRenderer,
-    StructureRenderers, TargetFocusAction, WriteOnlyReplacement,
+    InputType, Localizer, MessageDescriptor, NodePresentation, PreparedExtension,
+    PreparedExtensions, RenderConfiguration, RenderConfigurationBuilder, ShellContext,
+    ShellRenderer, StructureRenderers, TargetFocusAction, WriteOnlyReplacement,
 };
 #[cfg(schemaform_test_validation_faults)]
 pub use render_observation::{RenderEvent, RenderNodeKind, RenderObservation, RenderObserver};
@@ -4014,6 +4044,18 @@ mod tests {
                 BuiltinMessage::BooleanTrue,
                 "schemaform.boolean.true",
                 "True",
+                json!({}),
+            ),
+            (
+                BuiltinMessage::DateTimePlaceholder,
+                "schemaform.format.date-time.placeholder",
+                "2025-01-31T09:30:00Z",
+                json!({}),
+            ),
+            (
+                BuiltinMessage::TimePlaceholder,
+                "schemaform.format.time.placeholder",
+                "09:30:00Z",
                 json!({}),
             ),
             (

@@ -985,34 +985,96 @@ pub struct ControlFacets {
     ///
     /// Present when the applicable subschemas agree on exactly one `format`; absent when none
     /// declares one, and when they name different formats, since no single widget could
-    /// serve both. The core keeps `format` an annotation: it never validates or produces
-    /// findings, so a renderer package that maps it to a browser widget changes presentation
-    /// only. The built-in string control maps it as the crate README documents.
+    /// serve both. Presentation follows it through [`Self::input_type`]; a renderer package
+    /// that maps it to a browser widget changes presentation only.
     pub format: Option<String>,
+    /// The `type` of the text-like `<input>` the built-in renders for this control.
+    ///
+    /// Resolved by the adapter, so a custom renderer that uses it agrees with the built-in and
+    /// with the host's [`RenderConfigurationBuilder::format_input_type`] overrides. A
+    /// write-only value is [`InputType::Password`] whatever its `format`. A string's `format`
+    /// takes the host's override when there is one and otherwise the crate README's
+    /// `format`-to-`type` table; every other format, no format, and every non-string kind are
+    /// [`InputType::Text`].
+    pub input_type: InputType,
+    /// Localized placeholder showing the shape a text widget expects.
+    ///
+    /// Present when a string's `format` is `date-time` or `time` and [`Self::input_type`] is
+    /// [`InputType::Text`]: no browser widget writes an RFC 3339 `date-time` or `time`, so the
+    /// built-in takes typed text and shows an example of the shape.
+    pub placeholder: Option<String>,
 }
 
-impl ControlFacets {
-    /// The `type` the built-in text control renders.
+/// The `type` of a text-like `<input>`: which browser widget edits a string control.
+///
+/// Every variant edits a string. The enum may grow, so matches need a wildcard arm.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum InputType {
+    /// `type="text"`.
+    Text,
+    /// `type="password"`.
+    Password,
+    /// `type="email"`.
+    Email,
+    /// `type="url"`.
+    Url,
+    /// `type="tel"`.
+    Tel,
+    /// `type="search"`.
+    Search,
+    /// `type="date"`; writes `YYYY-MM-DD`, an RFC 3339 `full-date`.
+    Date,
+    /// `type="datetime-local"`; writes `YYYY-MM-DDTHH:MM[:SS]` with no zone offset, which is
+    /// not an RFC 3339 `date-time`.
+    DateTimeLocal,
+    /// `type="time"`; writes `HH:MM[:SS]` with no zone offset, which is not an RFC 3339
+    /// `time`.
+    Time,
+    /// `type="month"`; writes `YYYY-MM`.
+    Month,
+    /// `type="week"`; writes `YYYY-Www`.
+    Week,
+    /// `type="color"`; writes `#rrggbb`.
+    Color,
+}
+
+impl InputType {
+    /// The value of the `<input>` element's `type` attribute.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Password => "password",
+            Self::Email => "email",
+            Self::Url => "url",
+            Self::Tel => "tel",
+            Self::Search => "search",
+            Self::Date => "date",
+            Self::DateTimeLocal => "datetime-local",
+            Self::Time => "time",
+            Self::Month => "month",
+            Self::Week => "week",
+            Self::Color => "color",
+        }
+    }
+
+    /// The built-in widget for a string `format`, per the crate README's table.
     ///
-    /// A write-only value is a `password` widget whatever its `format`. A string whose
-    /// `format` names a concept the browser has a widget for gets that widget, per the
-    /// `format`-to-`type` table in the crate README; every other format, no format, and every
-    /// non-string kind render `text`.
-    pub(crate) fn input_type(&self) -> &'static str {
-        if self.write_only {
-            return "password";
+    /// Only formats whose browser widget writes a value of that format get one: `date-time`
+    /// and `time` stay text, since `datetime-local` and `time` widgets write no zone offset.
+    pub(crate) fn builtin_for_format(format: &str) -> Self {
+        match format {
+            "email" | "idn-email" => Self::Email,
+            "uri" | "uri-reference" | "iri" | "iri-reference" => Self::Url,
+            "date" => Self::Date,
+            _ => Self::Text,
         }
-        if self.kind != ControlKind::String {
-            return "text";
-        }
-        match self.format.as_deref() {
-            Some("email" | "idn-email") => "email",
-            Some("uri" | "uri-reference" | "iri" | "iri-reference") => "url",
-            Some("date") => "date",
-            Some("date-time") => "datetime-local",
-            Some("time") => "time",
-            _ => "text",
-        }
+    }
+}
+
+impl fmt::Display for InputType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
     }
 }
 
@@ -1447,6 +1509,7 @@ pub struct RenderConfiguration {
     localizer: Arc<dyn Localizer>,
     extensions: Vec<(ExtensionNamespace, Arc<dyn ExtensionHandler>)>,
     grid_wide_breakpoint_css_px: u32,
+    format_input_types: BTreeMap<String, InputType>,
     #[cfg(schemaform_test_validation_faults)]
     observer: Option<Arc<dyn RenderObserver>>,
 }
@@ -1461,6 +1524,7 @@ impl Default for RenderConfiguration {
             localizer: Arc::new(FallbackLocalizer),
             extensions: Vec::new(),
             grid_wide_breakpoint_css_px: 640,
+            format_input_types: BTreeMap::new(),
             #[cfg(schemaform_test_validation_faults)]
             observer: None,
         }
@@ -1527,6 +1591,7 @@ impl RenderConfiguration {
                 localizer: Signal::new(self.localizer.clone()),
                 submission_mode: Signal::new(crate::SubmissionMode::Gated),
                 grid_wide_breakpoint_css_px: self.grid_wide_breakpoint_css_px,
+                format_input_types: self.format_input_types.clone(),
                 #[cfg(schemaform_test_validation_faults)]
                 observer: self.observer.clone(),
             }),
@@ -1753,6 +1818,21 @@ impl RenderConfigurationBuilder {
         self
     }
 
+    /// Renders a string control whose `format` is exactly `format` as `input_type`.
+    ///
+    /// Overrides the built-in `format`-to-`type` table for one format, or maps a format it does
+    /// not list; a later call for the same format wins. A write-only string stays
+    /// [`InputType::Password`], and non-string controls are unaffected. The resolved type
+    /// reaches custom renderers as [`ControlFacets::input_type`]. Fixed at
+    /// [`RenderConfiguration::bind`]. The widget's output is stored verbatim: a host that picks
+    /// [`InputType::DateTimeLocal`] for `date-time` accepts values with no zone offset.
+    pub fn format_input_type(mut self, format: impl Into<String>, input_type: InputType) -> Self {
+        self.configuration
+            .format_input_types
+            .insert(format.into(), input_type);
+        self
+    }
+
     /// Sets the CSS-pixel breakpoint at which authored grid cells use their wide spans.
     pub fn grid_wide_breakpoint_css_px(mut self, breakpoint: u32) -> Self {
         self.configuration.grid_wide_breakpoint_css_px = breakpoint;
@@ -1847,8 +1927,33 @@ pub(crate) struct BoundFormInner {
     /// presenters re-render when it changes.
     pub(crate) submission_mode: Signal<crate::SubmissionMode>,
     pub(crate) grid_wide_breakpoint_css_px: u32,
+    /// Host overrides of the built-in `format`-to-`type` table; see
+    /// [`RenderConfigurationBuilder::format_input_type`].
+    pub(crate) format_input_types: BTreeMap<String, InputType>,
     #[cfg(schemaform_test_validation_faults)]
     pub(crate) observer: Option<Arc<dyn RenderObserver>>,
+}
+
+impl BoundFormInner {
+    /// Resolves [`ControlFacets::input_type`] for a control.
+    pub(crate) fn input_type(
+        &self,
+        kind: ControlKind,
+        write_only: bool,
+        format: Option<&str>,
+    ) -> InputType {
+        if write_only {
+            return InputType::Password;
+        }
+        match (kind, format) {
+            (ControlKind::String, Some(format)) => self
+                .format_input_types
+                .get(format)
+                .copied()
+                .unwrap_or_else(|| InputType::builtin_for_format(format)),
+            _ => InputType::Text,
+        }
+    }
 }
 
 #[derive(Clone, PartialEq)]
