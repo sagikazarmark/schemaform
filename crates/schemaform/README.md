@@ -456,6 +456,20 @@ fn control_at(form: &Form, pointer: &str) -> InstanceIdentity {
 }
 ```
 
+## Read-Only Forms
+
+A host can make a whole form read-only — to keep an answered form on screen,
+say — with `Form::set_read_only(true)`, or create it that way with
+`FormBuilder::read_only`. Every node then reports `NodeView::is_read_only` and
+no allowed operations, and `UserActions` refuses every edit, presence and
+collection operation, and blur with `UserOperationError::OperationNotAllowed`.
+It is runtime state, not a data-schema annotation: host operations —
+transactions, reinitialization, external findings, and submission preparation —
+keep working, form data and findings are untouched, and
+`Form::set_read_only(false)` restores what the schema's own `readOnly`
+annotations allow. Changing it advances only the state revision and reports the
+nodes whose view changed.
+
 ## Trust Boundary
 
 Data schemas must be application-trusted for evaluator work. The package

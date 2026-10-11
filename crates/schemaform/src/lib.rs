@@ -3580,6 +3580,7 @@ pub mod form {
         external_finding_limits: ExternalFindingLimits,
         limits: FormDataLimits,
         finding_visibility: FindingVisibilityPolicy,
+        read_only: bool,
         id: u64,
     }
 
@@ -3591,6 +3592,7 @@ pub mod form {
         edit_buffer: Option<String>,
         allowed_operations: AllowedOperations,
         value_state: Option<ScalarValueState>,
+        read_only: bool,
         touched: bool,
         dirty: bool,
         findings: Vec<FindingObservation>,
@@ -3655,6 +3657,7 @@ pub mod form {
                 external_finding_limits,
                 limits,
                 finding_visibility,
+                read_only: false,
                 id,
             })
         }
@@ -4056,6 +4059,32 @@ pub mod form {
             }
             let after = self.revisions();
             self.transition(before, after, self.changed_nodes(observations_before))
+        }
+
+        /// Makes every node of the form read-only, or lifts that again.
+        ///
+        /// A read-only form allows no user operation: every node reports
+        /// [`NodeView::is_read_only`] and no [`NodeView::allowed_operations`], and
+        /// [`UserActions`] refuses edits, presence and collection operations, and
+        /// blur with [`UserOperationError::OperationNotAllowed`]. Host operations —
+        /// transactions, reinitialization, external findings, and submission
+        /// preparation — are unaffected, as are form data, edit buffers, and
+        /// findings. Lifting it restores whatever the data schema's own `readOnly`
+        /// annotations allow. This may advance only the state revision.
+        pub fn set_read_only(&mut self, read_only: bool) -> Transition {
+            let before = self.revisions();
+            let observations_before = self.node_observations();
+            if self.read_only != read_only {
+                self.read_only = read_only;
+                self.engine.mark_state_changed();
+            }
+            let after = self.revisions();
+            self.transition(before, after, self.changed_nodes(observations_before))
+        }
+
+        /// Returns whether the whole form is read-only; see [`Self::set_read_only`].
+        pub fn is_read_only(&self) -> bool {
+            self.read_only
         }
 
         /// Replaces the form's baseline and current data with a new owned object.
@@ -4544,6 +4573,7 @@ pub mod form {
                 edit_buffer: node.edit_buffer().map(str::to_owned),
                 allowed_operations: node.allowed_operations(),
                 value_state: node.value_state(),
+                read_only: node.is_read_only(),
                 touched: node.is_touched(),
                 dirty: node.is_dirty(),
                 findings,
@@ -5022,6 +5052,7 @@ pub mod form {
         external_finding_limits: ExternalFindingLimits,
         limits: FormDataLimits,
         seed_defaults: bool,
+        read_only: bool,
     }
 
     impl<'a> FormBuilder<'a> {
@@ -5033,6 +5064,7 @@ pub mod form {
                 external_finding_limits: ExternalFindingLimits::default(),
                 limits: FormDataLimits::default(),
                 seed_defaults: false,
+                read_only: false,
             }
         }
 
@@ -5044,6 +5076,12 @@ pub mod form {
         /// seeded.
         pub fn seed_defaults(mut self) -> Self {
             self.seed_defaults = true;
+            self
+        }
+
+        /// Creates the form read-only; see [`Form::set_read_only`].
+        pub fn read_only(mut self) -> Self {
+            self.read_only = true;
             self
         }
 
@@ -5081,13 +5119,15 @@ pub mod form {
                     .engine
                     .seed_defaults(&mut self.form_data);
             }
-            Form::new(
+            let mut form = Form::new(
                 self.definition.clone(),
                 self.form_data,
                 self.limits,
                 self.visibility,
                 self.external_finding_limits,
-            )
+            )?;
+            form.read_only = self.read_only;
+            Ok(form)
         }
     }
 
@@ -5417,8 +5457,13 @@ pub mod form {
             operations
         }
 
-        /// Returns whether this node or an enclosing schema scope is read-only.
+        /// Returns whether this node is read-only: the whole form is (see
+        /// [`Form::set_read_only`]), or the node or an enclosing schema scope is
+        /// annotated `readOnly`.
         pub fn is_read_only(&self) -> bool {
+            if self.form.read_only {
+                return true;
+            }
             if self.definition().data_schema_annotations().is_read_only() {
                 return true;
             }

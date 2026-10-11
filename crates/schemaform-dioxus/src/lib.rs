@@ -202,6 +202,8 @@ pub fn SchemaForm(props: SchemaFormProps) -> Element {
         return rsx! {};
     };
     localize_node_text(&props.form, &mut root);
+    // Subscribes to the form-wide read-only flag alone, not to every transition.
+    let read_only = handle.observe_read_only();
     let presentation = node_presentation(&props.form, &root, &form_id, Vec::new(), None);
     let heading_id = (presentation.label_visible && !presentation.label.is_empty())
         .then(|| format!("{form_id}-heading"));
@@ -217,6 +219,7 @@ pub fn SchemaForm(props: SchemaFormProps) -> Element {
             summary: rsx! { FindingSummary { form: props.form.clone() } },
             body: rsx! { FormBody { form: props.form.clone() } },
             submit: submit_affordance,
+            read_only,
         });
     let mut grid_styles = format!(
         "#{form_id} .schemaform-grid{{display:grid;grid-template-columns:repeat(12,minmax(0,1fr))}}",
@@ -271,12 +274,18 @@ fn use_gated_submit_callback(props: &SchemaFormProps) -> Callback<()> {
         render::TargetFocusAction::new(format!("{}-summary", props.form.inner.form_id));
     let on_submit = props.on_submit;
     let on_error = props.on_error;
-    use_callback(move |()| match form.handle().prepare_submission() {
-        Ok(preparation) => match preparation.into_parts().1 {
-            SubmissionOutcome::Ready(snapshot) => on_submit.call(snapshot),
-            SubmissionOutcome::Blocked(_) => summary_focus.focus(),
-        },
-        Err(error) => on_error.call(error),
+    use_callback(move |()| {
+        // A read-only form submits nothing.
+        if form.handle().peek_read_only() {
+            return;
+        }
+        match form.handle().prepare_submission() {
+            Ok(preparation) => match preparation.into_parts().1 {
+                SubmissionOutcome::Ready(snapshot) => on_submit.call(snapshot),
+                SubmissionOutcome::Blocked(_) => summary_focus.focus(),
+            },
+            Err(error) => on_error.call(error),
+        }
     })
 }
 
@@ -293,12 +302,16 @@ fn use_advisory_submit_callback(props: &SchemaFormProps) -> Callback<()> {
     let form = props.form.clone();
     let on_advisory_submit = props.on_advisory_submit;
     let on_error = props.on_error;
-    use_callback(
-        move |()| match form.handle().prepare_advisory_submission() {
+    use_callback(move |()| {
+        // A read-only form submits nothing.
+        if form.handle().peek_read_only() {
+            return;
+        }
+        match form.handle().prepare_advisory_submission() {
             Ok(preparation) => on_advisory_submit.call(preparation.into_parts().1),
             Err(error) => on_error.call(error),
-        },
-    )
+        }
+    })
 }
 
 #[derive(Props, Clone, PartialEq)]

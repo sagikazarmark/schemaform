@@ -5964,6 +5964,72 @@ async fn format_widgets_round_trip_their_values_to_canonical_form_data_as_string
 }
 
 #[wasm_bindgen_test]
+async fn a_read_only_form_renders_every_control_as_output_and_submits_nothing() {
+    let MountedTestApp {
+        root,
+        form_handle,
+        submitted,
+    } = mount_test_app(format_test_app).await;
+    let submit_button = |root: &web_sys::Element| {
+        root.query_selector("form button[type='submit']")
+            .expect("the submit selector should be valid")
+    };
+    assert!(submit_button(&root).is_some());
+    let data = form_handle
+        .reader()
+        .form_data()
+        .expect("form should be readable");
+
+    form_handle
+        .set_read_only(true)
+        .expect("the live form should become read-only");
+    poll_dom(|| submit_button(&root).is_none().then_some(())).await;
+    // Every control is noninteractive output; the write-only one still hides its value.
+    assert!(
+        root.query_selector("form input")
+            .expect("the input selector should be valid")
+            .is_none(),
+        "a read-only form renders no editable input"
+    );
+    let email = root
+        .query_selector("output[name='/email'][data-read-only]")
+        .expect("the output selector should be valid")
+        .expect("the email should render as read-only output");
+    assert_eq!(email.text_content().as_deref(), Some("ada@example.test"));
+    assert!(
+        !root.inner_html().contains("hunter2"),
+        "a read-only write-only value is still not echoed"
+    );
+
+    let form: HtmlFormElement = root
+        .query_selector("form")
+        .expect("the form selector should be valid")
+        .expect("the schema form should render a form element")
+        .dyn_into()
+        .expect("the schema form should use semantic form HTML");
+    dispatch_submit(&form);
+    // Give a submission every chance to land before asserting that none did.
+    for _ in 0..8 {
+        next_microtask().await;
+    }
+    assert!(submitted.borrow().is_none());
+
+    form_handle
+        .set_read_only(false)
+        .expect("the live form should become editable again");
+    poll_dom(|| submit_button(&root).is_some().then_some(())).await;
+    assert_eq!(
+        input_with_binding(&root, "/email").value(),
+        "ada@example.test"
+    );
+    dispatch_submit(&form);
+    let snapshot = poll_dom(|| submitted.borrow().clone()).await;
+    assert_eq!(snapshot.form_data(), &data);
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
 async fn builtins_present_read_only_and_write_only_data_without_losing_submission_values() {
     let MountedTestApp {
         root,

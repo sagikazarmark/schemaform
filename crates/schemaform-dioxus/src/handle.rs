@@ -37,6 +37,8 @@ pub(crate) struct HandleInner {
     pub(crate) form: RefCell<Form>,
     form_version: Signal<u64>,
     summary_projection: Signal<SummaryProjection>,
+    /// Whether the whole form is read-only, written only when that changes.
+    read_only: Signal<bool>,
     lifecycle_version: Signal<u64>,
     node_versions: RefCell<HashMap<InstanceIdentity, Signal<u64>>>,
     owner_scope: ScopeId,
@@ -67,6 +69,7 @@ impl FormHandle {
     fn new(form: Form) -> Self {
         let root = form.view().root();
         let summary_projection = project_summary(&form);
+        let read_only = form.is_read_only();
         let mut identities = Vec::new();
         let mut pending = vec![root];
         while let Some(identity) = pending.pop() {
@@ -88,6 +91,7 @@ impl FormHandle {
                 form: RefCell::new(form),
                 form_version: Signal::new(0),
                 summary_projection: Signal::new(summary_projection),
+                read_only: Signal::new(read_only),
                 lifecycle_version: Signal::new(0),
                 node_versions: RefCell::new(node_versions),
                 owner_scope: current_scope_id(),
@@ -248,6 +252,25 @@ impl FormHandle {
         Ok(transition)
     }
 
+    /// Makes the whole form read-only, or lifts that again; see
+    /// [`schemaform::Form::set_read_only`].
+    ///
+    /// A mounted [`crate::SchemaForm`] follows: every control renders read-only, no presence or
+    /// collection affordance is offered, the built-in shell omits its submit button, and
+    /// submitting does nothing. Host operations on this handle keep working. Re-entry while the
+    /// form is borrowed returns [`HandleError::BorrowConflict`].
+    pub fn set_read_only(&self, read_only: bool) -> Result<Transition, HandleError> {
+        self.ensure_live()?;
+        let transition = self
+            .inner
+            .form
+            .try_borrow_mut()
+            .map_err(|_| HandleError::BorrowConflict)?
+            .set_read_only(read_only);
+        self.apply_transition(&transition);
+        Ok(transition)
+    }
+
     /// Runs one privileged core transaction and publishes its transition after commit.
     ///
     /// The closure runs synchronously while this handle is mutably borrowed and must not call
@@ -356,6 +379,16 @@ impl FormHandle {
         if summary_projection.peek().ne(&next_summary) {
             summary_projection.set(next_summary);
         }
+        let next_read_only = self
+            .inner
+            .form
+            .try_borrow()
+            .expect("form mutations release their borrow before publishing")
+            .is_read_only();
+        let mut read_only = self.inner.read_only;
+        if *read_only.peek() != next_read_only {
+            read_only.set(next_read_only);
+        }
         let (changed_versions, removed_versions) = {
             let mut node_versions = self.inner.node_versions.borrow_mut();
             let mut changed_versions = Vec::new();
@@ -418,6 +451,16 @@ impl FormHandle {
 
     pub(crate) fn summary_projection(&self) -> SummaryProjection {
         self.inner.summary_projection.read().clone()
+    }
+
+    /// Whether the whole form is read-only, subscribing the caller to changes of that alone.
+    pub(crate) fn observe_read_only(&self) -> bool {
+        *self.inner.read_only.read()
+    }
+
+    /// Whether the whole form is read-only, without subscribing.
+    pub(crate) fn peek_read_only(&self) -> bool {
+        *self.inner.read_only.peek()
     }
 
     pub(crate) fn observe_node(&self, identity: InstanceIdentity) {
@@ -496,6 +539,7 @@ impl FormReader {
             data_revision: view.data_revision(),
             state_revision: view.state_revision(),
             submission_attempted: view.submission_attempted(),
+            read_only: form.is_read_only(),
             findings,
         })
     }
@@ -683,6 +727,8 @@ pub struct FormProjection {
     pub state_revision: StateRevision,
     /// Whether submission has been attempted since initialization or reset.
     pub submission_attempted: bool,
+    /// Whether the whole form is read-only; see [`FormHandle::set_read_only`].
+    pub read_only: bool,
     /// Currently visible findings in core presentation order.
     pub findings: Vec<FindingProjection>,
 }

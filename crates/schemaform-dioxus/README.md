@@ -763,6 +763,23 @@ labels and help, findings, submit and presence controls, array actions and live
 announcements, and write-only replacement chrome all pass through this
 interface. Text is rendered as escaped plain text.
 
+## Read-Only Forms
+
+`FormHandle::set_read_only(true)` makes a mounted form read-only as a whole,
+for a form that stays visible after it has been answered. It is the core's
+read-only form (see
+[the core README](../schemaform/README.md#read-only-forms)), so the adapter
+follows without extra wiring: every built-in control renders as noninteractive
+`output`, a write-only value stays unechoed, no presence or collection
+affordance is offered, and the built-in shell omits its submit button.
+Submitting does nothing in either submission mode — neither the form's `submit`
+event nor a submit affordance a shell kept reaches `on_submit` or
+`on_advisory_submit`. Custom renderers see the same state: `control().read_only`
+is true, `presentation().presence` is empty, an action returns
+`HandleError::UserOperation(OperationNotAllowed)`, and `ShellContext::read_only`
+tells a custom shell to omit or disable its submit button.
+`FormProjection::read_only` reports the flag. `set_read_only(false)` lifts it.
+
 ## Errors And Platform Boundary
 
 | Stage | Public result |

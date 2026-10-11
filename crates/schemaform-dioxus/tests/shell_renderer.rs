@@ -34,6 +34,7 @@ struct CapturedShell {
     heading_id: Option<String>,
     submit: Affordance,
     summary_rendered: bool,
+    read_only: bool,
     body_rendered: bool,
 }
 
@@ -52,6 +53,7 @@ impl ShellRenderer for CapturingShell {
             presentation: context.presentation.clone(),
             heading_id: context.heading_id.clone(),
             submit: context.submit.clone(),
+            read_only: context.read_only,
             summary_rendered: context.summary.is_ok(),
             body_rendered: context.body.is_ok(),
         });
@@ -585,4 +587,52 @@ fn switching_the_submission_mode_prop_re_presents_the_findings_in_the_new_mode()
         mounted.latest_presented_modes(),
         (SubmissionMode::Gated, SubmissionMode::Gated)
     );
+}
+
+#[test]
+fn a_read_only_form_tells_the_shell_and_submits_nothing_in_either_mode() {
+    for mode in [SubmissionMode::Gated, SubmissionMode::Advisory] {
+        let mut mounted = MountedShell::mount_in(mode);
+        assert!(!mounted.captured().read_only);
+
+        let handle = mounted.handle.clone();
+        mounted.drive(|| {
+            handle
+                .set_read_only(true)
+                .expect("the live form should become read-only");
+        });
+        let shell = mounted.captured();
+        assert!(shell.read_only, "{mode:?}");
+        assert!(
+            mounted
+                .handle
+                .reader()
+                .read()
+                .expect("the form should be readable")
+                .read_only
+        );
+
+        let submit = shell.submit;
+        mounted.drive(|| submit.invoke());
+        assert!(mounted.submitted.borrow().is_none(), "{mode:?}");
+        assert!(mounted.advisory_submissions.borrow().is_empty(), "{mode:?}");
+        assert!(mounted.errors.borrow().is_empty(), "{mode:?}");
+
+        let handle = mounted.handle.clone();
+        mounted.drive(|| {
+            handle
+                .set_read_only(false)
+                .expect("the live form should become editable again");
+        });
+        let shell = mounted.captured();
+        assert!(!shell.read_only, "{mode:?}");
+        let submit = shell.submit;
+        mounted.drive(|| submit.invoke());
+        assert_eq!(
+            mounted.submitted.borrow().is_some() as usize
+                + mounted.advisory_submissions.borrow().len(),
+            1,
+            "{mode:?}: lifting read-only restores submission"
+        );
+    }
 }

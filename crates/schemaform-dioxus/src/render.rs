@@ -631,6 +631,12 @@ pub struct ShellContext {
     /// button to say what it does ("Send anyway", say) branches on the kind rather than
     /// reconstructing the rule; the label is the same localized message in both modes.
     pub submit: Affordance,
+    /// Whether the whole form is read-only (see [`FormHandle::set_read_only`]).
+    ///
+    /// A read-only form submits nothing: [`Self::submit`] and the form's own `submit` event do
+    /// nothing while this is true. The built-in shell omits its submit button; a custom shell
+    /// should omit or disable its own.
+    pub read_only: bool,
 }
 
 impl fmt::Debug for ShellContext {
@@ -641,6 +647,7 @@ impl fmt::Debug for ShellContext {
             .field("presentation", &self.presentation)
             .field("heading_id", &self.heading_id)
             .field("submit", &self.submit)
+            .field("read_only", &self.read_only)
             .finish_non_exhaustive()
     }
 }
@@ -663,7 +670,9 @@ impl ShellRenderer for BuiltinShell {
             }
             {context.summary}
             {context.body}
-            button { id: context.submit.id.clone(), r#type: "submit", "{context.submit.label}" }
+            if !context.read_only {
+                button { id: context.submit.id.clone(), r#type: "submit", "{context.submit.label}" }
+            }
         }
     }
 }

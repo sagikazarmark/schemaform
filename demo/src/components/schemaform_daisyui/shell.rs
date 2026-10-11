@@ -17,7 +17,7 @@ use crate::components::button::{Button, ButtonColor};
 /// here, because the adapter focuses it.
 ///
 /// The button is `type="submit"`, so it submits through the adapter-owned form element and
-/// pressing Enter in a text control takes the same path. The summary arrives with its
+/// pressing Enter in a text control takes the same path. A read-only form gets no button. The summary arrives with its
 /// adapter-owned region wrapper; this component's finding presenter ([`super::findings`]) is what
 /// frames the findings inside it as an alert, since the shell cannot see whether there are any.
 /// The [`Appearance`] axis switches the grid and the button's width utility off.
@@ -36,6 +36,7 @@ impl DaisyuiShell {
 impl ShellRenderer for DaisyuiShell {
     fn shell(&self, context: ShellContext) -> Element {
         let submit = context.submit;
+        let read_only = context.read_only;
         let appearance = self.appearance;
         rsx! {
             div { class: appearance.utilities("grid gap-4"), "data-schemaform-daisyui": "shell",
@@ -46,12 +47,15 @@ impl ShellRenderer for DaisyuiShell {
                     p { id: help.id, "{help.text}" }
                 }
                 {context.body}
-                Button {
-                    id: submit.id.clone(),
-                    r#type: "submit",
-                    color: ButtonColor::Primary,
-                    class: appearance.utilities("w-fit"),
-                    "{submit.label}"
+                // A read-only form submits nothing, so it offers no button.
+                if !read_only {
+                    Button {
+                        id: submit.id.clone(),
+                        r#type: "submit",
+                        color: ButtonColor::Primary,
+                        class: appearance.utilities("w-fit"),
+                        "{submit.label}"
+                    }
                 }
                 {context.summary}
             }

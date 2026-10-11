@@ -565,3 +565,38 @@ fn host_format_input_types_override_the_built_in_table() {
 
     assert!(errors.borrow().is_empty());
 }
+
+#[test]
+fn a_read_only_form_reaches_custom_renderers_through_the_facets_and_affordances() {
+    let MountedContract {
+        mut dom,
+        contexts,
+        handle,
+        errors,
+    } = mount_contract_app();
+    assert!(!facets(&contexts, "/name").read_only);
+    assert!(!presence_kinds(&contexts, "/level").is_empty());
+
+    dom.in_scope(ScopeId::ROOT, || {
+        handle
+            .set_read_only(true)
+            .expect("the live form should become read-only");
+    });
+    dom.render_immediate(&mut dioxus_core::NoOpMutations);
+
+    for name in ["/name", "/agree", "/secret", "/level", "/email", "/when"] {
+        let context = captured(&contexts, name);
+        assert!(context.control().read_only, "{name}");
+        assert!(context.presentation().presence.is_empty(), "{name}");
+    }
+    assert_eq!(
+        captured(&contexts, "/name")
+            .actions()
+            .input_text("Grace")
+            .err(),
+        Some(HandleError::UserOperation(
+            schemaform::form::UserOperationError::OperationNotAllowed
+        ))
+    );
+    assert!(errors.borrow().is_empty());
+}
