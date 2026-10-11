@@ -770,7 +770,10 @@ for a form that stays visible after it has been answered. It is the core's
 read-only form (see
 [the core README](../schemaform/README.md#read-only-forms)), so the adapter
 follows without extra wiring: every built-in control renders as noninteractive
-`output`, a write-only value stays unechoed, no presence or collection
+`output` that stays in the tab order (`tabindex="0"`, as a native `readonly`
+input would), so keyboard and screen-reader users can still reach each value; a
+custom renderer's read-only presentation should stay focusable too. A
+write-only value stays unechoed, no presence or collection
 affordance is offered, and the built-in shell omits its submit button.
 Submitting does nothing in either submission mode — neither the form's `submit`
 event nor a submit affordance a shell kept reaches `on_submit` or
@@ -805,7 +808,12 @@ as, as every affordance does. Finding presenters see the mode too:
 `FindingCollectionContext::submission_mode()` reports it for the summary and for
 every node-local collection, and a switch re-renders them, so a presenter that
 shows advisory findings as warnings reads it from the adapter rather than from a
-context its shell provides. `FormHandle::prepare_advisory_submission` is the
+context its shell provides. Renderers that present a node's findings
+themselves — a control that wires blocking findings to `aria-errormessage` only
+when they refuse submission, say — read the same mode from
+`NodePresentation::submission_mode()`; it is a reactive read, so a control or
+structure renderer that calls it while rendering re-renders on a switch.
+`FormHandle::prepare_advisory_submission` is the
 handle-level call behind the advisory path, with the same borrow-conflict and
 disposed-handle semantics as `prepare_submission`; which hosts want which path
 is described in

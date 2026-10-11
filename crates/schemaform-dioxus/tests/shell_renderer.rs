@@ -17,9 +17,13 @@ use std::{
 
 use dioxus::prelude::{Element, Props, Signal, WritableExt, rsx, use_hook, use_signal};
 use dioxus_core::{NoOpMutations, ScopeId, VirtualDom};
-use schemaform::{AdvisorySubmission, FormDefinition, SubmissionSnapshot, form::SubmissionBlocker};
+use schemaform::{
+    AdvisorySubmission, FormDefinition, SubmissionSnapshot, definition::DefinitionNodeView,
+    form::SubmissionBlocker,
+};
 use schemaform_dioxus::{
-    Affordance, AffordanceKind, BoundForm, BuiltinShell, FindingCollectionContext,
+    Affordance, AffordanceKind, BoundForm, BuiltinControlRenderer, BuiltinShell, ControlMatcher,
+    ControlRegistry, ControlRenderContext, ControlRenderer, FindingCollectionContext,
     FindingCollectionPresenter, FormHandle, HandleError, Localizer, NodePresentation,
     RenderConfiguration, SchemaForm, ShellContext, ShellRenderer, StructureRenderers,
     SubmissionMode, render::MessageDescriptor, use_form,
@@ -92,6 +96,29 @@ impl FindingCollectionPresenter for ModeRecordingPresenter {
     }
 }
 
+/// Every submission mode a control renderer read from its presentation, in render order.
+type ControlModes = Rc<RefCell<Vec<SubmissionMode>>>;
+
+/// Records the submission mode each control render reads, then renders the built-in control.
+struct ModeRecordingControl(ControlModes);
+
+impl ControlRenderer for ModeRecordingControl {
+    fn render(&self, context: ControlRenderContext) -> Element {
+        self.0
+            .borrow_mut()
+            .push(context.presentation().submission_mode());
+        BuiltinControlRenderer.render(context)
+    }
+}
+
+struct EveryControl;
+
+impl ControlMatcher for EveryControl {
+    fn matches(&self, _definition: DefinitionNodeView<'_>) -> bool {
+        true
+    }
+}
+
 /// Localizes the built-in submit label by its stable key; everything else falls back.
 struct ShellLocalizer;
 
@@ -118,6 +145,7 @@ struct ShellAppProps {
     initial_mode: SubmissionMode,
     mode: Rc<RefCell<Option<Signal<SubmissionMode>>>>,
     presented_modes: PresentedModes,
+    control_modes: ControlModes,
 }
 
 impl PartialEq for ShellAppProps {
@@ -132,6 +160,7 @@ impl PartialEq for ShellAppProps {
             && self.initial_mode == other.initial_mode
             && Rc::ptr_eq(&self.mode, &other.mode)
             && Rc::ptr_eq(&self.presented_modes, &other.presented_modes)
+            && Rc::ptr_eq(&self.control_modes, &other.control_modes)
     }
 }
 
@@ -162,8 +191,14 @@ fn shell_app(props: ShellAppProps) -> Element {
     let capture = props.capture.clone();
     let calls = props.calls.clone();
     let presented_modes = props.presented_modes.clone();
+    let control_modes = props.control_modes.clone();
     let bound = use_hook(move || {
         RenderConfiguration::builder()
+            .controls(ControlRegistry::with_builtins().matcher(
+                10,
+                Arc::new(EveryControl),
+                Arc::new(ModeRecordingControl(control_modes)),
+            ))
             .structure(StructureRenderers::default().with_shell(CapturingShell { capture, calls }))
             .local_presenter(Arc::new(ModeRecordingPresenter(presented_modes.clone())))
             .summary_presenter(Arc::new(ModeRecordingPresenter(presented_modes)))
@@ -203,6 +238,7 @@ struct MountedShell {
     errors: Rc<RefCell<Vec<HandleError>>>,
     mode: Signal<SubmissionMode>,
     presented_modes: PresentedModes,
+    control_modes: ControlModes,
 }
 
 impl MountedShell {
@@ -220,6 +256,7 @@ impl MountedShell {
         let errors = Rc::new(RefCell::new(Vec::new()));
         let mode = Rc::new(RefCell::new(None));
         let presented_modes = PresentedModes::default();
+        let control_modes = ControlModes::default();
         let mut dom = VirtualDom::new_with_props(
             shell_app,
             ShellAppProps {
@@ -233,6 +270,7 @@ impl MountedShell {
                 initial_mode,
                 mode: mode.clone(),
                 presented_modes: presented_modes.clone(),
+                control_modes: control_modes.clone(),
             },
         );
         dom.rebuild_in_place();
@@ -258,6 +296,7 @@ impl MountedShell {
             errors,
             mode,
             presented_modes,
+            control_modes,
         }
     }
 
@@ -586,6 +625,34 @@ fn switching_the_submission_mode_prop_re_presents_the_findings_in_the_new_mode()
     assert_eq!(
         mounted.latest_presented_modes(),
         (SubmissionMode::Gated, SubmissionMode::Gated)
+    );
+}
+
+#[test]
+fn control_renderers_read_the_form_submission_mode_and_follow_a_switch() {
+    let mounted = MountedShell::mount_in(SubmissionMode::Advisory);
+    assert_eq!(
+        mounted.control_modes.borrow().last(),
+        Some(&SubmissionMode::Advisory)
+    );
+
+    let mut mounted = MountedShell::mount();
+    assert_eq!(
+        mounted.control_modes.borrow().last(),
+        Some(&SubmissionMode::Gated)
+    );
+
+    // The renderer read the mode while rendering, so switching the prop re-renders the control
+    // with nothing else about the node changed.
+    mounted.switch_mode(SubmissionMode::Advisory);
+    assert_eq!(
+        mounted.control_modes.borrow().last(),
+        Some(&SubmissionMode::Advisory)
+    );
+    mounted.switch_mode(SubmissionMode::Gated);
+    assert_eq!(
+        mounted.control_modes.borrow().last(),
+        Some(&SubmissionMode::Gated)
     );
 }
 

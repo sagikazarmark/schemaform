@@ -3368,6 +3368,9 @@ impl BuiltinChrome {
     }
 
     /// Renders a read-only node as noninteractive `output`, as every built-in kind does.
+    ///
+    /// The output stays in the tab order (`tabindex="0"`), as a native `readonly` input does,
+    /// so a keyboard or screen-reader user can still reach and read the value.
     fn read_only_output(self, display_value: String) -> Element {
         let label = self.label(self.label.clone());
         rsx! {
@@ -3378,7 +3381,7 @@ impl BuiltinChrome {
                 output {
                     id: self.element_id,
                     name: self.name,
-                    tabindex: "-1",
+                    tabindex: "0",
                     "data-read-only": "",
                     "aria-invalid": self.invalid,
                     "aria-label": self.accessible_label,
