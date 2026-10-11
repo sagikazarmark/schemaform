@@ -456,6 +456,66 @@ fn control_at(form: &Form, pointer: &str) -> InstanceIdentity {
 }
 ```
 
+## Protocol-Profile Schemas
+
+Some protocols restrict JSON Schema to a flat object and fill in what the
+sender leaves out. ACP elicitation schemas are like this: ACP defaults the root
+`type` to `object`, and protocol schemas rarely carry `$schema`. Under plain JSON
+Schema an untyped root accepts any instance, so the compiler reports
+`validation.type.unconstrained` rather than guessing that the form is an
+object. A schema with no `$schema` fails qualification with `MissingDialect`.
+
+The library applies plain JSON Schema semantics and leaves a protocol's defaults
+to the host, which already knows which protocol it speaks. Apply them before
+compiling: set `FormCompiler::default_dialect`, and insert the root
+`"type": "object"` when it is absent. Validation then runs against the schema
+the protocol meant. `examples/untyped_root.rs` shows both
+(`cargo run -p schemaform --example untyped_root`):
+
+```rust
+use schemaform::{CompileError, Dialect, FormDefinition};
+use serde_json::{Value, json};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // An elicitation schema as it can arrive on the wire: no `$schema`, and the
+    // protocol defaults the root `type` to `object`, so the sender may leave it
+    // out.
+    let mut data_schema = json!({
+        "properties": {
+            "name": { "type": "string" }
+        },
+        "required": ["name"]
+    });
+
+    // The protocol fixes the dialect, so the host supplies it. Under plain JSON
+    // Schema an untyped root still accepts any instance, and the compiler
+    // refuses to guess a form for it.
+    let compile = |data_schema: Value| {
+        FormDefinition::compiler(data_schema)
+            .default_dialect(Dialect::Draft202012)
+            .compile()
+    };
+    let Err(CompileError::Capability(report)) = compile(data_schema.clone()) else {
+        panic!("an untyped root has no single representation");
+    };
+    assert!(
+        report
+            .findings()
+            .any(|finding| finding.code() == "validation.type.unconstrained")
+    );
+
+    // The host applies the protocol's default root type before compiling.
+    if let Value::Object(root) = &mut data_schema {
+        root.entry("type").or_insert_with(|| json!("object"));
+    }
+    let definition = compile(data_schema)?;
+    let form = definition.create_form(json!({ "name": "Ada" }))?;
+
+    println!("{}", form.form_data());
+    Ok(())
+}
+```
+
 ## Read-Only Forms
 
 A host can make a whole form read-only — to keep an answered form on screen,
