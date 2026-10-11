@@ -38,8 +38,24 @@ mod finite_choices {
     }
 }
 
+mod format_assertion {
+    include!("../examples/format_assertion.rs");
+
+    pub fn run() -> super::ExampleResult {
+        main()
+    }
+}
+
+mod untyped_root {
+    include!("../examples/untyped_root.rs");
+
+    pub fn run() -> super::ExampleResult {
+        main()
+    }
+}
+
 /// Every example the README quotes, by its file stem under `examples/`.
-const README_EXAMPLES: [(&str, &str); 4] = [
+const README_EXAMPLES: [(&str, &str); 6] = [
     ("quickstart", include_str!("../examples/quickstart.rs")),
     (
         "advisory_submission",
@@ -53,6 +69,11 @@ const README_EXAMPLES: [(&str, &str); 4] = [
         "finite_choices",
         include_str!("../examples/finite_choices.rs"),
     ),
+    (
+        "format_assertion",
+        include_str!("../examples/format_assertion.rs"),
+    ),
+    ("untyped_root", include_str!("../examples/untyped_root.rs")),
 ];
 
 #[test]
@@ -87,4 +108,14 @@ fn the_seeded_defaults_example_runs() {
 #[test]
 fn the_finite_choices_example_runs() {
     finite_choices::run().expect("examples/finite_choices.rs should run to completion");
+}
+
+#[test]
+fn the_format_assertion_example_runs() {
+    format_assertion::run().expect("examples/format_assertion.rs should run to completion");
+}
+
+#[test]
+fn the_untyped_root_example_runs() {
+    untyped_root::run().expect("examples/untyped_root.rs should run to completion");
 }

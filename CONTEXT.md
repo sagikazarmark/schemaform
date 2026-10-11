@@ -139,3 +139,7 @@ _Avoid_: Multi-select, checkbox group, tag list, set control
 **Default seeding**:
 An opt-in, creation-time policy that fills every absent leaf control — scalar, choice, or multiple choice — inside an object the form data already holds with its single property-level `default`, producing the form's baseline. The library never seeds implicitly; host-supplied members — including a present `null` or `[]` — are never overwritten, absent containers and item-level defaults never invent array items, and a seeded default that violates its own schema is reported as a finding rather than corrected.
 _Avoid_: Pre-fill, auto-defaults, initial values, default materialization
+
+**Read-only form**:
+A form-wide, host-set state in which every node is read-only and the core allows no user operation, while host operations — transactions, reinitialization, external findings, submission preparation — keep working. A presentation keeps the form visible but offers nothing to edit or submit. It is runtime state rather than a data-schema annotation, and lifting it restores what the annotations allow.
+_Avoid_: Disabled form, frozen form, locked form

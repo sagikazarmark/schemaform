@@ -1,4 +1,7 @@
-use std::{cmp::Ordering, collections::HashMap};
+use std::{
+    cmp::Ordering,
+    collections::{BTreeSet, HashMap},
+};
 
 use jsonschema::{
     Keyword, PatternOptions, ValidationError, error::ValidationErrorKind, paths::Location,
@@ -8,6 +11,7 @@ use serde_json::{Value, json};
 
 use crate::{
     JsonPointer, QualificationError, RetrievalUri, SchemaLocation, ValidationFinding,
+    definition::AssertedFormat,
     form::IndeterminateReason,
     resources::{DenyRetrieval, ResourceGraph},
 };
@@ -35,6 +39,32 @@ const QUALIFIED_CONFIGURATION: ValidatorConfiguration = ValidatorConfiguration {
     regex_size_limit: REGEX_SIZE_LIMIT,
     regex_dfa_size_limit: REGEX_DFA_SIZE_LIMIT,
 };
+
+/// Every `format` the pinned validator checks when format validation is on. Once a host asserts
+/// any format, each of these it did not assert gets a check that accepts every value, so it stays
+/// the annotation it is by default. `idn-email` and `idn-hostname` need a validator feature this
+/// build leaves off, and are listed so enabling it cannot start asserting them.
+const BUILTIN_FORMATS: [&str; 19] = [
+    "date",
+    "date-time",
+    "duration",
+    "email",
+    "hostname",
+    "idn-email",
+    "idn-hostname",
+    "ipv4",
+    "ipv6",
+    "iri",
+    "iri-reference",
+    "json-pointer",
+    "regex",
+    "relative-json-pointer",
+    "time",
+    "uri",
+    "uri-reference",
+    "uri-template",
+    "uuid",
+];
 
 #[derive(Clone, Copy)]
 enum CardinalityComparison {
@@ -213,34 +243,42 @@ pub(crate) enum Outcome {
 }
 
 impl Validator {
-    pub(crate) fn compile(graph: &ResourceGraph) -> Result<Self, QualificationError> {
+    pub(crate) fn compile(
+        graph: &ResourceGraph,
+        asserted_formats: &BTreeSet<AssertedFormat>,
+    ) -> Result<Self, QualificationError> {
         let root_uri = RetrievalUri::parse(graph.root_resource())
             .expect("qualified resource identities are absolute and fragment-free");
         let root_document = graph.validator_root_document();
-        let inner = build_validator(&root_document, graph.root_resource(), graph.registry())
-            .map_err(|error| {
-                let (resource, pointer) = error.absolute_keyword_location().map_or_else(
-                    || (None, error.schema_path().to_string()),
-                    |absolute| {
-                        let (resource, encoded_pointer) = absolute
-                            .as_str()
-                            .split_once('#')
-                            .unwrap_or((absolute.as_str(), ""));
-                        (
-                            Some(resource),
-                            crate::resources::decode_uri_fragment(encoded_pointer)
-                                .unwrap_or_else(|| error.schema_path().to_string()),
-                        )
-                    },
-                );
-                QualificationError::InvalidSchema {
-                    location: graph.qualification_location_for_error(
-                        resource,
-                        &pointer,
-                        error.instance().as_ref(),
-                    ),
-                }
-            })?;
+        let inner = build_validator(
+            &root_document,
+            graph.root_resource(),
+            graph.registry(),
+            asserted_formats,
+        )
+        .map_err(|error| {
+            let (resource, pointer) = error.absolute_keyword_location().map_or_else(
+                || (None, error.schema_path().to_string()),
+                |absolute| {
+                    let (resource, encoded_pointer) = absolute
+                        .as_str()
+                        .split_once('#')
+                        .unwrap_or((absolute.as_str(), ""));
+                    (
+                        Some(resource),
+                        crate::resources::decode_uri_fragment(encoded_pointer)
+                            .unwrap_or_else(|| error.schema_path().to_string()),
+                    )
+                },
+            );
+            QualificationError::InvalidSchema {
+                location: graph.qualification_location_for_error(
+                    resource,
+                    &pointer,
+                    error.instance().as_ref(),
+                ),
+            }
+        })?;
 
         Ok(Self {
             inner,
@@ -571,8 +609,9 @@ fn build_validator(
     data_schema: &Value,
     base_uri: &str,
     registry: &referencing::Registry<'_>,
+    asserted_formats: &BTreeSet<AssertedFormat>,
 ) -> Result<jsonschema::Validator, ValidationError<'static>> {
-    jsonschema::draft202012::options()
+    let mut options = jsonschema::draft202012::options()
         .with_base_uri(base_uri)
         .with_registry(registry)
         .with_retriever(DenyRetrieval)
@@ -581,14 +620,23 @@ fn build_validator(
         .with_keyword("$recursiveRef", annotation_factory)
         .with_keyword("minItems", min_items_factory)
         .with_keyword("maxItems", max_items_factory)
-        .should_validate_formats(QUALIFIED_CONFIGURATION.validate_formats)
+        .should_validate_formats(
+            QUALIFIED_CONFIGURATION.validate_formats || !asserted_formats.is_empty(),
+        )
         .should_ignore_unknown_formats(QUALIFIED_CONFIGURATION.ignore_unknown_formats)
         .with_pattern_options(
             PatternOptions::regex()
                 .size_limit(QUALIFIED_CONFIGURATION.regex_size_limit)
                 .dfa_size_limit(QUALIFIED_CONFIGURATION.regex_dfa_size_limit),
-        )
-        .build(data_schema)
+        );
+    if !asserted_formats.is_empty() {
+        for name in BUILTIN_FORMATS {
+            if !asserted_formats.iter().any(|format| format.name() == name) {
+                options = options.with_format(name, |_: &str| true);
+            }
+        }
+    }
+    options.build(data_schema)
 }
 
 fn compare_findings(left: &ValidationFinding, right: &ValidationFinding) -> Ordering {
@@ -673,6 +721,7 @@ mod tests {
             }),
             "https://schemas.example/root.json",
             &registry,
+            &BTreeSet::new(),
         );
         let Err(error) = result else {
             panic!("validator construction should deny missing resource retrieval");
@@ -752,6 +801,7 @@ mod tests {
                 &schema,
                 "https://schemas.example/cardinality.json",
                 &registry,
+                &BTreeSet::new(),
             )
             .expect("the cardinality schema should compile");
             assert_eq!(
@@ -809,7 +859,8 @@ mod tests {
             Vec::new(),
         )
         .expect("the dual-role schema should prepare");
-        let validator = Validator::compile(&graph).expect("the dual-role schema should compile");
+        let validator = Validator::compile(&graph, &BTreeSet::new())
+            .expect("the dual-role schema should compile");
         let keyword_value = match keyword {
             "dependencies" => json!({ "foo": ["bar"] }),
             "additionalItems" => Value::Bool(false),
@@ -898,6 +949,7 @@ mod tests {
             }),
             "https://schemas.example/length.json",
             &registry,
+            &BTreeSet::new(),
         )
         .expect("the length schema should compile");
 
@@ -949,6 +1001,88 @@ mod tests {
             };
             assert!(!evaluator_failed(&kind));
             assert_eq!(finding_code(&kind), keyword);
+        }
+    }
+
+    /// Validates `value` against `{ "format": format }` with `asserted` asserted.
+    fn format_is_valid(asserted: &[AssertedFormat], format: &str, value: &str) -> bool {
+        let registry = Registry::new()
+            .draft(Draft::Draft202012)
+            .prepare()
+            .expect("the empty registry should prepare");
+        build_validator(
+            &json!({
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "format": format
+            }),
+            "https://schemas.example/format.json",
+            &registry,
+            &asserted.iter().copied().collect(),
+        )
+        .expect("the format schema should compile")
+        .is_valid(&json!(value))
+    }
+
+    #[cfg_attr(
+        all(target_arch = "wasm32", target_os = "unknown"),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
+    #[cfg_attr(not(all(target_arch = "wasm32", target_os = "unknown")), test)]
+    fn only_asserted_formats_constrain_values() {
+        // Nothing asserted: every format is an annotation.
+        assert!(format_is_valid(&[], "date-time", "not a date-time"));
+
+        let asserted = [AssertedFormat::DateTime, AssertedFormat::Email];
+        assert!(format_is_valid(
+            &asserted,
+            "date-time",
+            "2025-01-31T09:30:00Z"
+        ));
+        // What a `datetime-local` widget writes: no seconds, no zone offset.
+        assert!(!format_is_valid(&asserted, "date-time", "2025-01-31T09:30"));
+        assert!(!format_is_valid(&asserted, "email", "not an email"));
+        // Every format the validator knows but the host did not assert stays an annotation.
+        for format in BUILTIN_FORMATS {
+            if format != "date-time" && format != "email" {
+                assert!(
+                    format_is_valid(&asserted, format, "\u{0} [not valid ("),
+                    "{format} should not be asserted"
+                );
+            }
+        }
+        // So does a format the validator does not know.
+        assert!(format_is_valid(&asserted, "x-unknown", "anything"));
+    }
+
+    #[cfg_attr(
+        all(target_arch = "wasm32", target_os = "unknown"),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
+    #[cfg_attr(not(all(target_arch = "wasm32", target_os = "unknown")), test)]
+    fn every_asserted_format_is_one_the_validator_checks() {
+        for format in [
+            AssertedFormat::Date,
+            AssertedFormat::DateTime,
+            AssertedFormat::Time,
+            AssertedFormat::Duration,
+            AssertedFormat::Email,
+            AssertedFormat::Hostname,
+            AssertedFormat::Ipv4,
+            AssertedFormat::Ipv6,
+            AssertedFormat::Uri,
+            AssertedFormat::UriReference,
+            AssertedFormat::Iri,
+            AssertedFormat::IriReference,
+            AssertedFormat::UriTemplate,
+            AssertedFormat::Uuid,
+            AssertedFormat::JsonPointer,
+            AssertedFormat::RelativeJsonPointer,
+        ] {
+            assert!(BUILTIN_FORMATS.contains(&format.name()), "{format:?}");
+            assert!(
+                !format_is_valid(&[format], format.name(), "\u{0} [not valid ("),
+                "{format:?} should reject a value of no format"
+            );
         }
     }
 }

@@ -515,6 +515,7 @@ pub mod definition {
                 None,
                 CompilationProfile::default(),
                 None,
+                BTreeSet::new(),
             )?;
             Self::require_no_blocking_capabilities(definition)
         }
@@ -535,6 +536,7 @@ pub mod definition {
             ui_schema: Option<ui::v1::UiSchema>,
             profile: CompilationProfile,
             default_dialect: Option<Dialect>,
+            asserted_formats: BTreeSet<AssertedFormat>,
         ) -> Result<Self, CompileError> {
             crate::limits::check_compilation_inputs(&root_uri, &data_schema, &resources, &profile)
                 .map_err(|error| CompileError::Resource(ResourceError::Limit(error)))?;
@@ -809,7 +811,7 @@ pub mod definition {
             )
             .map_err(|error| CompileError::Resource(ResourceError::Limit(error)))?;
 
-            let validator = crate::validation::Validator::compile(&graph)
+            let validator = crate::validation::Validator::compile(&graph, &asserted_formats)
                 .map_err(CompileError::Qualification)?;
 
             let fingerprint = fingerprint(
@@ -819,6 +821,7 @@ pub mod definition {
                 &engine,
                 &root_uri,
                 &profile,
+                &asserted_formats,
             );
             Ok(Self {
                 inner: Arc::new(DefinitionInner {
@@ -1908,6 +1911,7 @@ pub mod definition {
         ui_schema: Option<ui::v1::UiSchema>,
         profile: CompilationProfile,
         default_dialect: Option<Dialect>,
+        asserted_formats: BTreeSet<AssertedFormat>,
     }
 
     impl FormCompiler {
@@ -1923,6 +1927,7 @@ pub mod definition {
                 ui_schema: None,
                 profile: CompilationProfile::default(),
                 default_dialect: None,
+                asserted_formats: BTreeSet::new(),
             }
         }
 
@@ -1963,6 +1968,20 @@ pub mod definition {
             self
         }
 
+        /// Asserts `formats`, in addition to any asserted already.
+        ///
+        /// `format` is an annotation by default, as Draft 2020-12's default
+        /// vocabulary has it. A string whose `format` is asserted and that does
+        /// not match it is invalid, with an ordinary validation finding (code
+        /// `format`, parameter `format`) at the string: it blocks a gated
+        /// submission and travels with an advisory one. Every `format` not
+        /// asserted stays an annotation. The asserted set is part of the
+        /// definition fingerprint.
+        pub fn assert_formats(mut self, formats: impl IntoIterator<Item = AssertedFormat>) -> Self {
+            self.asserted_formats.extend(formats);
+            self
+        }
+
         /// Replaces all compilation resource limits with `profile`.
         pub fn profile(mut self, profile: CompilationProfile) -> Self {
             self.profile = profile;
@@ -1978,6 +1997,7 @@ pub mod definition {
                 self.ui_schema,
                 self.profile,
                 self.default_dialect,
+                self.asserted_formats,
             )
         }
 
@@ -2039,6 +2059,77 @@ pub mod definition {
     #[non_exhaustive]
     pub enum Dialect {
         Draft202012,
+    }
+
+    /// A `format` the validator can assert when a host opts in with
+    /// [`FormCompiler::assert_formats`].
+    ///
+    /// `format` is an annotation by default. An asserted format makes a string
+    /// that does not match it invalid, reported as an ordinary validation
+    /// finding with code `format` and a `format` parameter. Every check here is
+    /// linear in the value: `regex` is deliberately absent, since checking it
+    /// compiles the value as a regular expression, and `idn-email` and
+    /// `idn-hostname` are not built into this release. The enum may grow, so
+    /// matches need a wildcard arm.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[non_exhaustive]
+    pub enum AssertedFormat {
+        /// RFC 3339 `full-date`, such as `2025-01-31`.
+        Date,
+        /// RFC 3339 `date-time`, which requires seconds and a zone offset.
+        DateTime,
+        /// RFC 3339 `full-time`, which requires seconds and a zone offset.
+        Time,
+        /// ISO 8601 duration, such as `P1DT2H`.
+        Duration,
+        /// RFC 5321 mailbox.
+        Email,
+        /// RFC 1123 host name.
+        Hostname,
+        /// Dotted-quad IPv4 address.
+        Ipv4,
+        /// RFC 4291 IPv6 address.
+        Ipv6,
+        /// RFC 3986 URI.
+        Uri,
+        /// RFC 3986 URI reference.
+        UriReference,
+        /// RFC 3987 IRI.
+        Iri,
+        /// RFC 3987 IRI reference.
+        IriReference,
+        /// RFC 6570 URI template.
+        UriTemplate,
+        /// RFC 4122 UUID.
+        Uuid,
+        /// RFC 6901 JSON Pointer.
+        JsonPointer,
+        /// Relative JSON Pointer.
+        RelativeJsonPointer,
+    }
+
+    impl AssertedFormat {
+        /// The `format` keyword value this asserts.
+        pub fn name(self) -> &'static str {
+            match self {
+                Self::Date => "date",
+                Self::DateTime => "date-time",
+                Self::Time => "time",
+                Self::Duration => "duration",
+                Self::Email => "email",
+                Self::Hostname => "hostname",
+                Self::Ipv4 => "ipv4",
+                Self::Ipv6 => "ipv6",
+                Self::Uri => "uri",
+                Self::UriReference => "uri-reference",
+                Self::Iri => "iri",
+                Self::IriReference => "iri-reference",
+                Self::UriTemplate => "uri-template",
+                Self::Uuid => "uuid",
+                Self::JsonPointer => "json-pointer",
+                Self::RelativeJsonPointer => "relative-json-pointer",
+            }
+        }
     }
 
     /// Resource limits for bounded parsing and compilation of data-schema and
@@ -3184,9 +3275,10 @@ pub mod definition {
         engine: &engine::FormDefinition,
         root_uri: &RetrievalUri,
         profile: &CompilationProfile,
+        asserted_formats: &BTreeSet<AssertedFormat>,
     ) -> DefinitionFingerprint {
         let mut hasher = Sha256::new();
-        hasher.update(b"schemaform-definition-v22\0");
+        hasher.update(b"schemaform-definition-v23\0");
         hash_bytes(&mut hasher, engine.fingerprint_bytes());
         hash_bytes(&mut hasher, root_uri.as_str().as_bytes());
         for maximum in profile.ui_schema_limits().values() {
@@ -3197,6 +3289,10 @@ pub mod definition {
         }
         for maximum in profile.extension_limits().values() {
             hasher.update((maximum as u64).to_be_bytes());
+        }
+        hasher.update((asserted_formats.len() as u64).to_be_bytes());
+        for format in asserted_formats {
+            hash_bytes(&mut hasher, format.name().as_bytes());
         }
         hasher.update((required_extensions.len() as u64).to_be_bytes());
         for namespace in required_extensions {
@@ -3484,6 +3580,7 @@ pub mod form {
         external_finding_limits: ExternalFindingLimits,
         limits: FormDataLimits,
         finding_visibility: FindingVisibilityPolicy,
+        read_only: bool,
         id: u64,
     }
 
@@ -3495,6 +3592,7 @@ pub mod form {
         edit_buffer: Option<String>,
         allowed_operations: AllowedOperations,
         value_state: Option<ScalarValueState>,
+        read_only: bool,
         touched: bool,
         dirty: bool,
         findings: Vec<FindingObservation>,
@@ -3559,6 +3657,7 @@ pub mod form {
                 external_finding_limits,
                 limits,
                 finding_visibility,
+                read_only: false,
                 id,
             })
         }
@@ -3960,6 +4059,32 @@ pub mod form {
             }
             let after = self.revisions();
             self.transition(before, after, self.changed_nodes(observations_before))
+        }
+
+        /// Makes every node of the form read-only, or lifts that again.
+        ///
+        /// A read-only form allows no user operation: every node reports
+        /// [`NodeView::is_read_only`] and no [`NodeView::allowed_operations`], and
+        /// [`UserActions`] refuses edits, presence and collection operations, and
+        /// blur with [`UserOperationError::OperationNotAllowed`]. Host operations —
+        /// transactions, reinitialization, external findings, and submission
+        /// preparation — are unaffected, as are form data, edit buffers, and
+        /// findings. Lifting it restores whatever the data schema's own `readOnly`
+        /// annotations allow. This may advance only the state revision.
+        pub fn set_read_only(&mut self, read_only: bool) -> Transition {
+            let before = self.revisions();
+            let observations_before = self.node_observations();
+            if self.read_only != read_only {
+                self.read_only = read_only;
+                self.engine.mark_state_changed();
+            }
+            let after = self.revisions();
+            self.transition(before, after, self.changed_nodes(observations_before))
+        }
+
+        /// Returns whether the whole form is read-only; see [`Self::set_read_only`].
+        pub fn is_read_only(&self) -> bool {
+            self.read_only
         }
 
         /// Replaces the form's baseline and current data with a new owned object.
@@ -4448,6 +4573,7 @@ pub mod form {
                 edit_buffer: node.edit_buffer().map(str::to_owned),
                 allowed_operations: node.allowed_operations(),
                 value_state: node.value_state(),
+                read_only: node.is_read_only(),
                 touched: node.is_touched(),
                 dirty: node.is_dirty(),
                 findings,
@@ -4926,6 +5052,7 @@ pub mod form {
         external_finding_limits: ExternalFindingLimits,
         limits: FormDataLimits,
         seed_defaults: bool,
+        read_only: bool,
     }
 
     impl<'a> FormBuilder<'a> {
@@ -4937,6 +5064,7 @@ pub mod form {
                 external_finding_limits: ExternalFindingLimits::default(),
                 limits: FormDataLimits::default(),
                 seed_defaults: false,
+                read_only: false,
             }
         }
 
@@ -4948,6 +5076,12 @@ pub mod form {
         /// seeded.
         pub fn seed_defaults(mut self) -> Self {
             self.seed_defaults = true;
+            self
+        }
+
+        /// Creates the form read-only; see [`Form::set_read_only`].
+        pub fn read_only(mut self) -> Self {
+            self.read_only = true;
             self
         }
 
@@ -4985,13 +5119,15 @@ pub mod form {
                     .engine
                     .seed_defaults(&mut self.form_data);
             }
-            Form::new(
+            let mut form = Form::new(
                 self.definition.clone(),
                 self.form_data,
                 self.limits,
                 self.visibility,
                 self.external_finding_limits,
-            )
+            )?;
+            form.read_only = self.read_only;
+            Ok(form)
         }
     }
 
@@ -5321,8 +5457,13 @@ pub mod form {
             operations
         }
 
-        /// Returns whether this node or an enclosing schema scope is read-only.
+        /// Returns whether this node is read-only: the whole form is (see
+        /// [`Form::set_read_only`]), or the node or an enclosing schema scope is
+        /// annotated `readOnly`.
         pub fn is_read_only(&self) -> bool {
+            if self.form.read_only {
+                return true;
+            }
             if self.definition().data_schema_annotations().is_read_only() {
                 return true;
             }
@@ -7631,7 +7772,7 @@ pub mod form {
 
 pub use address::{ExtensionNamespace, JsonPointer, RetrievalUri, SchemaLocation, WidgetSymbol};
 pub use definition::{
-    AnalysisError, CapabilityFinding, CapabilityReport, CapabilitySeverity,
+    AnalysisError, AssertedFormat, CapabilityFinding, CapabilityReport, CapabilitySeverity,
     CompilationLimitDimension, CompilationLimitError, CompilationLimitPhase, CompilationProfile,
     CompileError, DataSchemaAnnotations, DefinitionFingerprint, DefinitionNodeId, Dialect,
     FormAnalysis, FormCompiler, FormDefinition, ResourceError, ResourceLimitError,

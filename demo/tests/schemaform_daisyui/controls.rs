@@ -364,8 +364,8 @@ fn a_write_only_control_uses_the_password_type_and_the_replacement_label() {
     assert!(rendered.html().contains("Replace Secret"));
 }
 
-/// The `format` facet reaches this renderer package as the annotation; it maps the formats the
-/// browser has a widget for the way the built-in does, without seeing the data schema.
+/// The adapter resolves the `<input>` type from the `format`, so this renderer package renders
+/// the widget the built-in does without seeing the data schema or keeping its own table.
 #[test]
 fn a_string_with_a_format_the_browser_has_a_widget_for_renders_that_widget() {
     let rendered = mount();
@@ -384,6 +384,15 @@ fn a_string_with_a_format_the_browser_has_a_widget_for_renders_that_widget() {
             "{name} should still be a daisyUI input: {control:?}"
         );
     }
+
+    // No browser widget writes an RFC 3339 `date-time`: it is typed text, and the facet's
+    // placeholder shows the shape.
+    let met_at = rendered.control("/met_at");
+    assert_eq!(met_at.attribute("type"), Some("text"));
+    assert_eq!(
+        met_at.attribute("placeholder"),
+        Some("2025-01-31T09:30:00Z")
+    );
 }
 
 #[test]

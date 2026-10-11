@@ -152,6 +152,7 @@ pub(crate) fn gallery_app(props: TestAppProps) -> Element {
                 "nickname": { "type": ["string", "null"], "title": "Nickname" },
                 "email": { "type": "string", "title": "Email", "format": "email" },
                 "born_on": { "type": "string", "title": "Born on", "format": "date" },
+                "met_at": { "type": "string", "title": "Met at", "format": "date-time" },
                 "secret": {
                     "type": "string",
                     "title": "Secret",

@@ -170,6 +170,12 @@ pub struct SchemaFormProps {
 pub fn SchemaForm(props: SchemaFormProps) -> Element {
     let operation_errors = use_context_provider(OperationErrorHandler::default);
     operation_errors.set(Some(props.on_error));
+    // Finding presenters read the mode through the bound form; only a change is written, and
+    // this component never subscribes to the signal, so the write cannot re-render it.
+    let mut submission_mode = props.form.inner.submission_mode;
+    if *submission_mode.peek() != props.submission_mode {
+        submission_mode.set(props.submission_mode);
+    }
     let form_id = props.form.inner.form_id.clone();
     let gated_submit = use_gated_submit_callback(&props);
     let advisory_submit = use_advisory_submit_callback(&props);
@@ -196,6 +202,8 @@ pub fn SchemaForm(props: SchemaFormProps) -> Element {
         return rsx! {};
     };
     localize_node_text(&props.form, &mut root);
+    // Subscribes to the form-wide read-only flag alone, not to every transition.
+    let read_only = handle.observe_read_only();
     let presentation = node_presentation(&props.form, &root, &form_id, Vec::new(), None);
     let heading_id = (presentation.label_visible && !presentation.label.is_empty())
         .then(|| format!("{form_id}-heading"));
@@ -211,6 +219,7 @@ pub fn SchemaForm(props: SchemaFormProps) -> Element {
             summary: rsx! { FindingSummary { form: props.form.clone() } },
             body: rsx! { FormBody { form: props.form.clone() } },
             submit: submit_affordance,
+            read_only,
         });
     let mut grid_styles = format!(
         "#{form_id} .schemaform-grid{{display:grid;grid-template-columns:repeat(12,minmax(0,1fr))}}",
@@ -265,12 +274,18 @@ fn use_gated_submit_callback(props: &SchemaFormProps) -> Callback<()> {
         render::TargetFocusAction::new(format!("{}-summary", props.form.inner.form_id));
     let on_submit = props.on_submit;
     let on_error = props.on_error;
-    use_callback(move |()| match form.handle().prepare_submission() {
-        Ok(preparation) => match preparation.into_parts().1 {
-            SubmissionOutcome::Ready(snapshot) => on_submit.call(snapshot),
-            SubmissionOutcome::Blocked(_) => summary_focus.focus(),
-        },
-        Err(error) => on_error.call(error),
+    use_callback(move |()| {
+        // A read-only form submits nothing.
+        if form.handle().peek_read_only() {
+            return;
+        }
+        match form.handle().prepare_submission() {
+            Ok(preparation) => match preparation.into_parts().1 {
+                SubmissionOutcome::Ready(snapshot) => on_submit.call(snapshot),
+                SubmissionOutcome::Blocked(_) => summary_focus.focus(),
+            },
+            Err(error) => on_error.call(error),
+        }
     })
 }
 
@@ -287,12 +302,16 @@ fn use_advisory_submit_callback(props: &SchemaFormProps) -> Callback<()> {
     let form = props.form.clone();
     let on_advisory_submit = props.on_advisory_submit;
     let on_error = props.on_error;
-    use_callback(
-        move |()| match form.handle().prepare_advisory_submission() {
+    use_callback(move |()| {
+        // A read-only form submits nothing.
+        if form.handle().peek_read_only() {
+            return;
+        }
+        match form.handle().prepare_advisory_submission() {
             Ok(preparation) => on_advisory_submit.call(preparation.into_parts().1),
             Err(error) => on_error.call(error),
-        },
-    )
+        }
+    })
 }
 
 #[derive(Props, Clone, PartialEq)]
@@ -411,8 +430,9 @@ fn FindingCollectionPresentation(props: FindingCollectionPresentationProps) -> E
     } else {
         props.form.inner.local_presenter
     };
+    let submission_mode = *props.form.inner.submission_mode.read();
     let presenter = presenter.read();
-    presenter.render(props.context)
+    presenter.render(props.context.with_submission_mode(submission_mode))
 }
 
 #[derive(Clone)]
@@ -1039,6 +1059,8 @@ enum BuiltinMessage {
     BooleanTrue,
     ChoiceNull,
     MultipleChoiceRequired,
+    DateTimePlaceholder,
+    TimePlaceholder,
     WriteOnlyNotSet { label: String },
     WriteOnlyNeedsReplacement { label: String },
     WriteOnlySet { label: String },
@@ -1230,6 +1252,16 @@ impl BuiltinMessage {
             Self::MultipleChoiceRequired => (
                 "schemaform.multiple-choice.required",
                 "Field must be present".to_owned(),
+                serde_json::json!({}),
+            ),
+            Self::DateTimePlaceholder => (
+                "schemaform.format.date-time.placeholder",
+                "2025-01-31T09:30:00Z".to_owned(),
+                serde_json::json!({}),
+            ),
+            Self::TimePlaceholder => (
+                "schemaform.format.time.placeholder",
+                "09:30:00Z".to_owned(),
                 serde_json::json!({}),
             ),
             Self::WriteOnlyNotSet { label } => (
@@ -2841,6 +2873,20 @@ fn control_facets(
         true_label: localize_builtin(form, BuiltinMessage::BooleanTrue),
     });
     let format = single_format(&projection.data_schema_annotations);
+    let input_type = form
+        .inner
+        .input_type(kind, projection.write_only, format.as_deref());
+    // No browser widget writes an RFC 3339 `date-time` or `time`; a text widget shows the shape.
+    let placeholder = match (kind, format.as_deref(), input_type) {
+        (render::ControlKind::String, Some("date-time"), render::InputType::Text) => {
+            Some(BuiltinMessage::DateTimePlaceholder)
+        }
+        (render::ControlKind::String, Some("time"), render::InputType::Text) => {
+            Some(BuiltinMessage::TimePlaceholder)
+        }
+        _ => None,
+    }
+    .map(|message| localize_builtin(form, message));
     let multiple_choice_required_notice = (kind == render::ControlKind::MultipleChoice && required)
         .then(|| localize_builtin(form, BuiltinMessage::MultipleChoiceRequired));
     render::ControlFacets {
@@ -2858,6 +2904,8 @@ fn control_facets(
         write_only_status,
         boolean_labels,
         format,
+        input_type,
+        placeholder,
     }
 }
 
@@ -3367,7 +3415,8 @@ fn BuiltinTextControl(props: BuiltinControlProps) -> Element {
     let facets = context.control();
     let write_only = facets.write_only;
     let required = facets.required;
-    let input_type = facets.input_type();
+    let input_type = facets.input_type.as_str();
+    let placeholder = facets.placeholder.clone();
     let label = chrome.label(chrome.widget_label(write_only));
     let incompatible_value = context.presentation().incompatible_value.clone();
     rsx! {
@@ -3379,6 +3428,7 @@ fn BuiltinTextControl(props: BuiltinControlProps) -> Element {
                 id: chrome.element_id,
                 name: chrome.name,
                 r#type: input_type,
+                placeholder,
                 inputmode: chrome.kind.input_mode(),
                 value: display_value,
                 "data-write-only-replacement": write_only.then_some(""),
@@ -3742,6 +3792,14 @@ fn validation_finding_fallback(finding: &schemaform::ValidationFinding) -> Strin
     {
         return format!("Value must be at least {limit}.");
     }
+    if finding.code() == "format"
+        && let Some(format) = finding
+            .parameters()
+            .get("format")
+            .and_then(|format| format.as_str())
+    {
+        return format!("Value must be a valid {format}.");
+    }
     format!("Value does not satisfy {}.", finding.code())
 }
 
@@ -3761,9 +3819,9 @@ pub use render::{
     ControlRegistry, ControlRenderContext, ControlRenderer, ExtensionHandler, ExtensionOccurrence,
     ExtensionPrepareError, ExtensionRenderContext, FindingCollectionContext,
     FindingCollectionPresenter, FindingDescriptor, FindingKind, FindingPresentation, Help,
-    Localizer, MessageDescriptor, NodePresentation, PreparedExtension, PreparedExtensions,
-    RenderConfiguration, RenderConfigurationBuilder, ShellContext, ShellRenderer,
-    StructureRenderers, TargetFocusAction, WriteOnlyReplacement,
+    InputType, Localizer, MessageDescriptor, NodePresentation, PreparedExtension,
+    PreparedExtensions, RenderConfiguration, RenderConfigurationBuilder, ShellContext,
+    ShellRenderer, StructureRenderers, TargetFocusAction, WriteOnlyReplacement,
 };
 #[cfg(schemaform_test_validation_faults)]
 pub use render_observation::{RenderEvent, RenderNodeKind, RenderObservation, RenderObserver};
@@ -4010,6 +4068,18 @@ mod tests {
                 json!({}),
             ),
             (
+                BuiltinMessage::DateTimePlaceholder,
+                "schemaform.format.date-time.placeholder",
+                "2025-01-31T09:30:00Z",
+                json!({}),
+            ),
+            (
+                BuiltinMessage::TimePlaceholder,
+                "schemaform.format.time.placeholder",
+                "09:30:00Z",
+                json!({}),
+            ),
+            (
                 BuiltinMessage::ChoiceNull,
                 "schemaform.choice.null",
                 "None",
@@ -4052,5 +4122,33 @@ mod tests {
                 "duplicate built-in key {expected_key}"
             );
         }
+    }
+
+    #[test]
+    fn an_asserted_format_finding_falls_back_to_naming_the_format() {
+        let definition = schemaform::FormDefinition::compiler(json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": { "when": { "type": "string", "format": "date-time" } }
+        }))
+        .assert_formats([schemaform::AssertedFormat::DateTime])
+        .compile()
+        .expect("the asserting definition should compile");
+        let mut form = definition
+            .create_form(json!({ "when": "2025-01-31T09:30" }))
+            .expect("the form should be created");
+        let (_, advisory) = form.prepare_advisory_submission().into_parts();
+        let finding = advisory
+            .findings()
+            .find_map(|blocker| match blocker {
+                schemaform::form::SubmissionBlocker::Validation(finding) => Some(finding),
+                _ => None,
+            })
+            .expect("the offset-less date-time should be a finding");
+
+        assert_eq!(
+            super::validation_finding_fallback(finding),
+            "Value must be a valid date-time."
+        );
     }
 }

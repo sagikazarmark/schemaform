@@ -43,3 +43,26 @@ fn the_shell_places_body_then_a_primary_submit_button_then_summary() {
         .expect("checked above");
     assert!(body < submit && submit < summary, "{html}");
 }
+
+/// A read-only form submits nothing, so the shell offers no button; lifting it brings the button
+/// back.
+#[test]
+fn a_read_only_form_has_no_submit_button() {
+    let mut rendered = mount();
+    let handle = rendered.handle.clone();
+    rendered.drive(|| {
+        handle
+            .set_read_only(true)
+            .expect("the live form should become read-only")
+    });
+    let html = rendered.html();
+    assert!(!html.contains(">Submit</button>"), "{html}");
+
+    let handle = rendered.handle.clone();
+    rendered.drive(|| {
+        handle
+            .set_read_only(false)
+            .expect("the live form should become editable again")
+    });
+    assert!(rendered.html().contains(">Submit</button>"));
+}

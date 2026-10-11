@@ -1671,8 +1671,8 @@ fn format_test_app(props: TestAppProps) -> Element {
             "iri": "https://example.test/ada",
             "iri_reference": "/ada",
             "date": "1815-12-10",
-            "date_time": "1815-12-10T09:30",
-            "time": "09:30",
+            "date_time": "1815-12-10T09:30:00Z",
+            "time": "09:30:00Z",
             "uuid": "not-a-uuid",
             "plain": "Ada",
             "secret": "hunter2"
@@ -5847,6 +5847,7 @@ async fn generated_string_controls_render_the_browser_widget_for_their_format() 
     let MountedTestApp { root, .. } = mount_test_app(format_test_app).await;
 
     // One control per row of the mapping table, plus the two fall-through rows.
+    // `date-time` and `time` are typed as text: no browser widget writes an RFC 3339 value.
     for (binding, expected_type) in [
         ("/email", "email"),
         ("/idn_email", "email"),
@@ -5855,8 +5856,8 @@ async fn generated_string_controls_render_the_browser_widget_for_their_format() 
         ("/iri", "url"),
         ("/iri_reference", "url"),
         ("/date", "date"),
-        ("/date_time", "datetime-local"),
-        ("/time", "time"),
+        ("/date_time", "text"),
+        ("/time", "text"),
         ("/uuid", "text"),
         ("/plain", "text"),
     ] {
@@ -5868,14 +5869,17 @@ async fn generated_string_controls_render_the_browser_widget_for_their_format() 
             "{binding}"
         );
     }
-    // The widgets accepted the canonical form data: a date or time input that rejected its
-    // value would have sanitised it to the empty string.
+    // The widgets accepted the canonical form data: a date input that rejected its value would
+    // have sanitised it to the empty string. The RFC 3339 text inputs hold the value verbatim
+    // and show the shape they expect as a placeholder.
     assert_eq!(input_with_binding(&root, "/date").value(), "1815-12-10");
-    assert_eq!(
-        input_with_binding(&root, "/date_time").value(),
-        "1815-12-10T09:30"
-    );
-    assert_eq!(input_with_binding(&root, "/time").value(), "09:30");
+    let date_time = input_with_binding(&root, "/date_time");
+    assert_eq!(date_time.value(), "1815-12-10T09:30:00Z");
+    assert_eq!(date_time.placeholder(), "2025-01-31T09:30:00Z");
+    let time = input_with_binding(&root, "/time");
+    assert_eq!(time.value(), "09:30:00Z");
+    assert_eq!(time.placeholder(), "09:30:00Z");
+    assert!(!input_with_binding(&root, "/plain").has_attribute("placeholder"));
 
     // A write-only string is a password widget whatever its `format`.
     let secret = input_with_binding(&root, "/secret");
@@ -5906,13 +5910,12 @@ async fn format_widgets_round_trip_their_values_to_canonical_form_data_as_string
         .expect("form should be readable");
 
     // Typing into the email and url widgets, and picking a date, reach canonical form data as
-    // the strings the widget holds. The `datetime-local` widget yields no zone offset; the
-    // core stores what the browser wrote, verbatim.
+    // the strings the widget holds. A `date-time` is typed as RFC 3339 text and stored verbatim.
     for (binding, typed) in [
         ("/email", "grace@example.test"),
         ("/uri", "https://example.test/grace"),
         ("/date", "1906-12-09"),
-        ("/date_time", "1906-12-09T07:45"),
+        ("/date_time", "1906-12-09T07:45:00+01:00"),
     ] {
         let input = input_with_binding(&root, binding);
         dispatch_input(&input, typed);
@@ -5956,6 +5959,72 @@ async fn format_widgets_round_trip_their_values_to_canonical_form_data_as_string
     dispatch_submit(&form);
     let snapshot = poll_dom(|| submitted.borrow().clone()).await;
     assert_eq!(snapshot.form_data(), &expected);
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+async fn a_read_only_form_renders_every_control_as_output_and_submits_nothing() {
+    let MountedTestApp {
+        root,
+        form_handle,
+        submitted,
+    } = mount_test_app(format_test_app).await;
+    let submit_button = |root: &web_sys::Element| {
+        root.query_selector("form button[type='submit']")
+            .expect("the submit selector should be valid")
+    };
+    assert!(submit_button(&root).is_some());
+    let data = form_handle
+        .reader()
+        .form_data()
+        .expect("form should be readable");
+
+    form_handle
+        .set_read_only(true)
+        .expect("the live form should become read-only");
+    poll_dom(|| submit_button(&root).is_none().then_some(())).await;
+    // Every control is noninteractive output; the write-only one still hides its value.
+    assert!(
+        root.query_selector("form input")
+            .expect("the input selector should be valid")
+            .is_none(),
+        "a read-only form renders no editable input"
+    );
+    let email = root
+        .query_selector("output[name='/email'][data-read-only]")
+        .expect("the output selector should be valid")
+        .expect("the email should render as read-only output");
+    assert_eq!(email.text_content().as_deref(), Some("ada@example.test"));
+    assert!(
+        !root.inner_html().contains("hunter2"),
+        "a read-only write-only value is still not echoed"
+    );
+
+    let form: HtmlFormElement = root
+        .query_selector("form")
+        .expect("the form selector should be valid")
+        .expect("the schema form should render a form element")
+        .dyn_into()
+        .expect("the schema form should use semantic form HTML");
+    dispatch_submit(&form);
+    // Give a submission every chance to land before asserting that none did.
+    for _ in 0..8 {
+        next_microtask().await;
+    }
+    assert!(submitted.borrow().is_none());
+
+    form_handle
+        .set_read_only(false)
+        .expect("the live form should become editable again");
+    poll_dom(|| submit_button(&root).is_some().then_some(())).await;
+    assert_eq!(
+        input_with_binding(&root, "/email").value(),
+        "ada@example.test"
+    );
+    dispatch_submit(&form);
+    let snapshot = poll_dom(|| submitted.borrow().clone()).await;
+    assert_eq!(snapshot.form_data(), &data);
 
     root.remove();
 }

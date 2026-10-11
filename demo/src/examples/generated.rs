@@ -168,7 +168,7 @@ fn host_form_data() -> Value {
         "email": "ada@example.test",
         "homepage": "https://example.test/ada",
         "born_on": "1815-12-10",
-        "last_seen": "2024-05-06T09:30",
+        "last_seen": "2024-05-06T09:30:00Z",
         "account_type": "standard",
         "customer_id": "cus_1843",
         "access_token": "not-rendered"
@@ -263,15 +263,15 @@ fn definition() -> FormDefinition {
             "last_seen": {
                 "type": "string",
                 "title": "Last seen",
-                "description": "Rendered as the browser's local date-time picker; the value carries no zone offset.",
+                "description": "Typed as RFC 3339 text: no browser picker writes a zone offset.",
                 "format": "date-time"
             },
             "daily_digest_at": {
                 "type": "string",
                 "title": "Daily digest at",
-                "description": "Rendered as the browser's time picker.",
+                "description": "Typed as RFC 3339 text, offset included.",
                 "format": "time",
-                "default": "08:00"
+                "default": "08:00:00Z"
             },
             "account_type": {
                 "title": "Account type",
@@ -316,7 +316,7 @@ mod tests {
         expected["active"] = json!(true);
         expected["plan"] = json!("starter");
         expected["priority"] = json!("normal");
-        expected["daily_digest_at"] = json!("08:00");
+        expected["daily_digest_at"] = json!("08:00:00Z");
         assert_eq!(seeded.form_data(), &expected);
     }
 }

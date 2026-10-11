@@ -15,7 +15,7 @@ use dioxus_core::{ScopeId, VirtualDom};
 use schemaform::{FormDefinition, definition::DefinitionNodeView};
 use schemaform_dioxus::{
     AffordanceKind, ControlFacets, ControlKind, ControlMatcher, ControlRegistry,
-    ControlRenderContext, ControlRenderer, FormHandle, HandleError, RenderConfiguration,
+    ControlRenderContext, ControlRenderer, FormHandle, HandleError, InputType, RenderConfiguration,
     SchemaForm, render::FindingKind, use_form,
 };
 use serde_json::json;
@@ -48,6 +48,8 @@ struct ContractAppProps {
     contexts: CapturedContexts,
     handle: Rc<RefCell<Option<FormHandle>>>,
     errors: Rc<RefCell<Vec<HandleError>>>,
+    /// Host overrides of the built-in `format`-to-`type` table.
+    format_input_types: Vec<(&'static str, InputType)>,
 }
 
 impl PartialEq for ContractAppProps {
@@ -55,6 +57,7 @@ impl PartialEq for ContractAppProps {
         Rc::ptr_eq(&self.contexts, &other.contexts)
             && Rc::ptr_eq(&self.handle, &other.handle)
             && Rc::ptr_eq(&self.errors, &other.errors)
+            && self.format_input_types == other.format_input_types
     }
 }
 
@@ -73,9 +76,18 @@ fn contract_app(props: ContractAppProps) -> Element {
                     "minLength": 2
                 },
                 "agree": { "type": "boolean", "title": "Agree" },
-                "secret": { "type": "string", "title": "Secret", "writeOnly": true },
+                "secret": {
+                    "type": "string",
+                    "title": "Secret",
+                    "format": "date",
+                    "writeOnly": true
+                },
                 "level": { "type": ["integer", "null"], "title": "Level" },
                 "email": { "type": "string", "title": "Email", "format": "email" },
+                "day": { "type": "string", "title": "Day", "format": "date" },
+                "when": { "type": "string", "title": "When", "format": "date-time" },
+                "at": { "type": "string", "title": "At", "format": "time" },
+                "colour": { "type": "string", "title": "Colour", "format": "color" },
                 "conflicting_formats": {
                     "allOf": [
                         { "type": "string", "format": "date" },
@@ -96,13 +108,19 @@ fn contract_app(props: ContractAppProps) -> Element {
         .borrow_mut()
         .get_or_insert_with(|| form.clone());
     let contexts = props.contexts.clone();
+    let format_input_types = props.format_input_types.clone();
     let bound = use_hook(move || {
-        RenderConfiguration::builder()
-            .controls(ControlRegistry::with_builtins().matcher(
+        let builder =
+            RenderConfiguration::builder().controls(ControlRegistry::with_builtins().matcher(
                 10,
                 Arc::new(EveryControl),
                 Arc::new(CapturingRenderer { contexts }),
-            ))
+            ));
+        format_input_types
+            .into_iter()
+            .fold(builder, |builder, (format, input_type)| {
+                builder.format_input_type(format, input_type)
+            })
             .build()
             .bind(&form)
             .expect("the capturing renderer should bind every control")
@@ -125,6 +143,10 @@ struct MountedContract {
 }
 
 fn mount_contract_app() -> MountedContract {
+    mount_contract_app_with(Vec::new())
+}
+
+fn mount_contract_app_with(format_input_types: Vec<(&'static str, InputType)>) -> MountedContract {
     let contexts: CapturedContexts = Rc::default();
     let handle = Rc::new(RefCell::new(None));
     let errors = Rc::new(RefCell::new(Vec::new()));
@@ -134,6 +156,7 @@ fn mount_contract_app() -> MountedContract {
             contexts: contexts.clone(),
             handle: handle.clone(),
             errors: errors.clone(),
+            format_input_types,
         },
     );
     dom.rebuild_in_place();
@@ -476,6 +499,104 @@ fn presentation_reflects_visible_findings_and_the_context_compares_by_value() {
             .form_data()
             .expect("the form should be readable"),
         json!({ "name": "A", "agree": false, "secret": "hunter2", "level": null })
+    );
+    assert!(errors.borrow().is_empty());
+}
+
+#[test]
+fn control_facets_resolve_the_input_type_and_the_placeholder_from_the_format() {
+    let MountedContract {
+        contexts, errors, ..
+    } = mount_contract_app();
+    let resolved = |name: &str| {
+        let facets = facets(&contexts, name);
+        (facets.input_type, facets.placeholder)
+    };
+
+    assert_eq!(resolved("/name"), (InputType::Text, None));
+    assert_eq!(resolved("/email"), (InputType::Email, None));
+    assert_eq!(resolved("/day"), (InputType::Date, None));
+    // No browser widget writes an RFC 3339 `date-time` or `time`: both are typed as text, and
+    // the placeholder shows the shape.
+    assert_eq!(
+        resolved("/when"),
+        (InputType::Text, Some("2025-01-31T09:30:00Z".to_owned()))
+    );
+    assert_eq!(
+        resolved("/at"),
+        (InputType::Text, Some("09:30:00Z".to_owned()))
+    );
+    assert_eq!(resolved("/colour"), (InputType::Text, None));
+    assert_eq!(resolved("/secret"), (InputType::Password, None));
+    assert_eq!(resolved("/level"), (InputType::Text, None));
+    assert_eq!(InputType::Email.as_str(), "email");
+    assert_eq!(InputType::DateTimeLocal.to_string(), "datetime-local");
+
+    assert!(errors.borrow().is_empty());
+}
+
+#[test]
+fn host_format_input_types_override_the_built_in_table() {
+    let MountedContract {
+        contexts, errors, ..
+    } = mount_contract_app_with(vec![
+        ("date-time", InputType::DateTimeLocal),
+        ("color", InputType::Color),
+        ("email", InputType::Text),
+        // Overriding a format a write-only string carries never reveals its value.
+        ("date", InputType::Week),
+    ]);
+    let resolved = |name: &str| {
+        let facets = facets(&contexts, name);
+        (facets.input_type, facets.placeholder)
+    };
+
+    // A host that picks the browser's picker gives up the shape hint along with the offset.
+    assert_eq!(resolved("/when"), (InputType::DateTimeLocal, None));
+    assert_eq!(resolved("/colour"), (InputType::Color, None));
+    assert_eq!(resolved("/email"), (InputType::Text, None));
+    assert_eq!(resolved("/day"), (InputType::Week, None));
+    // Formats with no override keep the built-in answer.
+    assert_eq!(
+        resolved("/at"),
+        (InputType::Text, Some("09:30:00Z".to_owned()))
+    );
+    assert_eq!(resolved("/secret"), (InputType::Password, None));
+
+    assert!(errors.borrow().is_empty());
+}
+
+#[test]
+fn a_read_only_form_reaches_custom_renderers_through_the_facets_and_affordances() {
+    let MountedContract {
+        mut dom,
+        contexts,
+        handle,
+        errors,
+    } = mount_contract_app();
+    assert!(!facets(&contexts, "/name").read_only);
+    assert!(!presence_kinds(&contexts, "/level").is_empty());
+
+    dom.in_scope(ScopeId::ROOT, || {
+        handle
+            .set_read_only(true)
+            .expect("the live form should become read-only");
+    });
+    dom.render_immediate(&mut dioxus_core::NoOpMutations);
+
+    for name in ["/name", "/agree", "/secret", "/level", "/email", "/when"] {
+        let context = captured(&contexts, name);
+        assert!(context.control().read_only, "{name}");
+        assert!(context.presentation().presence.is_empty(), "{name}");
+    }
+    assert_eq!(
+        captured(&contexts, "/name")
+            .actions()
+            .input_text("Grace")
+            .err(),
+        Some(HandleError::UserOperation(
+            schemaform::form::UserOperationError::OperationNotAllowed
+        ))
     );
     assert!(errors.borrow().is_empty());
 }

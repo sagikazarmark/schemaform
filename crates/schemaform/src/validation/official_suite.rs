@@ -242,9 +242,10 @@ fn run_suite_files(
             .unwrap_or_else(|error| {
                 panic!("failed to prepare {suite} {file_name} / {description}: {error:?}")
             });
-            let validator = Validator::compile(&graph).unwrap_or_else(|error| {
-                panic!("failed to compile {suite} {file_name} / {description}: {error}")
-            });
+            let validator = Validator::compile(&graph, &std::collections::BTreeSet::new())
+                .unwrap_or_else(|error| {
+                    panic!("failed to compile {suite} {file_name} / {description}: {error}")
+                });
 
             for case in group["tests"]
                 .as_array()

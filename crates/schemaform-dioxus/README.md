@@ -139,9 +139,11 @@ renderer everything it needs, pre-localized:
   `name`, `required`, `multiple_choice_required_notice` (localized field-presence wording),
   `disabled`, `read_only`, `write_only`, `touched`, `dirty`, `nullable`, the
   localized write-only replacement label and placeholder, write-only status
-  text, and boolean value labels the built-in uses, and `format`: the data
+  text, and boolean value labels the built-in uses, `format`: the data
   schema's `format` annotation as authored, `None` when there is none or the
-  applicable subschemas name different ones (see
+  applicable subschemas name different ones, and `input_type` and
+  `placeholder`: the `<input>` type and localized placeholder the built-in
+  renders for it, with the host's overrides applied (see
   [String formats and browser widgets](#string-formats-and-browser-widgets)).
 - `node()` is a target-scoped reactive reader, `actions()` the approved scalar
   actions for that node, and `extensions()` the prepared extension decorators.
@@ -456,40 +458,65 @@ control no registration accepts. A host can also register
 ### String formats and browser widgets
 
 A string control whose data schema carries a `format` the browser has a widget
-for renders that widget. The built-in string control maps the `format`
-annotation to the `<input>`'s `type`:
+for renders that widget, provided the widget writes values of that format. The
+built-in string control maps the `format` annotation to the `<input>`'s `type`:
 
 | `format` | `type` |
 | --- | --- |
 | `email`, `idn-email` | `email` |
 | `uri`, `uri-reference`, `iri`, `iri-reference` | `url` |
 | `date` | `date` |
-| `date-time` | `datetime-local` |
-| `time` | `time` |
+| `date-time` | `text`, with an RFC 3339 placeholder |
+| `time` | `text`, with an RFC 3339 placeholder |
 | anything else, or none | `text` |
 
 A write-only string stays `type="password"` whatever its `format`. Number and
 integer controls are unaffected. The mapping is presentation only: the core's
-data stays a string, and `format` remains the annotation it is under Draft
-2020-12's default vocabulary — the core asserts nothing about it and raises no
-finding, however the value was entered (see
-[the core README](../schemaform/README.md#format-is-an-annotation)). The form
+data stays a string, holding exactly what the widget wrote, and `format` remains
+the annotation it is under Draft 2020-12's default vocabulary — the core raises
+no finding about it, however the value was entered, unless the host asserts that
+format when it compiles, in which case a mismatch is an ordinary validation
+finding at the control (see
+[the core README](../schemaform/README.md#format-is-an-annotation-unless-asserted)). The form
 element keeps `novalidate`, so the browser's own constraint validation for
 `email` and `url` colours the widget but never blocks submission.
 
-`datetime-local` yields `YYYY-MM-DDTHH:MM[:SS]` with no zone offset, which is
-not an RFC 3339 `date-time`. The widget is still the right one: it is what
-browsers offer for the concept, and the core stores what the browser writes,
-verbatim. A host whose server or downstream validator asserts `format` should
-know that this pairing produces a finding on every value the widget writes;
-normalising the value to RFC 3339 is the host's job. The alternative — no picker
-for `date-time` — was rejected.
+`date-time` and `time` get no picker. JSON Schema takes both from RFC 3339,
+which requires a zone offset (`2025-01-31T09:30:00Z`, `09:30:00+01:00`), and the
+browser's `datetime-local` and `time` widgets write wall-clock values with no
+offset and often no seconds. A picker would make a conformant value impossible to
+enter. Supplying the offset on the user's behalf was rejected too: it needs the
+viewer's time zone, which the adapter otherwise never reads; it is ambiguous
+across daylight-saving transitions; and it would rewrite the offset of a value
+the form was handed. So both are text inputs whose localized
+placeholder (`schemaform.format.date-time.placeholder`,
+`schemaform.format.time.placeholder`) shows the shape expected.
 
-`format` reaches custom renderers through the control facets, so a renderer
-package makes the same choice from `control().format` without seeing the raw
-data schema. When an `allOf` contributes two different formats, the facet is
-`None`: no single widget serves both, so the string is presented as if none were
-declared.
+A host can change any row, or map a format the table does not list, with
+`RenderConfigurationBuilder::format_input_type`:
+
+```rust
+use schemaform_dioxus::{InputType, RenderConfiguration};
+
+let configuration = RenderConfiguration::builder()
+    // Wall-clock picker; the host adds the offset before the value leaves.
+    .format_input_type("date-time", InputType::DateTimeLocal)
+    .format_input_type("color", InputType::Color)
+    .build();
+```
+
+An override is fixed when the form is bound, never reveals a write-only value,
+and drops the placeholder when it moves `date-time` or `time` off `text`. A
+host that picks `InputType::DateTimeLocal` accepts values with no offset, and
+normalising them is then its job.
+
+Custom renderers see the result, not just the annotation:
+`control().input_type` is the `InputType` the built-in renders, with the host's
+overrides applied, and `control().placeholder` is the localized placeholder, so
+a renderer package stays consistent with the built-in and with the host without
+copying the table. `control().format` is still the annotation as authored. When
+an `allOf` contributes two different formats, it is `None`: no single widget
+serves both, so the string is presented as if none were declared.
 
 ### Structure renderers
 
@@ -736,6 +763,23 @@ labels and help, findings, submit and presence controls, array actions and live
 announcements, and write-only replacement chrome all pass through this
 interface. Text is rendered as escaped plain text.
 
+## Read-Only Forms
+
+`FormHandle::set_read_only(true)` makes a mounted form read-only as a whole,
+for a form that stays visible after it has been answered. It is the core's
+read-only form (see
+[the core README](../schemaform/README.md#read-only-forms)), so the adapter
+follows without extra wiring: every built-in control renders as noninteractive
+`output`, a write-only value stays unechoed, no presence or collection
+affordance is offered, and the built-in shell omits its submit button.
+Submitting does nothing in either submission mode — neither the form's `submit`
+event nor a submit affordance a shell kept reaches `on_submit` or
+`on_advisory_submit`. Custom renderers see the same state: `control().read_only`
+is true, `presentation().presence` is empty, an action returns
+`HandleError::UserOperation(OperationNotAllowed)`, and `ShellContext::read_only`
+tells a custom shell to omit or disable its submit button.
+`FormProjection::read_only` reports the flag. `set_read_only(false)` lifts it.
+
 ## Errors And Platform Boundary
 
 | Stage | Public result |
@@ -757,7 +801,11 @@ takes effect on the next render: the shell is handed the affordance of the new
 mode (`AffordanceKind::Submit` or `AffordanceKind::AdvisorySubmit`) and the
 form's own `submit` event follows it, while an affordance a shell retained from
 an earlier render keeps performing the operation of the kind it was handed out
-as, as every affordance does. `FormHandle::prepare_advisory_submission` is the
+as, as every affordance does. Finding presenters see the mode too:
+`FindingCollectionContext::submission_mode()` reports it for the summary and for
+every node-local collection, and a switch re-renders them, so a presenter that
+shows advisory findings as warnings reads it from the adapter rather than from a
+context its shell provides. `FormHandle::prepare_advisory_submission` is the
 handle-level call behind the advisory path, with the same borrow-conflict and
 disposed-handle semantics as `prepare_submission`; which hosts want which path
 is described in

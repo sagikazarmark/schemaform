@@ -456,6 +456,80 @@ fn control_at(form: &Form, pointer: &str) -> InstanceIdentity {
 }
 ```
 
+## Protocol-Profile Schemas
+
+Some protocols restrict JSON Schema to a flat object and fill in what the
+sender leaves out. ACP elicitation schemas are like this: ACP defaults the root
+`type` to `object`, and protocol schemas rarely carry `$schema`. Under plain JSON
+Schema an untyped root accepts any instance, so the compiler reports
+`validation.type.unconstrained` rather than guessing that the form is an
+object. A schema with no `$schema` fails qualification with `MissingDialect`.
+
+The library applies plain JSON Schema semantics and leaves a protocol's defaults
+to the host, which already knows which protocol it speaks. Apply them before
+compiling: set `FormCompiler::default_dialect`, and insert the root
+`"type": "object"` when it is absent. Validation then runs against the schema
+the protocol meant. `examples/untyped_root.rs` shows both
+(`cargo run -p schemaform --example untyped_root`):
+
+```rust
+use schemaform::{CompileError, Dialect, FormDefinition};
+use serde_json::{Value, json};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // An elicitation schema as it can arrive on the wire: no `$schema`, and the
+    // protocol defaults the root `type` to `object`, so the sender may leave it
+    // out.
+    let mut data_schema = json!({
+        "properties": {
+            "name": { "type": "string" }
+        },
+        "required": ["name"]
+    });
+
+    // The protocol fixes the dialect, so the host supplies it. Under plain JSON
+    // Schema an untyped root still accepts any instance, and the compiler
+    // refuses to guess a form for it.
+    let compile = |data_schema: Value| {
+        FormDefinition::compiler(data_schema)
+            .default_dialect(Dialect::Draft202012)
+            .compile()
+    };
+    let Err(CompileError::Capability(report)) = compile(data_schema.clone()) else {
+        panic!("an untyped root has no single representation");
+    };
+    assert!(
+        report
+            .findings()
+            .any(|finding| finding.code() == "validation.type.unconstrained")
+    );
+
+    // The host applies the protocol's default root type before compiling.
+    if let Value::Object(root) = &mut data_schema {
+        root.entry("type").or_insert_with(|| json!("object"));
+    }
+    let definition = compile(data_schema)?;
+    let form = definition.create_form(json!({ "name": "Ada" }))?;
+
+    println!("{}", form.form_data());
+    Ok(())
+}
+```
+
+## Read-Only Forms
+
+A host can make a whole form read-only — to keep an answered form on screen,
+say — with `Form::set_read_only(true)`, or create it that way with
+`FormBuilder::read_only`. Every node then reports `NodeView::is_read_only` and
+no allowed operations, and `UserActions` refuses every edit, presence and
+collection operation, and blur with `UserOperationError::OperationNotAllowed`.
+It is runtime state, not a data-schema annotation: host operations —
+transactions, reinitialization, external findings, and submission preparation —
+keep working, form data and findings are untouched, and
+`Form::set_read_only(false)` restores what the schema's own `readOnly`
+annotations allow. Changing it advances only the state revision and reports the
+nodes whose view changed.
+
 ## Trust Boundary
 
 Data schemas must be application-trusted for evaluator work. The package
@@ -468,18 +542,84 @@ findings, and library-owned state growth are structurally bounded.
 validation, submission snapshots, or custom adapters. Applications remain
 responsible for secrets, persistence, transport, and authorization.
 
-### `format` is an annotation
+### `format` is an annotation unless asserted
 
-`format` is collected as an annotation and never asserted, as Draft 2020-12's
-default vocabulary has it: a string that does not look like its `format` is
-valid, and no finding is raised for it. The annotation reaches adapters through
-`DataSchemaAnnotations::formats`. The Dioxus adapter's built-in string control
-uses it to pick the browser widget — `email`, `url`, `date`, `datetime-local`,
-`time` — and its README records the
-[mapping and the `datetime-local` decision](../schemaform-dioxus/README.md#string-formats-and-browser-widgets).
-That is presentation only: the data stays a string, and a host that asserts
-`format` downstream should read that section before pairing the picker with an
-RFC 3339 `date-time`.
+By default `format` is collected as an annotation and never asserted, as Draft
+2020-12's default vocabulary has it: a string that does not look like its
+`format` is valid, and no finding is raised for it. The annotation reaches
+adapters through `DataSchemaAnnotations::formats`. The Dioxus adapter's built-in
+string control uses it to pick the browser widget — `email`, `url`, `date` — and
+takes `date-time` and `time` as RFC 3339 text, since no browser widget writes a
+zone offset; its README records the
+[mapping, the host override, and why `date-time` has no picker](../schemaform-dioxus/README.md#string-formats-and-browser-widgets).
+That is presentation only: the data stays the string the user entered.
+
+A host that wants formats checked asserts them when it compiles.
+`examples/format_assertion.rs` compiles one data schema both ways
+(`cargo run -p schemaform --example format_assertion`):
+
+```rust
+use schemaform::{AssertedFormat, FormDefinition, SubmissionOutcome, form::SubmissionBlocker};
+use serde_json::json;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let data_schema = json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "when": { "type": "string", "format": "date-time" },
+            "email": { "type": "string", "format": "email" },
+            "id": { "type": "string", "format": "uuid" }
+        }
+    });
+    // A date-time with no zone offset, as a `datetime-local` widget writes it.
+    let form_data = json!({ "when": "2025-01-31T09:30", "email": "ada", "id": "x" });
+
+    // By default `format` is an annotation: nothing here is a finding.
+    let mut form = FormDefinition::compile(data_schema.clone())?.create_form(form_data.clone())?;
+    let (_, outcome) = form.prepare_submission().into_parts();
+    assert!(matches!(outcome, SubmissionOutcome::Ready(_)));
+
+    // Asserting `date-time` and `email` makes both values findings; `uuid`,
+    // which is not asserted, stays an annotation.
+    let definition = FormDefinition::compiler(data_schema)
+        .assert_formats([AssertedFormat::DateTime, AssertedFormat::Email])
+        .compile()?;
+    let mut form = definition.create_form(form_data)?;
+    let (_, outcome) = form.prepare_submission().into_parts();
+    let SubmissionOutcome::Blocked(blockers) = outcome else {
+        panic!("values that do not match an asserted format block submission");
+    };
+    let mut failing = blockers
+        .iter()
+        .filter_map(|blocker| match blocker {
+            SubmissionBlocker::Validation(finding) if finding.code() == "format" => {
+                Some(finding.instance_location().as_str().to_owned())
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    failing.sort();
+    assert_eq!(failing, ["/email", "/when"]);
+
+    println!("{failing:?}");
+    Ok(())
+}
+```
+
+A value that does not match an asserted format is invalid, with an ordinary
+validation finding at that value — code `format`, parameter `format` — so finding
+visibility, gated blocking, and advisory submission treat it like any other.
+Every format not asserted stays an annotation. The asserted set is part of the
+definition fingerprint.
+
+The assertion is an explicit allow-list of `AssertedFormat` values rather than a
+switch for every format the validator knows, so a host opts into exactly the
+checks it means. Every check offered is linear in the value. `regex` is
+deliberately not offered: checking it compiles the value as a regular expression,
+which is work the evaluation story does not bound. `idn-email` and
+`idn-hostname` are not built into this release.
 
 ## Feature Flags
 
