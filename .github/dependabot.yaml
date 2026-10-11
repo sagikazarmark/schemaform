@@ -6,6 +6,13 @@ updates:
     schedule:
       interval: daily
     groups:
+      # The validator is pinned to a qualified release, so a bump fails CI until it is
+      # requalified. Keep it apart so it never holds back the rest of the cargo updates.
+      # A dependency joins the first group it matches, so this group comes first.
+      validator:
+        patterns:
+          - "jsonschema"
+          - "referencing"
       cargo:
         patterns:
           - "*"
