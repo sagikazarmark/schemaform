@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cmp::Ordering, collections::HashMap};
+use std::{cmp::Ordering, collections::HashMap};
 
 use jsonschema::{
     Keyword, PatternOptions, ValidationError, error::ValidationErrorKind, paths::Location,
@@ -335,7 +335,7 @@ impl Validator {
         error: ValidationError<'_>,
         max_parameter_value_bytes: usize,
     ) -> ValidationFinding {
-        let mut keyword_location = self.schema_location(&error);
+        let keyword_location = self.schema_location(&error);
         let mut code = finding_code(error.kind());
         let mut parameters = match error.kind() {
             ValidationErrorKind::AdditionalItems { limit } => json!({ "limit": limit }),
@@ -421,11 +421,8 @@ impl Validator {
                 pointer if pointer.ends_with("/maxContains") => Some("maxContains"),
                 _ => None,
             };
-            if let Some(bound) = bound
-                && let Some(bound_location) = contains_bound_location(&keyword_location, bound)
-            {
+            if let Some(bound) = bound {
                 code = bound;
-                keyword_location = bound_location;
                 if let Some(limit) = self.cardinality_bound_limits.get(&keyword_location) {
                     parameters = value_parameter("limit", limit, max_parameter_value_bytes);
                 }
@@ -442,7 +439,7 @@ impl Validator {
 
     fn schema_location(&self, error: &ValidationError<'_>) -> SchemaLocation {
         if let Some(absolute) = error.absolute_keyword_location() {
-            let absolute = reported_absolute_keyword_location(absolute.as_str(), error);
+            let absolute = absolute.as_str();
             if let Some((_, anchor_pointer, suffix)) = self
                 .anchor_locations
                 .iter()
@@ -459,7 +456,7 @@ impl Validator {
             {
                 let resource = absolute
                     .split_once('#')
-                    .map_or(&*absolute, |(resource, _)| resource);
+                    .map_or(absolute, |(resource, _)| resource);
                 let suffix = crate::resources::decode_uri_fragment(suffix)
                     .unwrap_or_else(|| suffix.to_owned());
                 if let (Ok(resource), Ok(pointer)) = (
@@ -471,7 +468,7 @@ impl Validator {
             }
             let (resource, encoded_pointer) = absolute
                 .split_once('#')
-                .map_or((&*absolute, None), |(resource, pointer)| {
+                .map_or((absolute, None), |(resource, pointer)| {
                     (resource, Some(pointer))
                 });
             let pointer = encoded_pointer
@@ -495,26 +492,6 @@ impl Validator {
                 .expect("validator keyword locations are JSON Pointers"),
         )
     }
-}
-
-/// The absolute keyword location `jsonschema` reports for `error`, naming the keyword that failed.
-///
-/// `jsonschema` 0.52.1 fused sibling `minLength` and `maxLength` into one validator registered
-/// under `minLength`, and it stamps every error a validator emits with the absolute location of
-/// that registration. A `maxLength` error beside a `minLength` therefore arrives naming
-/// `.../minLength` absolutely while its `schema_path` still ends in `maxLength`. The two agree
-/// everywhere else, so the trailing segment is restored here until upstream stamps per keyword
-/// (<https://github.com/Stranger6667/jsonschema/issues/1579>).
-fn reported_absolute_keyword_location<'a>(
-    absolute: &'a str,
-    error: &ValidationError<'_>,
-) -> Cow<'a, str> {
-    if matches!(error.kind(), ValidationErrorKind::MaxLength { .. })
-        && let Some(prefix) = absolute.strip_suffix("/minLength")
-    {
-        return Cow::Owned(format!("{prefix}/maxLength"));
-    }
-    Cow::Borrowed(absolute)
 }
 
 fn evaluator_failed(kind: &ValidationErrorKind) -> bool {
@@ -612,12 +589,6 @@ fn build_validator(
                 .dfa_size_limit(QUALIFIED_CONFIGURATION.regex_dfa_size_limit),
         )
         .build(data_schema)
-}
-
-fn contains_bound_location(location: &SchemaLocation, keyword: &str) -> Option<SchemaLocation> {
-    let parent = location.pointer().as_str().strip_suffix("/contains")?;
-    let pointer = JsonPointer::parse(format!("{parent}/{keyword}")).ok()?;
-    Some(SchemaLocation::new(location.resource().clone(), pointer))
 }
 
 fn compare_findings(left: &ValidationFinding, right: &ValidationFinding) -> Ordering {
@@ -940,17 +911,14 @@ mod tests {
             let reported = error
                 .absolute_keyword_location()
                 .expect("length keyword errors carry an absolute location");
-            // The qualified `jsonschema` stamps both bounds with the `minLength` registration.
-            // Once a release stamps `maxLength` with its own location this assertion fails,
-            // which is the cue to delete `reported_absolute_keyword_location`.
+            // `jsonschema` 0.52.1 through 0.54.0 fused sibling `minLength` and `maxLength` into one
+            // validator and stamped both errors with the `minLength` location, which schemaform
+            // corrected (<https://github.com/Stranger6667/jsonschema/issues/1579>). The qualified
+            // release stamps each bound with its own location; a regression fails here.
             assert_eq!(
                 reported.as_str(),
-                "https://schemas.example/length.json#/properties/value/minLength",
-                "the qualified validator no longer misattributes {keyword}; drop the workaround"
-            );
-            assert_eq!(
-                reported_absolute_keyword_location(reported.as_str(), error),
-                format!("https://schemas.example/length.json#/properties/value/{keyword}")
+                format!("https://schemas.example/length.json#/properties/value/{keyword}"),
+                "the qualified validator misattributes {keyword}"
             );
         }
     }

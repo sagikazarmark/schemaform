@@ -534,7 +534,7 @@ pub fn retained_cases() -> &'static [RetainedCase] {
                 "../../../fuzz/corpus/form_construction/regression-incompatible-array"
             ),
             expected_outcome: "form:success",
-            expected_digest: "dd6f287768ff3531b61dd58f3cce6dd663160e5a2ea60274646ddd6532c20f6b",
+            expected_digest: "b8f73a3744cc71113a448c9a1da7094efcdc439bf639e7a2339b9db6457c0c11",
         },
         RetainedCase {
             target: Target::UriPointer,
