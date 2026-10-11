@@ -319,6 +319,17 @@ impl NodePresentation {
         (!ids.is_empty()).then(|| ids.join(" "))
     }
 
+    /// The submission mode of the form this node belongs to.
+    ///
+    /// A renderer that presents [`NodePresentation::findings`] itself — wiring blocking
+    /// findings as field errors only in [`SubmissionMode::Gated`](crate::SubmissionMode::Gated),
+    /// say — branches on this, as a finding presenter branches on
+    /// [`FindingCollectionContext::submission_mode`]. It is a reactive read: the component
+    /// that calls it while rendering re-renders when the `SchemaForm` prop switches.
+    pub fn submission_mode(&self) -> crate::SubmissionMode {
+        *self.form.inner.submission_mode.read()
+    }
+
     /// Renders the node's local findings through the configured local finding presenter.
     ///
     /// The returned element reads the presenter in a child scope, so swapping the presenter
