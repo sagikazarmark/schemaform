@@ -121,7 +121,7 @@ changes nothing: the renderer dispatches on the control kind first.
 | --- | --- |
 | homogeneous array | `fieldset` carrying the adapter's element id, focusable for the container presence operations; `fieldset-legend`; help; the incompatible-value readout and container presence `Button`s; a dashed empty state while there are no items; the adapter-keyed item hosts in a grid; the append affordance as an outline `Button`; the adapter's live region; the local findings |
 | array item | `card card-border card-sm` with `role="group"`, labelled by a title reading the item noun and its position; the insert, move up, move down, and remove affordances as a `join` of `btn-square` icon buttons whose `aria-label` is the affordance's positional accessible name and whose `title` is its label; the item's controls follow |
-| form shell | a `grid gap-4` of the adapter's summary region, the body, and the submit affordance as `btn btn-primary` of `type="submit"` |
+| form shell | a `grid gap-4` of the body, the submit affordance as `btn btn-primary` of `type="submit"`, and the adapter's summary region last, so a finding revealed when a control is left never moves the button being clicked |
 | finding summary | nothing while empty; otherwise `alert alert-soft`, `alert-error` while any finding blocks submission and `alert-warning` otherwise, with one `link` button per finding that reveals and focuses its target |
 | node-local findings | one `p` per finding in `text-error` or `text-warning` |
 
