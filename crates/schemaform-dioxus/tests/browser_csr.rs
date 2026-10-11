@@ -5996,6 +5996,20 @@ async fn a_read_only_form_renders_every_control_as_output_and_submits_nothing() 
         .expect("the output selector should be valid")
         .expect("the email should render as read-only output");
     assert_eq!(email.text_content().as_deref(), Some("ada@example.test"));
+    // Read-only rather than disabled: the value stays in the tab order and takes focus.
+    assert_eq!(email.get_attribute("tabindex").as_deref(), Some("0"));
+    email
+        .dyn_ref::<web_sys::HtmlElement>()
+        .expect("the read-only output should be an HTML element")
+        .focus()
+        .expect("the read-only output should accept focus");
+    assert_eq!(
+        web_sys::window()
+            .and_then(|window| window.document())
+            .and_then(|document| document.active_element())
+            .as_ref(),
+        Some(&email)
+    );
     assert!(
         !root.inner_html().contains("hunter2"),
         "a read-only write-only value is still not echoed"
@@ -6052,7 +6066,7 @@ async fn builtins_present_read_only_and_write_only_data_without_losing_submissio
         .expect("the write-only constant should render without its value");
 
     assert_eq!(read_only.text_content().as_deref(), Some("Ada"));
-    assert_eq!(read_only.get_attribute("tabindex").as_deref(), Some("-1"));
+    assert_eq!(read_only.get_attribute("tabindex").as_deref(), Some("0"));
     assert!(
         root.query_selector("input[name='/profile/name']")
             .expect("the read-only input selector should be valid")
@@ -7374,7 +7388,7 @@ async fn a_multiple_choice_is_a_fieldset_of_checkboxes_toggled_from_the_keyboard
         Some("read, write"),
         "the output lists the selected labels in option order"
     );
-    assert_eq!(granted.get_attribute("tabindex").as_deref(), Some("-1"));
+    assert_eq!(granted.get_attribute("tabindex").as_deref(), Some("0"));
     assert!(
         root.query_selector("input[name='/granted']")
             .expect("the input selector should be valid")

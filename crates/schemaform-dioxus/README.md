@@ -770,7 +770,10 @@ for a form that stays visible after it has been answered. It is the core's
 read-only form (see
 [the core README](../schemaform/README.md#read-only-forms)), so the adapter
 follows without extra wiring: every built-in control renders as noninteractive
-`output`, a write-only value stays unechoed, no presence or collection
+`output` that stays in the tab order (`tabindex="0"`, as a native `readonly`
+input would), so keyboard and screen-reader users can still reach each value; a
+custom renderer's read-only presentation should stay focusable too. A
+write-only value stays unechoed, no presence or collection
 affordance is offered, and the built-in shell omits its submit button.
 Submitting does nothing in either submission mode — neither the form's `submit`
 event nor a submit affordance a shell kept reaches `on_submit` or
