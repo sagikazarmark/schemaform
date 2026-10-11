@@ -3779,6 +3779,14 @@ fn validation_finding_fallback(finding: &schemaform::ValidationFinding) -> Strin
     {
         return format!("Value must be at least {limit}.");
     }
+    if finding.code() == "format"
+        && let Some(format) = finding
+            .parameters()
+            .get("format")
+            .and_then(|format| format.as_str())
+    {
+        return format!("Value must be a valid {format}.");
+    }
     format!("Value does not satisfy {}.", finding.code())
 }
 
@@ -4101,5 +4109,33 @@ mod tests {
                 "duplicate built-in key {expected_key}"
             );
         }
+    }
+
+    #[test]
+    fn an_asserted_format_finding_falls_back_to_naming_the_format() {
+        let definition = schemaform::FormDefinition::compiler(json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": { "when": { "type": "string", "format": "date-time" } }
+        }))
+        .assert_formats([schemaform::AssertedFormat::DateTime])
+        .compile()
+        .expect("the asserting definition should compile");
+        let mut form = definition
+            .create_form(json!({ "when": "2025-01-31T09:30" }))
+            .expect("the form should be created");
+        let (_, advisory) = form.prepare_advisory_submission().into_parts();
+        let finding = advisory
+            .findings()
+            .find_map(|blocker| match blocker {
+                schemaform::form::SubmissionBlocker::Validation(finding) => Some(finding),
+                _ => None,
+            })
+            .expect("the offset-less date-time should be a finding");
+
+        assert_eq!(
+            super::validation_finding_fallback(finding),
+            "Value must be a valid date-time."
+        );
     }
 }

@@ -468,17 +468,84 @@ findings, and library-owned state growth are structurally bounded.
 validation, submission snapshots, or custom adapters. Applications remain
 responsible for secrets, persistence, transport, and authorization.
 
-### `format` is an annotation
+### `format` is an annotation unless asserted
 
-`format` is collected as an annotation and never asserted, as Draft 2020-12's
-default vocabulary has it: a string that does not look like its `format` is
-valid, and no finding is raised for it. The annotation reaches adapters through
-`DataSchemaAnnotations::formats`. The Dioxus adapter's built-in string control
-uses it to pick the browser widget — `email`, `url`, `date` — and takes
-`date-time` and `time` as RFC 3339 text, since no browser widget writes a zone
-offset; its README records the
+By default `format` is collected as an annotation and never asserted, as Draft
+2020-12's default vocabulary has it: a string that does not look like its
+`format` is valid, and no finding is raised for it. The annotation reaches
+adapters through `DataSchemaAnnotations::formats`. The Dioxus adapter's built-in
+string control uses it to pick the browser widget — `email`, `url`, `date` — and
+takes `date-time` and `time` as RFC 3339 text, since no browser widget writes a
+zone offset; its README records the
 [mapping, the host override, and why `date-time` has no picker](../schemaform-dioxus/README.md#string-formats-and-browser-widgets).
 That is presentation only: the data stays the string the user entered.
+
+A host that wants formats checked asserts them when it compiles.
+`examples/format_assertion.rs` compiles one data schema both ways
+(`cargo run -p schemaform --example format_assertion`):
+
+```rust
+use schemaform::{AssertedFormat, FormDefinition, SubmissionOutcome, form::SubmissionBlocker};
+use serde_json::json;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let data_schema = json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "when": { "type": "string", "format": "date-time" },
+            "email": { "type": "string", "format": "email" },
+            "id": { "type": "string", "format": "uuid" }
+        }
+    });
+    // A date-time with no zone offset, as a `datetime-local` widget writes it.
+    let form_data = json!({ "when": "2025-01-31T09:30", "email": "ada", "id": "x" });
+
+    // By default `format` is an annotation: nothing here is a finding.
+    let mut form = FormDefinition::compile(data_schema.clone())?.create_form(form_data.clone())?;
+    let (_, outcome) = form.prepare_submission().into_parts();
+    assert!(matches!(outcome, SubmissionOutcome::Ready(_)));
+
+    // Asserting `date-time` and `email` makes both values findings; `uuid`,
+    // which is not asserted, stays an annotation.
+    let definition = FormDefinition::compiler(data_schema)
+        .assert_formats([AssertedFormat::DateTime, AssertedFormat::Email])
+        .compile()?;
+    let mut form = definition.create_form(form_data)?;
+    let (_, outcome) = form.prepare_submission().into_parts();
+    let SubmissionOutcome::Blocked(blockers) = outcome else {
+        panic!("values that do not match an asserted format block submission");
+    };
+    let mut failing = blockers
+        .iter()
+        .filter_map(|blocker| match blocker {
+            SubmissionBlocker::Validation(finding) if finding.code() == "format" => {
+                Some(finding.instance_location().as_str().to_owned())
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    failing.sort();
+    assert_eq!(failing, ["/email", "/when"]);
+
+    println!("{failing:?}");
+    Ok(())
+}
+```
+
+A value that does not match an asserted format is invalid, with an ordinary
+validation finding at that value — code `format`, parameter `format` — so finding
+visibility, gated blocking, and advisory submission treat it like any other.
+Every format not asserted stays an annotation. The asserted set is part of the
+definition fingerprint.
+
+The assertion is an explicit allow-list of `AssertedFormat` values rather than a
+switch for every format the validator knows, so a host opts into exactly the
+checks it means. Every check offered is linear in the value. `regex` is
+deliberately not offered: checking it compiles the value as a regular expression,
+which is work the evaluation story does not bound. `idn-email` and
+`idn-hostname` are not built into this release.
 
 ## Feature Flags
 

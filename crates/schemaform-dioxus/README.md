@@ -473,9 +473,11 @@ built-in string control maps the `format` annotation to the `<input>`'s `type`:
 A write-only string stays `type="password"` whatever its `format`. Number and
 integer controls are unaffected. The mapping is presentation only: the core's
 data stays a string, holding exactly what the widget wrote, and `format` remains
-the annotation it is under Draft 2020-12's default vocabulary — the core asserts
-nothing about it and raises no finding, however the value was entered (see
-[the core README](../schemaform/README.md#format-is-an-annotation)). The form
+the annotation it is under Draft 2020-12's default vocabulary — the core raises
+no finding about it, however the value was entered, unless the host asserts that
+format when it compiles, in which case a mismatch is an ordinary validation
+finding at the control (see
+[the core README](../schemaform/README.md#format-is-an-annotation-unless-asserted)). The form
 element keeps `novalidate`, so the browser's own constraint validation for
 `email` and `url` colours the widget but never blocks submission.
 
